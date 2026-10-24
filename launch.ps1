@@ -2,13 +2,15 @@
 # connected to it. The console window closes by itself when the game exits.
 # Usually started through launch_spore_mod.bat.
 #
-#   .\launch.ps1                       dev: build, install, start, open the console (no git pull: run git pull yourself)
+#   .\launch.ps1                       dev: check GitHub for new commits (asks whether to pull them), build, install,
+#                                      start, open the console
 #   .\launch.ps1 -Mode release         install the latest GitHub release (what players get) instead of building
 #   .\launch.ps1 -Mode play            start whatever is installed
-#   -NoConsole does not open the console window.
+#   -NoConsole does not open the console window, -NoUpdateCheck skips the question about new commits.
 param(
     [ValidateSet('dev', 'release', 'play')][string]$Mode = 'dev',
-    [switch]$NoConsole
+    [switch]$NoConsole,
+    [switch]$NoUpdateCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +38,10 @@ if ($running) {
 # -- get the mod
 switch ($Mode) {
     'dev' {
+        if (-not $NoUpdateCheck) {
+            # looks at GitHub for new commits of the repo and asks whether to pull them (silent when there is nothing new)
+            try { & (Join-Path $root 'update\update.ps1') -Check -Only repo } catch { Write-Host "[launch] update check failed: $($_.Exception.Message)" -ForegroundColor Yellow }
+        }
         Say 'building the mod...'
         & cmd /c "`"$root\mod\CoopMod\build.bat`" > `"$env:TEMP\coopmod_build.log`" 2>&1"
         if ($LASTEXITCODE -ne 0) { Get-Content "$env:TEMP\coopmod_build.log" -Tail 25; Fail 'the build failed, the game was not started.' }
@@ -45,7 +51,7 @@ switch ($Mode) {
     }
     'release' {
         Say 'installing the latest release...'
-        try { & (Join-Path $root 'update\update.ps1') -GameDir $game } catch { Fail "update failed: $($_.Exception.Message)" }
+        try { & (Join-Path $root 'update\update.ps1') -GameDir $game -Install } catch { Fail "update failed: $($_.Exception.Message)" }
     }
 }
 

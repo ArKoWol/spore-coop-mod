@@ -62,9 +62,9 @@ SporeApp.exe
   `mod\CoopMod\make_assets.ps1` (run by `build.bat`) builds `staging\CoopMod.package`; the launcher (dev), `make_package.ps1`
   and `update.ps1` install it as `<game>\Data\CoopMod.package`.
 - `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
-- `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
+- `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release; from a repo checkout it checks new commits and releases and asks whether to pull, install the release, both or skip.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
-- `launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; it does **not** `git pull`, do that yourself), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
+- `launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; before building it asks whether to pull when GitHub has new commits, `-NoUpdateCheck` skips that), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
 - `console.bat` / `console.ps1` - remote game console (use the .bat where script execution is disabled): `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
 - `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
@@ -143,6 +143,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 

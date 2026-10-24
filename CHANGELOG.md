@@ -10,6 +10,9 @@ Format: one bullet per change: what, why, and anything the other developer must 
   (1920x1080, 16:9; keep the important part in the middle ~1440x1080); today a **red placeholder** until exxecute's art
   is in. New `mod\CoopMod\make_assets.ps1` (run by `build.bat`) packs it into `CoopMod.package`, which the launcher,
   `make_package.ps1` (`Data\` in the zip) and `update.ps1` install into `<game>\Data\`. No protocol change.
+
+- **The updater checks and asks** (`update\update.ps1`, `update.bat`): from a repo checkout it looks at both news sources, new commits of the repo on GitHub (`git fetch`, the new commit subjects are listed) and a newer GitHub release than the installed one, and asks `P` = git pull, `R` = install the release into the game, `B` = both, `S` = skip (default). Without a repo (a player's `<game>\coop_update`) it still installs the latest release without asking. New switches: `-Install` (install the release, no questions: used by `launch.ps1 -Mode release`), `-Check` and `-Only repo|release|both`. `launch.ps1` in `dev` mode runs `update.ps1 -Check -Only repo` before building: it is silent when nothing is new and asks whether to pull when there are new commits (`-NoUpdateCheck` skips it). A failing `git pull` (local commits, uncommitted changes in the way) prints what to do instead of crashing. No protocol change.
+
 - **The launcher no longer runs `git pull`** (`launch.ps1`, so `launch_spore_mod.bat` too): in `dev` mode it only builds and installs. Pull yourself when you want the other developer's changes. The `-NoPull` switch is gone. No protocol change.
 
 - **M0 replication core** (`core/coop_core.h`, plain C++ without Spore or Windows headers) and its tests (`tests/core_tests.cpp`, run `tests\run_core_tests.bat`, prints `ALL OK`): entity table with netIds, wire format, host side (`Spawn/Update/Destroy`, deltas, full snapshots, reliable events), guest side with stale-state rejection, tombstones and reconcile-on-full. The tests run a fake world through a network with loss, duplicates and reordering (and a 100-tick total blackout) with oracles for unknown ids, resurrected ids, going back in time and final equality, plus mutation twins (each protection switched off once must make a test fail). The test rig found a real bug on the first run (a late duplicate delta recreated a destroyed entity after a full snapshot had cleared its tombstone) and it is fixed; 500 seeds pass. Not used by the mod yet (the game adapter comes next).
@@ -91,6 +94,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 
