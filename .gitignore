@@ -1,0 +1,17 @@
+# game installs and test copies
+/SPORE/
+/test/
+/downloads/
+
+# build output
+/coop_package/
+/coop_package.zip
+/mod/CoopMod/staging/
+/mod/CoopMod/obj/
+*.pdb
+*.obj
+*.log
+
+# personal notes and machine-specific files; only the registry helper script is shared
+/local/*
+!/local/fix_spore_registry.ps1
