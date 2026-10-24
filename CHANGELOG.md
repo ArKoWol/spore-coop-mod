@@ -5,6 +5,9 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Splash picture is in**: `assets/splash.png` is now exxecute's art (both developers, "The best mod ever") instead of the
+  red placeholder. To change it, replace that file (PNG 1920x1080) and build.
+
 - **Intro splash**: our own picture for 2.5 s after the EA logo, then the intro continues (Maxis, Spore logo). The intro is
   one movie, so the mod pauses it after the EA part and shows a window on top. The picture is `assets/splash.png`
   (1920x1080, 16:9; keep the important part in the middle ~1440x1080); today a **red placeholder** until exxecute's art
