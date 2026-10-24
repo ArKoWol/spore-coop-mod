@@ -1,4 +1,4 @@
-# Builds the package and publishes it as a GitHub release (needs: gh auth login, a remote named origin).
+﻿# Builds the package and publishes it as a GitHub release (needs: gh auth login, a remote named origin).
 # Usage: .\publish.ps1 [-Notes "override text"]   (build the mod first so staging\CoopMod.dll is current)
 # The release notes come from the "## Unreleased" section of CHANGELOG.md; afterwards that section is moved under the new tag.
 # CLAUDE.md and CHANGELOG.md are attached to the release and shipped inside the package (docs\).
@@ -20,9 +20,10 @@ if (-not $Notes) {
 }
 
 # move the Unreleased entries under the new tag
-$changelog = [regex]::Replace($changelog, '## Unreleased', "## Unreleased`r`n`r`n## $tag", 1)
+$changelog = [regex]::Replace($changelog, '(?m)^## Unreleased', "## Unreleased`r`n`r`n## $tag", 1)
 Set-Content $changelogPath $changelog -Encoding utf8
 
 & "$PSScriptRoot\make_package.ps1" -Repo $repo | Select-Object -Last 1
 gh release create $tag "$PSScriptRoot\coop_package.zip" "$PSScriptRoot\CLAUDE.md" "$PSScriptRoot\CHANGELOG.md" --repo $repo --title $tag --notes $Notes --latest
 "Published $tag to $repo. CHANGELOG.md was updated: commit and push it."
+
