@@ -58,8 +58,7 @@ SporeApp.exe
 - `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
-- `launch_spore_mod.bat [dev|release|play]` - starts the test copy: `dev` (default) builds and installs `staging\CoopMod.dll`,
-  `release` installs the latest GitHub release, `play` starts as is. Closes a running game first (asks). Starts windowed (`-w`).
+- `launch.ps1` (wrapped by `launch_spore_mod.bat`, `host.bat`, `join.bat`) - the one-step test launcher: closes a running game, `git pull` + build + install (`-Mode dev`, default), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it. `host.bat`: also `coop host` and the Steam ID goes to the clipboard. `join.bat <id>`: `coopjoin <id>` (no id: the last one). Options: `-NoPull`, `-NoConsole`.
 - `console.bat` / `console.ps1` - remote game console (use the .bat where script execution is disabled): `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
 - `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
@@ -67,8 +66,7 @@ SporeApp.exe
 ## Workflow
 1. `.\setup.ps1 -GameDir "<your Spore folder>"` once.
 2. Edit `mod/CoopMod/dllmain.cpp`.
-3. Run `launch_spore_mod.bat`: it builds, closes the game if needed (the DLL is locked while it runs, hence `staging`),
-   installs the build and starts the game. Each launch writes a `===== ... launch (mode) =====` line into `CoopMod.log`.
+3. Run `launch_spore_mod.bat` (or `host.bat` / `join.bat <id>` for a co-op test): it pulls, builds, closes a running game (the DLL is locked while it runs, hence `staging`), installs the build, starts the game and opens the connected console window.
 4. Check `test\SPORE_A\SporebinEP1\CoopMod.log` (our log) and `spore_log.txt` (ModAPI log).
 5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
 
@@ -114,6 +112,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 

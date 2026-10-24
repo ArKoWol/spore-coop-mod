@@ -7,7 +7,8 @@
 param(
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Command,
     [double]$Wait = 2,
-    [int]$Port = 27780
+    [int]$Port = 27780,
+    [string]$Run  # interactive mode only: commands (separated by ;) sent right after connecting, e.g. -Run "coop host"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -50,9 +51,13 @@ $null = $ps.AddScript({
     [Console]::WriteLine('(game closed the console)')
 }).AddArgument($stream)
 $null = $ps.BeginInvoke()
+Write-Host 'Spore console. Commands: coop host | coopjoin <steamid> | coop status | coop off | stage creature | exit' -ForegroundColor Cyan
+foreach ($c in ($Run -split ';')) {
+    if ($c.Trim()) { $writer.WriteLine($c.Trim()) }
+}
 try {
     while ($client.Connected) {
-        $line = Read-Host
+        $line = Read-Host 'spore'
         if ($line -eq 'exit') { break }
         $writer.WriteLine($line)
     }
