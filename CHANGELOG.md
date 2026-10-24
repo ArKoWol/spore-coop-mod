@@ -5,6 +5,15 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **The remote player's puppet walks instead of drifting** (Track B, S3): instead of `Teleport` every frame, the game's
+  own locomotion walks it to the received position (`MoveTo`, new `mod/CoopMod/game/PuppetMotion.cpp`), so its legs move
+  while it moves and it stands still when the other player stands; it only teleports when more than 6 m behind.
+  **No protocol change** (the speed is derived from the received positions; `StatePacket` is unchanged). Tested on one PC
+  with the new `coop echo` (a puppet that repeats you 0.4 s later, 4 m to the side): it walks at up to 4.0 m/s and follows
+  2-4 m behind. New console commands: `coop move` (default) / `coop walk` (WalkTo) / `coop teleport` (old way),
+  `coop motionlog` (`motion:` lines in `CoopMod.log`), `coop echo`. Known: at a full sprint the puppet lags a bit
+  (walk speed cap); next: run animation via `SetDesiredSpeed`.
+
 - **`docs/HANDOFF_B.md`: work split after the first two-PC test** (docs only). The test showed two separate worlds and a
   drifting puppet. Track A (ArKoWol): shared world, entity table, mirrors, guest AI/spawn neutered (S1, S2, M2).
   Track B (exxecute): puppet walking animation first, then the other player's own creature model, start flow, sidecar.

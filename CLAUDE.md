@@ -32,7 +32,8 @@ SporeApp.exe
       steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar)
 ```
 - **Console commands** (Ctrl+Shift+C in game): `coop host`, `coopjoin <steamid>`, `coop udphost`, `coopudpjoin <ip>`,
-  `coop status`, `coop abs`, `coop anim`, `coop noworld`, `coop sendworld`, `coop off`, plus `stage <name>` and `coophello`.
+  `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport` (how the puppet follows, `anim` = `walk`),
+  `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m to the side), `coop noworld`, `coop sendworld`, `coop off`, plus `stage <name>` and `coophello`.
   The game rejects a command without arguments, so every command has at least one word.
 - **Each frame** (`App::AddUpdateFunction(NetUpdate)`): pump Steam callbacks, receive packets, send our avatar's
   position + orientation (30 Hz, `StatePacket`), drive the puppet from the newest received state.
@@ -52,8 +53,10 @@ SporeApp.exe
   commands and gets the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread;
   commands are queued and run on the main thread in `ConsoleUpdate`. One client at a time; a new one replaces the old.
 - **Puppet**: a one-animal herd made with `GameNounManager.CreateHerd`; the animal shows up in `herd->mHerd` a few frames
-  later; its AI is skipped by a detour on `cCreatureAnimal::NPCTickAI`; its transform is set with `SetPosition` /
-  `SetOrientation` (smoothed). It is removed with `GameNounManager.DestroyInstance(herd)`.
+  later; its AI is skipped by a detour on `cCreatureAnimal::NPCTickAI`; the received position is smoothed and handed to
+  `game/PuppetMotion.cpp`, which lets the game's locomotion walk it there (`MoveTo` to a point a little ahead,
+  `StopMovement` + `SetOrientation` when the remote player stands, `Teleport` only when more than 6 m behind), so the game
+  plays the walk/idle animations itself. The remote speed is derived from the received positions (no packet change). It is removed with `GameNounManager.DestroyInstance(herd)`.
 
 ## Repository layout
 ```
@@ -108,7 +111,12 @@ player presses Continue.
 - **Move creatures with `Teleport(pos, rot)`, not `SetPosition`**: the creature's physics puts it back after
   `SetPosition` (the SDK says so on `cSpatialObject::Teleport`); `SetOrientation` alone does stick.
 - **Do not call `cCreatureAnimal::Create` without a herd**: it crashes right after spawning. Use `CreateHerd`.
-- **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is behind the experimental `coop anim` switch.
+- **A puppet walks with the game's own locomotion even with its AI skipped**: `cLocomotiveObject::MoveTo(goal, 0.3, 0.6)`
+  every 100 ms on the herd animal (whose `NPCTickAI` we skip) makes it walk there with leg animation; `StopMovement`
+  stops it. Verified with `coop echo` (2026-10-24): puppet speed up to **4.0 m/s** (seems to be the creature's walk
+  speed; a sprinting player at ~4.8 m/s gets 2-4 m ahead), no teleports while following. `SetDesiredSpeed` is the knob to try
+  for running. `Teleport` every frame (the old way) gives no leg animation.
+- **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is `coop walk` now (untested with a herd).
 - Creature stage is on a **sphere**: positions and orientations are full 3D values; copy them as they are, never assume a
   flat plane or `+Y` forward.
 - A `member_detour` needs `GetAddress(Class, Method)`; ours is `NPCTickAI_detour` in `AttachDetours()`.

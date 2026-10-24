@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "Entities.h"
 #include "Log.h"
+#include "game/PuppetMotion.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
 #include <Spore/Movie/MovieSystem.h>
 
@@ -413,13 +414,15 @@ static const DWORD kReconnectMs = 10000;
 // both players are on the same planet (the host sends its save, see "world transfer"). Relative mode shows
 // the remote movement around an anchor next to the local player, for two unrelated games.
 static bool sAbsolute = true;
-static bool sAnim = false;       // experimental: drive the puppet with WalkTo to get a walking animation
 static bool sSendWorld = true;   // host: send the save game to a client when it connects
 static bool sGotFirst = false;
 static Vector3 sPuppetPos;
 static float sPuppetRot[4];
 static DWORD sPuppetLast = 0;
-static DWORD sLastWalkTo = 0;
+// `coop echo`: a puppet that repeats our own avatar 0.4 s later, 4 m to the side, through the same puppet code as the
+// network. Tests the puppet's movement on one PC.
+static bool sEcho = false;
+static bool sEchoStarted = false;  // the echo has its offset and an empty sample buffer
 static Vector3 sRemoteFirst;
 static StatePacket sLatest;
 static bool sHaveLatest = false;
@@ -1164,42 +1167,9 @@ static void RunRestartIfDue()
 	}
 }
 
-static void NetUpdate()
+// Spawns the puppet when remote states arrive and moves it to the newest one.
+static void DrivePuppet(DWORD now, bool inGame)
 {
-	if (sDisposed) {
-		return;
-	}
-	FrameStats();
-	RunRestartIfDue();
-	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
-	UpdateIndicator(IndicatorText(), inGame);
-	if (sTransport == Transport::None) {
-		return;
-	}
-	if (sTransport == Transport::Steam) {
-		sSteam.RunCallbacks();
-		sSteam.SocketsRunCallbacks(sSteam.sockets);
-		SteamReceive();
-		SteamReceiveFiles();
-		WorldSendPump();
-	}
-	else {
-		UdpReceive();
-	}
-
-	DWORD now = GetTickCount();
-	if (sHavePeer && now - sLastSend >= kSendIntervalMs) {
-		sLastSend = now;
-		if (inGame) {
-			auto avatar = GameNounManager.GetAvatar();
-			NetSend(1, avatar->GetPosition(), avatar->mOrientation);
-		}
-		else {
-			NetSend(0, Vector3(), Math::Quaternion());
-		}
-	}
-
-	// Drive the puppet from the newest state.
 	if (!inGame) {
 		return;
 	}
@@ -1226,6 +1196,7 @@ static void NetUpdate()
 		const float* tr = sLatest.rot;
 		if (!sPuppetInit || (target - sPuppetPos).Length() > 8.0f) {
 			sPuppetInit = true;
+			PuppetMotion::Reset();
 			sPuppetPos = target;
 			memcpy(sPuppetRot, tr, sizeof(sPuppetRot));
 		}
@@ -1248,24 +1219,95 @@ static void NetUpdate()
 			}
 		}
 
-		// SetPosition alone is undone by the creature's physics (only the orientation stuck): Teleport moves the
-		// creature and recalculates its physics.
-		Math::Quaternion rot(sPuppetRot[0], sPuppetRot[1], sPuppetRot[2], sPuppetRot[3]);
-		if (sAnim) {
-			// Experimental: let the game walk the puppet (gives leg animation); correct it when it falls behind.
-			sPuppet->SetOrientation(rot);
-			if (now - sLastWalkTo >= 100) {
-				sLastWalkTo = now;
-				sPuppet->WalkTo(1, sPuppetPos, sPuppetPos, 0.5f, 1.0f);
-			}
-			if ((sPuppetPos - sPuppet->GetPosition()).Length() > 4.0f) {
-				sPuppet->Teleport(sPuppetPos, rot);
-			}
-		}
-		else {
-			sPuppet->Teleport(sPuppetPos, rot);
+		// the game's locomotion walks the puppet there (leg animation), see game/PuppetMotion.cpp
+		PuppetMotion::Drive(sPuppet.get(), sPuppetPos, Math::Quaternion(sPuppetRot[0], sPuppetRot[1], sPuppetRot[2], sPuppetRot[3]));
+	}}
+
+// `coop echo`: feeds sLatest from our own avatar, delayed and shifted, instead of from the network.
+static void EchoFeed(DWORD now)
+{
+	struct Sample { DWORD tick; Vector3 pos; Math::Quaternion rot; };
+	static Sample samples[64];
+	static int count = 0, next = 0;
+	static Vector3 side;
+	auto avatar = GameNounManager.GetAvatar();
+	if (!avatar) {
+		return;
+	}
+	if (!sEchoStarted) {
+		sEchoStarted = true;
+		// a fixed sideways offset, taken from the avatar's facing when the echo starts
+		Vector3 right = avatar->mOrientation.ToMatrix() * Vector3(1.0f, 0.0f, 0.0f);
+		side = right * 4.0f;
+		count = next = 0;
+	}
+	samples[next] = { now, avatar->GetPosition(), avatar->mOrientation };
+	next = (next + 1) % 64;
+	if (count < 64) {
+		++count;
+	}
+	// the newest sample that is at least 400 ms old
+	const Sample* pick = nullptr;
+	for (int k = 1; k <= count; ++k) {
+		const Sample& s = samples[(next - k + 64) % 64];
+		if (now - s.tick >= 400) {
+			pick = &s;
+			break;
 		}
 	}
+	if (!pick) {
+		return;
+	}
+	Vector3 pos = pick->pos + side;
+	sLatest.type = 1;
+	sLatest.pos[0] = pos.x; sLatest.pos[1] = pos.y; sLatest.pos[2] = pos.z;
+	sLatest.rot[0] = pick->rot.x; sLatest.rot[1] = pick->rot.y; sLatest.rot[2] = pick->rot.z; sLatest.rot[3] = pick->rot.w;
+	sHaveLatest = true;
+}
+
+static void NetUpdate()
+{
+	if (sDisposed) {
+		return;
+	}
+	FrameStats();
+	RunRestartIfDue();
+	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
+	UpdateIndicator(IndicatorText(), inGame);
+	if (sEcho) {
+		if (inGame) {
+			EchoFeed(GetTickCount());
+			DrivePuppet(GetTickCount(), inGame);
+		}
+		return;
+	}
+	if (sTransport == Transport::None) {
+		return;
+	}
+	if (sTransport == Transport::Steam) {
+		sSteam.RunCallbacks();
+		sSteam.SocketsRunCallbacks(sSteam.sockets);
+		SteamReceive();
+		SteamReceiveFiles();
+		WorldSendPump();
+	}
+	else {
+		UdpReceive();
+	}
+
+	DWORD now = GetTickCount();
+	if (sHavePeer && now - sLastSend >= kSendIntervalMs) {
+		sLastSend = now;
+		if (inGame) {
+			auto avatar = GameNounManager.GetAvatar();
+			NetSend(1, avatar->GetPosition(), avatar->mOrientation);
+		}
+		else {
+			NetSend(0, Vector3(), Math::Quaternion());
+		}
+	}
+
+	DrivePuppet(now, inGame);
 }
 
 // ---------------------------------------------------------------- remote console
@@ -1454,7 +1496,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1514,9 +1556,26 @@ public:
 		else if (strcmp(sub, "dump") == 0) {
 			DumpEntities();
 		}
-		else if (strcmp(sub, "anim") == 0) {
-			sAnim = !sAnim;
-			App::ConsolePrintF("coop: puppet walk animation (experimental) %s", sAnim ? "on" : "off");
+		else if (strcmp(sub, "move") == 0 || strcmp(sub, "walk") == 0 || strcmp(sub, "teleport") == 0 || strcmp(sub, "anim") == 0) {
+			// how the puppet follows the remote player (game/PuppetMotion.cpp); "anim" is the old name of "walk"
+			PuppetMotion::Mode mode = sub[0] == 'm' ? PuppetMotion::Mode::Move
+				: sub[0] == 't' ? PuppetMotion::Mode::Teleport : PuppetMotion::Mode::Walk;
+			PuppetMotion::SetMode(mode);
+			App::ConsolePrintF("coop: puppet motion: %s", PuppetMotion::ModeName(mode));
+		}
+		else if (strcmp(sub, "motionlog") == 0) {
+			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());
+			App::ConsolePrintF("coop: motion log in CoopMod.log %s", PuppetMotion::GetLogging() ? "on" : "off");
+		}
+		else if (strcmp(sub, "echo") == 0) {
+			sEcho = !sEcho;
+			sEchoStarted = false;
+			if (!sEcho) {
+				ReleasePuppet();
+				sHaveLatest = false;
+				sPuppetInit = false;
+			}
+			App::ConsolePrintF("coop: echo puppet (repeats you 0.4 s later, 4 m to the side) %s", sEcho ? "on" : "off");
 		}
 		else if (strcmp(sub, "abs") == 0) {
 			sAbsolute = !sAbsolute;

@@ -49,12 +49,14 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Log.h" />
+    <ClInclude Include="game\PuppetMotion.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Entities.cpp" />
     <ClCompile Include="Log.cpp" />
+    <ClCompile Include="game\PuppetMotion.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
