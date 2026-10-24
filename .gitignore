@@ -20,3 +20,6 @@
 # personal notes and machine-specific files; only the registry helper script is shared
 /local/*
 !/local/fix_spore_registry.ps1
+
+# test build output
+/tests/out/
