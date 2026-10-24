@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "World.h"
 #include "Log.h"
+#include "Models.h"
 #include "../../core/coop_core.h"
 
 #include <deque>
@@ -19,6 +20,11 @@ namespace
 	const size_t kDeltaPerMessage = 20;
 	const uint8_t kMsgSpecies = 100;    // [100][instance][type][group]: which species a hash stands for
 	const uint8_t kMsgTelemetry = 101;  // guest -> host: [101][table][mirrors][strays]
+	const uint8_t kMsgModelReq = 102;   // guest -> host: [102][instance][type][group]: I cannot build this species
+	const uint8_t kMsgModel = 103;      // host -> guest: [103][instance][type][group][index u8][count u8][recType][total][offset][len][bytes]
+	const uint8_t kMsgModelNone = 104;  // host -> guest: [104][instance]: the host has no record for it either
+	const uint32_t kModelChunk = 40 * 1024;
+	const DWORD kModelWaitMs = 20000;   // after this long a missing model is replaced by a stand-in (and counted)
 
 	struct Mirror
 	{
@@ -47,6 +53,15 @@ namespace
 		// guest
 		GuestWorld* guest = nullptr;
 		std::map<uint32_t, ResourceKey> species;
+		struct ModelWait
+		{
+			DWORD since = 0;
+			bool requested = false, failed = false, done = false;
+			std::vector<Models::Record> records;
+			std::vector<uint32_t> got;
+		};
+		std::map<uint32_t, ModelWait> models;  // species instance -> transfer state
+		int standIns = 0;                      // mirrors that had to use the stand-in species
 		std::map<uint32_t, Mirror> mirrors;
 		bool haveWorld = false;  // a snapshot arrived: the guest's own animals are strays now
 		DWORD lastNeuter = 0, lastTelemetry = 0, lastLog = 0;
@@ -181,13 +196,24 @@ namespace
 			profile = SpeciesManager.GetSpeciesProfile(key->second);
 		}
 		if (!profile) {
-			// the species is unknown here: show the guest's own species instead of nothing
+			// The species is not buildable here (yet). Its model is on its way from the host (see OnMessage): wait for it
+			// and only after kModelWaitMs show the guest's own species, loudly, as a counted stand-in.
+			State::ModelWait& wait = s.models[st.species];
+			DWORD now = GetTickCount();
+			if (!wait.since) {
+				wait.since = now;
+			}
+			if (!wait.failed && !wait.done && now - wait.since < kModelWaitMs) {
+				return nullptr;
+			}
 			if (auto avatar = GameNounManager.GetAvatar()) {
 				profile = SpeciesManager.GetSpeciesProfile(avatar->mSpeciesKey);
 			}
+			++s.standIns;
 			if (!s.warnedSpecies) {
 				s.warnedSpecies = true;
-				Logf("world: species %08x not found, using the avatar's species for mirrors", st.species);
+				Logf("world: species %08x has no model here (%s), using the avatar's species as a stand-in", st.species,
+					wait.failed ? "the host has none" : (wait.done ? "installed but not found" : "timeout"));
 			}
 		}
 		if (!profile) {
@@ -412,6 +438,35 @@ namespace World
 			return;
 		}
 		if (host) {
+			if (data[0] == kMsgModelReq && size == 13) {
+				Reader r(data, size);
+				r.U8();
+				uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
+				std::vector<Models::Record> records;
+				if (!Models::Read(instance, type, group, records)) {
+					Logf("world: the guest asked for species %08x, the host has no record for it", instance);
+					Writer w; w.U8(kMsgModelNone); w.U32(instance);
+					QueueReliable(s, w.buf);
+					return;
+				}
+				size_t total = 0;
+				for (size_t i = 0; i < records.size(); ++i) {
+					const Models::Record& rec = records[i];
+					total += rec.data.size();
+					for (uint32_t offset = 0; offset < rec.data.size(); offset += kModelChunk) {
+						uint32_t len = (uint32_t)std::min<size_t>(kModelChunk, rec.data.size() - offset);
+						Writer w;
+						w.U8(kMsgModel); w.U32(instance); w.U32(type); w.U32(group);
+						w.U8((uint8_t)i); w.U8((uint8_t)records.size()); w.U32(rec.type);
+						w.U32((uint32_t)rec.data.size()); w.U32(offset); w.U32(len);
+						w.buf.insert(w.buf.end(), rec.data.begin() + offset, rec.data.begin() + offset + len);
+						QueueReliable(s, w.buf);
+					}
+				}
+				Logf("world: sending the model of species %08x to the guest (%d records, %d bytes)", instance,
+					(int)records.size(), (int)total);
+				return;
+			}
 			if (data[0] == kMsgTelemetry && size == 13) {
 				Reader r(data, size);
 				r.U8();
@@ -436,6 +491,63 @@ namespace World
 			key.typeID = r.U32();
 			key.groupID = r.U32();
 			s.species[key.instanceID] = key;
+			Models::RegisterCached();
+			if (!Models::Has(key.instanceID, key.typeID, key.groupID)) {
+				State::ModelWait& wait = s.models[key.instanceID];
+				if (!wait.since) {
+					wait.since = GetTickCount();
+				}
+				if (!wait.done && !wait.failed && !wait.requested) {
+					wait.requested = true;
+					Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+					QueueReliable(s, w.buf);
+					Logf("world: species %08x/%08x/%08x is not buildable here, asking the host for its model", key.instanceID,
+						key.typeID, key.groupID);
+				}
+			}
+			return;
+		}
+		if (data[0] == kMsgModelNone && size == 5) {
+			Reader r(data, size);
+			r.U8();
+			s.models[r.U32()].failed = true;
+			return;
+		}
+		if (data[0] == kMsgModel && size >= 38) {
+			Reader r(data, size);
+			r.U8();
+			uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
+			uint8_t index = r.U8(), count = r.U8();
+			uint32_t recType = r.U32(), total = r.U32(), offset = r.U32(), len = r.U32();
+			if (!r.ok || len > size - 38 || total > 8u * 1024 * 1024 || offset + len > total || index >= count) {
+				return;
+			}
+			State::ModelWait& wait = s.models[instance];
+			if (wait.done) {
+				return;
+			}
+			if (wait.records.size() != count) {
+				wait.records.assign(count, Models::Record());
+				wait.got.assign(count, 0);
+			}
+			Models::Record& rec = wait.records[index];
+			if (rec.data.size() != total) {
+				rec.data.assign(total, 0);
+				rec.type = recType; rec.group = group; rec.instance = instance;
+			}
+			memcpy(rec.data.data() + offset, data + 38, len);
+			wait.got[index] += len;
+			bool complete = true;
+			for (uint8_t i = 0; i < count; ++i) {
+				complete = complete && !wait.records[i].data.empty() && wait.got[i] == wait.records[i].data.size();
+			}
+			if (complete) {
+				wait.done = true;
+				if (!Models::Install(instance, type, group, wait.records)) {
+					wait.failed = true;
+				}
+				std::vector<Models::Record>().swap(wait.records);
+			}
 			return;
 		}
 		if (s.guest->Receive(data, size)) {
@@ -466,6 +578,7 @@ namespace World
 	void Shutdown()
 	{
 		Reset();
+		Models::Shutdown();
 	}
 
 	void PrintStatus()
@@ -475,8 +588,8 @@ namespace World
 			return;
 		}
 		State& s = *sState;
-		App::ConsolePrintF("coop world: host animals %d | guest table %d, mirrors %d, strays %d (removed %d) | reported by guest: table %d, mirrors %d, strays %d",
-			s.hostAnimals, (int)s.guest->entities().size(), (int)s.mirrors.size(), s.strays, s.removedStrays, s.guestTable,
-			s.guestMirrors, s.guestStrays);
+		App::ConsolePrintF("coop world: host animals %d | guest table %d, mirrors %d, strays %d (removed %d), stand-in models %d | reported by guest: table %d, mirrors %d, strays %d",
+			s.hostAnimals, (int)s.guest->entities().size(), (int)s.mirrors.size(), s.strays, s.removedStrays, s.standIns,
+			s.guestTable, s.guestMirrors, s.guestStrays);
 	}
 }

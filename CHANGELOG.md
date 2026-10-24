@@ -5,6 +5,19 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Creature models travel with the session (S8, gate G2) and a dump to find out why animals looked wrong.** The cause of
+  "every animal has our species' model" is that a save holds only creature keys; the bodies (`bem` records) live in the host's
+  `EditorSaves.package` / `Pollination.package`. New `Models.cpp/.h`: the guest asks the host (`kMsgModelReq`) for every species
+  `GetSpeciesProfile` cannot build, the host reads the records from the resource manager and sends them (reliable, 40 KB chunks),
+  the guest writes `<game>\SporebinEP1\CoopModels\m_<group>_<instance>.package` (uncompressed DBPF) and registers it with
+  `ResourceManager.RegisterDatabase` (cached packages are registered again at the next start). Mirrors now **wait up to 20 s
+  for the model** instead of silently using our own species; after that they use the stand-in and it is counted (`coop status`:
+  "stand-in models", log `world:`). Idea and ids from WoodyWizard/SporeCoop (MIT), see `docs/SYNC_REDESIGN.md` 6b.
+  `coop dump` now also lists every creature species with `buildable=0/1` and the package that holds its record (spike S13);
+  `coop modeltest` checks read + package + register for the avatar's species on one PC; `scripts\worlddiff.ps1 host\CoopDump.txt
+  guest\CoopDump.txt` compares two dumps (gate G0). `docs/SYNC_REDESIGN.md`: the redesign plan (events, manifests, order of gates).
+  **`kProtocolVersion` is 5.** Not tested with two PCs yet; `coop modeltest` and `coop dump` need the creature stage.
+
 - **The remote player's puppet walks instead of drifting** (Track B, S3): instead of `Teleport` every frame, the game's
   own locomotion walks it to the received position (`MoveTo`, new `mod/CoopMod/game/PuppetMotion.cpp`), so its legs move
   while it moves and it stands still when the other player stands; it only teleports when more than 6 m behind.

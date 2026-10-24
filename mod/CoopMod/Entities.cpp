@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "Entities.h"
 #include "Log.h"
+#include "Models.h"
 
 #include <cstdio>
 #include <map>
@@ -51,6 +52,7 @@ namespace
 void DumpEntities()
 {
 	std::map<uint32_t, int> counts;
+	std::map<uint32_t, ResourceKey> speciesSeen;  // instance -> key of every creature species in the scene
 	int total = 0;
 
 	FILE* file = fopen("CoopDump.txt", "w");
@@ -76,6 +78,7 @@ void DumpEntities()
 			fprintf(file, " | %.2f %.2f %.2f", p.x, p.y, p.z);
 		}
 		if (auto creature = object_cast<Simulator::cCreatureBase>(object)) {
+			speciesSeen[creature->mSpeciesKey.instanceID] = creature->mSpeciesKey;
 			fprintf(file, " | species %08x/%08x/%08x", creature->mSpeciesKey.instanceID, creature->mSpeciesKey.typeID,
 				creature->mSpeciesKey.groupID);
 		}
@@ -88,9 +91,46 @@ void DumpEntities()
 		fprintf(file, "\n");
 	}
 
+	// where each species lives (spike S13): can this machine build it, and which package holds its model record?
+	int missing = 0;
+	for (auto& entry : speciesSeen) {
+		const ResourceKey& key = entry.second;
+		bool has = Models::Has(key.instanceID, key.typeID, key.groupID);
+		eastl::vector<uint32_t> types;
+		ResourceManager.GetRecordTypesFromResourceType(types, key.typeID);
+		if (types.empty()) {
+			types.push_back(key.typeID);
+		}
+		std::string where;
+		for (uint32_t recordType : types) {
+			ResourceKey recordKey(key.instanceID, recordType, key.groupID);
+			Resource::Database* db = ResourceManager.FindRecord(recordKey);
+			char part[512];
+			if (db) {
+				std::string path;
+				for (const char16_t* c = db->GetLocation(); c && *c; ++c) {
+					path += *c < 128 ? (char)*c : '?';
+				}
+				snprintf(part, sizeof(part), " [%08x in %s]", recordType, path.c_str());
+			}
+			else {
+				snprintf(part, sizeof(part), " [%08x not found]", recordType);
+			}
+			where += part;
+		}
+		if (!has) {
+			++missing;
+		}
+		if (file) {
+			fprintf(file, "species %08x/%08x/%08x buildable=%d%s\n", key.instanceID, key.typeID, key.groupID, has ? 1 : 0, where.c_str());
+		}
+		Logf("dump: species %08x/%08x/%08x buildable=%d%s", key.instanceID, key.typeID, key.groupID, has ? 1 : 0, where.c_str());
+	}
+
 	if (file) {
 		fclose(file);
 	}
+	App::ConsolePrintF("coop dump: %d creature species, %d not buildable here", (int)speciesSeen.size(), missing);
 
 	App::ConsolePrintF("coop dump: %d entities in %d kinds (full list in CoopDump.txt)", total, (int)counts.size());
 	Logf("dump: %d entities in %d kinds, creature stage %d", total, (int)counts.size(), Simulator::IsCreatureGame() ? 1 : 0);

@@ -4,6 +4,7 @@
 #include "Log.h"
 #include "game/PuppetMotion.h"
 #include "World.h"
+#include "Models.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
 #include <Spore/Movie/MovieSystem.h>
 
@@ -377,7 +378,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 4;
+static const uint32_t kProtocolVersion = 5;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1621,6 +1622,22 @@ public:
 		}
 		else if (strcmp(sub, "dump") == 0) {
 			DumpEntities();
+		}
+		else if (strcmp(sub, "modeltest") == 0) {
+			// one-PC check of the model transfer: read the avatar's species from the resource manager, write it as a
+			// CoopModels package, register it (the game already knows the key, so nothing visible changes)
+			auto avatar = GameNounManager.GetAvatar();
+			if (!avatar) {
+				App::ConsolePrintF("coop: modeltest needs the creature stage (an avatar)");
+			}
+			else {
+				const ResourceKey& k = avatar->mSpeciesKey;
+				std::vector<Models::Record> records;
+				bool read = Models::Read(k.instanceID, k.typeID, k.groupID, records);
+				bool installed = read && Models::Install(k.instanceID, k.typeID, k.groupID, records);
+				App::ConsolePrintF("coop: modeltest species %08x/%08x/%08x: read %s (%d records), install %s", k.instanceID,
+					k.typeID, k.groupID, read ? "ok" : "FAILED", (int)records.size(), installed ? "ok" : "FAILED");
+			}
 		}
 		else if (strcmp(sub, "move") == 0 || strcmp(sub, "walk") == 0 || strcmp(sub, "teleport") == 0 || strcmp(sub, "anim") == 0) {
 			// how the puppet follows the remote player (game/PuppetMotion.cpp); "anim" is the old name of "walk"
