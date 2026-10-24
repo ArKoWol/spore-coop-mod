@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 Newest first. Every change goes under `## Unreleased` while you work; `publish.ps1` moves it under the release tag.
 Format: one bullet per change: what, why, and anything the other developer must know (packet/protocol changes, new commands).
@@ -13,6 +13,23 @@ Format: one bullet per change: what, why, and anything the other developer must 
   2-4 m behind. New console commands: `coop move` (default) / `coop walk` (WalkTo) / `coop teleport` (old way),
   `coop motionlog` (`motion:` lines in `CoopMod.log`), `coop echo`. Known: at a full sprint the puppet lags a bit
   (walk speed cap); next: run animation via `SetDesiredSpeed`.
+
+- **Restart helper finds the console script by itself.** After the automatic restart the console window did not come back
+  when `COOP_CONSOLE_PS1` was missing or pointed to a file that had moved (the repo tidy-up moved `console.ps1` to
+  `scripts\`). `LaunchRestartHelper` now looks for `scripts\console.ps1` / `console.ps1` up to 5 folders above the game
+  folder when the variable does not work. Checked: game started without the variable, `coop restart`, new game process and
+  a new console window.
+
+- **Shared world, first version (M2, Track A): the host's animals are replicated to the guest.** New `World.cpp/.h`
+  (the game adapter of `core/coop_core.h`). Host: every 100 ms the `cCreatureAnimal`s (not the avatar, not the player puppet)
+  go into `HostWorld`; deltas (cut into messages of 20 entities, `HostWorld::MakeDeltas`) on Steam channel 2 (unreliable),
+  Spawn/Destroy events, a full snapshot every 10 s and the species definitions on channel 3 (reliable, ordered, queued when
+  Steam's buffer is full). Guest: `GuestWorld` rebuilds the table, each entity gets a mirror (a one-animal herd made with
+  `CreateHerd`, moved by `Teleport`, smoothed); the `NPCTickAI` detour skips every animal but the guest's own avatar
+  (`World::ShouldSkipAI`), and the guest's own animals are removed every 0.5 s once the first snapshot arrived (strays).
+  The guest reports table/mirror/stray counts to the host every 2 s: `coop status` and `CoopMod.log` (`world:` lines)
+  show host animals vs guest table/mirrors/strays. Only animals so far (nests, eggs, plants are next). Not tested in the
+  game yet. **`kProtocolVersion` is 4**: both players must update. Core: `MakeDeltas` + a test (`tests\run_core_tests.bat`).
 
 - **`docs/HANDOFF_B.md`: work split after the first two-PC test** (docs only). The test showed two separate worlds and a
   drifting puppet. Track A (ArKoWol): shared world, entity table, mirrors, guest AI/spawn neutered (S1, S2, M2).

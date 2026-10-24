@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <set>
@@ -151,6 +152,23 @@ namespace coop
 			for (uint32_t id : dirty_) w.State(entities_[id]);
 			dirty_.clear();
 			return w.buf;
+		}
+
+		// Same as MakeDelta, but cut into messages of at most perMessage entities (an unreliable message must stay
+		// under the network MTU, about 20 states of 49 bytes). Nothing changed: no messages.
+		std::vector<Message> MakeDeltas(size_t perMessage)
+		{
+			std::vector<Message> out;
+			if (perMessage == 0) perMessage = 1;
+			std::vector<uint32_t> ids(dirty_.begin(), dirty_.end());
+			dirty_.clear();
+			for (size_t i = 0; i < ids.size(); i += perMessage) {
+				size_t n = std::min(perMessage, ids.size() - i);
+				Writer w; w.U8((uint8_t)MsgType::Delta); w.U32(tick_); w.U16((uint16_t)n);
+				for (size_t k = 0; k < n; ++k) w.State(entities_[ids[i + k]]);
+				out.push_back(std::move(w.buf));
+			}
+			return out;
 		}
 
 		// Unreliable, sent every ~10 s and to a joining guest: every entity.

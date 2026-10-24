@@ -1,8 +1,9 @@
-﻿// dllmain.cpp : entry point for the CoopMod DLL.
+// dllmain.cpp : entry point for the CoopMod DLL.
 #include "stdafx.h"
 #include "Entities.h"
 #include "Log.h"
 #include "game/PuppetMotion.h"
+#include "World.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
 #include <Spore/Movie/MovieSystem.h>
 
@@ -25,7 +26,7 @@ member_detour(NPCTickAI_detour, Simulator::cCreatureAnimal, void(float))
 {
 	void detoured(float deltaTime)
 	{
-		if (this == sPuppetRaw) {
+		if (this == sPuppetRaw || World::ShouldSkipAI(this)) {
 			return;
 		}
 		original_function(this, deltaTime);
@@ -376,7 +377,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 3;
+static const uint32_t kProtocolVersion = 4;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -429,6 +430,7 @@ static bool sHaveLatest = false;
 
 static void NetStop()
 {
+	World::Reset();
 	if (sTransport == Transport::Udp && sSocket != INVALID_SOCKET) {
 		closesocket(sSocket);
 		sSocket = INVALID_SOCKET;
@@ -920,6 +922,7 @@ static void SteamReceive()
 						if (sSendWorld) {
 							WorldSendStart();
 						}
+						World::HostPeerConnected();
 					}
 					if (!sIsHost && !sHostSeen) {
 						sHostSeen = true;
@@ -954,6 +957,42 @@ static void SteamReceiveFiles()
 				WorldReceiveChunk(data, size);
 			}
 			sSteam.Release(messages[i]);
+		}
+	}
+}
+
+// The shared world (World.cpp): entity deltas on channel 2 (unreliable), the rest on channel 3 (reliable, ordered).
+static bool WorldSendOn(const void* data, uint32_t size, int flags, int channel)
+{
+	if (!sSteam.ready || !sPeerSteamId) {
+		return false;
+	}
+	alignas(8) unsigned char identity[256] = {};
+	sSteam.SetSteamID64(identity, sPeerSteamId);
+	return sSteam.Send(sSteam.messages, identity, data, size, flags, channel) == 1;
+}
+
+static bool WorldSendUnreliable(const void* data, uint32_t size) { return WorldSendOn(data, size, 5, World::kChannelDelta); }
+static bool WorldSendReliable(const void* data, uint32_t size) { return WorldSendOn(data, size, 8, World::kChannelReliable); }
+
+static void SteamReceiveWorld()
+{
+	void* messages[16];
+	for (int channel : { World::kChannelDelta, World::kChannelReliable }) {
+		for (;;) {
+			int n = sSteam.Receive(sSteam.messages, channel, messages, 16);
+			if (n <= 0) {
+				break;
+			}
+			for (int i = 0; i < n; ++i) {
+				const unsigned char* msg = (const unsigned char*)messages[i];
+				const unsigned char* data = *(const unsigned char* const*)msg;
+				int size = *(const int*)(msg + sizeof(void*));
+				if (size > 0) {
+					World::OnMessage(channel, data, (uint32_t)size, sIsHost);
+				}
+				sSteam.Release(messages[i]);
+			}
 		}
 	}
 }
@@ -1110,6 +1149,28 @@ static void LaunchRestartHelper()
 	GetTempPathW(MAX_PATH, temp);
 	std::wstring script = std::wstring(temp) + L"coop_restart.ps1";
 	const wchar_t* console = _wgetenv(L"COOP_CONSOLE_PS1");
+	// Without the launcher's variable (or when it points to a file that moved), look for the repo's console script above
+	// the game folder: test\SPORE_A\SporebinEP1 -> <repo>\scripts\console.ps1.
+	std::wstring found;
+	if (!console || !*console || GetFileAttributesW(console) == INVALID_FILE_ATTRIBUTES) {
+		console = nullptr;
+		std::wstring up = dir;
+		for (int level = 0; level < 5 && !console; ++level) {
+			size_t cut = up.find_last_of(L'\\');
+			if (cut == std::wstring::npos) {
+				break;
+			}
+			up.erase(cut);
+			for (const wchar_t* tail : { L"\\scripts\\console.ps1", L"\\console.ps1" }) {
+				std::wstring candidate = up + tail;
+				if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+					found = candidate;
+					console = found.c_str();
+					break;
+				}
+			}
+		}
+	}
 
 	FILE* f = _wfopen(script.c_str(), L"w, ccs=UTF-8");
 	if (!f) {
@@ -1289,7 +1350,12 @@ static void NetUpdate()
 		sSteam.SocketsRunCallbacks(sSteam.sockets);
 		SteamReceive();
 		SteamReceiveFiles();
+		SteamReceiveWorld();
 		WorldSendPump();
+		if (sHavePeer) {
+			World::SetTransport(WorldSendUnreliable, WorldSendReliable);
+			World::Update(sIsHost, inGame, sPuppetRaw);
+		}
 	}
 	else {
 		UdpReceive();
@@ -1589,6 +1655,7 @@ public:
 			if (sSteam.ready) {
 				App::ConsolePrintF("coop: your Steam ID %llu", (unsigned long long)sSteam.myId);
 			}
+			World::PrintStatus();
 		}
 		else if (strcmp(sub, "off") == 0) {
 			NetStop();
@@ -1742,6 +1809,8 @@ void Dispose()
 	// The loader unloads this DLL right after Dispose. Everything that still points into it must go first,
 	// otherwise the game or Steam would call freed code.
 	NetStop();
+	World::SetTransport(nullptr, nullptr);
+	World::Shutdown();
 	SteamStop();
 	ConsoleStop();
 	App::RemoveUpdateFunction(sNetListener);

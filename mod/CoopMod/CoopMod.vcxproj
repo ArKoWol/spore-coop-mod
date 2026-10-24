@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Release|Win32">
@@ -50,6 +50,7 @@
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="game\PuppetMotion.h" />
+    <ClInclude Include="World.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
@@ -57,6 +58,7 @@
     <ClCompile Include="Entities.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="game\PuppetMotion.cpp" />
+    <ClCompile Include="World.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
