@@ -11,8 +11,8 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>CoopMod</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <SporeSdkPath>C:\games\Spore_wtf_mode\downloads\Spore-ModAPI-src\Spore-ModAPI-master\</SporeSdkPath>
-    <SporeModLibs>C:\games\Spore_wtf_mode\test\SPORE_A\SporeModLoader\ModLibs\</SporeModLibs>
+    <SporeSdkPath>$(MSBuildThisFileDirectory)..\..\downloads\Spore-ModAPI-src\Spore-ModAPI-master\</SporeSdkPath>
+    <SporeModLibs>$(MSBuildThisFileDirectory)staging\</SporeModLibs>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -57,3 +57,4 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
+

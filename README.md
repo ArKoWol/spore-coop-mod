@@ -1,4 +1,4 @@
-# Spore co-op mod
+﻿# Spore co-op mod
 
 Experimental co-op for Spore: Galactic Adventures (GOG build, exe 3.1.0.29). A DLL mod for
 [SporeModLoader](https://github.com/Rosalie241/SporeModLoader) built on the
@@ -16,3 +16,17 @@ Status: early test. Creature stage only, no walking animation on the puppet, the
 - `launch_spore_mod.bat` - local test launcher.
 
 Game files, Valve's `steam_api.dll` and save games are not part of this repository.
+
+## Playing
+Download `coop_package.zip` from the [latest release](../../releases/latest), extract it, run `coop_update\update.bat`.
+Full instructions are in `coop_package_README.txt`.
+
+## Development
+```
+git clone https://github.com/ArKoWol/spore-coop-mod
+cd spore-coop-mod
+.\setup.ps1 -GameDir "D:\Games\SPORE"   # installs Build Tools, the SDK, SporeModLoader; builds the mod; makes test\SPORE_A
+```
+Edit `mod\CoopMod\dllmain.cpp`, build with `mod\CoopMod\build.bat` (output: `mod\CoopMod\staging\CoopMod.dll`),
+test with `launch_spore_mod.bat`, release with `.\publish.ps1` (needs `gh auth login`).
+Bump `kProtocolVersion` in `dllmain.cpp` whenever the packet layout changes.

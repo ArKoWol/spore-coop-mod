@@ -4,7 +4,7 @@
 param([switch]$IncludeSteamDll, [string]$Repo)
 
 $root = $PSScriptRoot
-$loader = Join-Path $root 'downloads\SporeModLoader-f42b869'
+$loader = (Get-ChildItem (Join-Path $root 'downloads') -Directory -Filter 'SporeModLoader-*' | Sort-Object Name | Select-Object -Last 1).FullName
 $dll = Join-Path $root 'mod\CoopMod\staging\CoopMod.dll'
 $out = Join-Path $root 'coop_package'
 
@@ -28,3 +28,4 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path "$out\*" -DestinationPath $zip
 Get-ChildItem $out -Recurse -File | Select-Object @{n='file';e={$_.FullName.Substring($out.Length + 1)}}, Length
 "$zip  $((Get-Item $zip).Length) bytes  sha256 $((Get-FileHash $zip).Hash)"
+

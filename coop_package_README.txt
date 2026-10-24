@@ -8,17 +8,15 @@ What you need
 - The game must start normally BEFORE installing the mod.
 
 Install (first time)
-1. Copy everything from this package into the game folder (the one that contains SporebinEP1), keeping the folders:
-     SporebinEP1\dinput8.dll        ->  <game>\SporebinEP1\
-     SporeModLoader\                ->  <game>\SporeModLoader\
-     coop_update\                   ->  <game>\coop_update\
-2. Run  <game>\coop_update\update.bat  once: it downloads the newest mod build and finds the Steam API file
-   (steam_api_coop.dll) in your Steam games. Close the game first. From now on, running update.bat is the whole update.
-3. Start the game by running <game>\SporebinEP1\SporeApp.exe (or the GOG shortcut).
+1. Extract this package anywhere and run  coop_update\update.bat . Close the game first.
+   It asks for your Spore folder (the one that contains SporebinEP1), downloads the newest mod build, installs it,
+   and finds the Steam API file (steam_api_coop.dll) in your Steam games.
+2. Start the game by running <game>\SporebinEP1\SporeApp.exe (or the GOG shortcut).
+3. To update later, run  coop_update\update.bat  again (from the same place).
 4. If you get "Configuration Script Failed [2000]" or "data directory is missing or corrupt [1004]":
    open PowerShell as Administrator and run
      .\fix_spore_registry.ps1 -GameDir "<game folder>"
-
+   (it is installed next to update.bat)
 Both players must run update.bat before playing: different mod versions refuse to talk to each other
 ("different mod version" message in the console).
 Playing together (test version)
@@ -38,6 +36,7 @@ Playing together (test version)
      host: coop udphost         client: coop udpjoin <host IP>      (UDP port 27777; needs VPN or port forwarding)
 Commands: coop host | coop join <steamid> | coop udphost | coop udpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off
 Log file: <game>\SporebinEP1\CoopMod.log - send it if something goes wrong.
+
 
 
 
