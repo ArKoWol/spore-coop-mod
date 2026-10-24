@@ -9,7 +9,7 @@ Read `DESIGN.md` for the product decisions (they stay). This file replaces its s
 | Symptom (guest = friend) | Cause | Confidence |
 |---|---|---|
 | Objects lie in the same places but do not disappear when eaten | We replicate only `cCreatureAnimal`. Fruit, plants, eggs, nests, food exist on both sides from the same save but nothing says "this one was eaten/destroyed". | high |
-| Every animal has the model of our own species | `World.cpp` falls back to the avatar's species when `SpeciesManager.GetSpeciesProfile(key)` finds nothing. It finds nothing because the NPC species (creature models) are not on the guest's machine: they come from the host's cache/generation, not from the save. The fallback hid the failure. | high for "profile not found", medium for "files are missing" (needs S8) |
+| Every animal has the model of our own species | **Revised after the first `coop dump` (host, 2026-10-24): the 7 species of the scene all live in the stock `Spore_Content.package`, so the guest has them too; "models missing on the guest" is NOT the cause for this scene** (the model transfer stays as a safety net for custom creatures). Still open: either the species definition did not reach the mirror code (then the guest log says `has no model here` and `coop status` shows stand-in models > 0), or the game builds animals from the herd's species, not from the profile we pass. Needs the friend's `CoopMod.log` (`world:` lines) and `coop dump`. | species location: verified; cause: unknown |
 | Nests are missing on the guest | Nests of the creature stage are made by the game at runtime, not stored in the save we send; and we do not replicate them. | medium (check with `coop dump` on both) |
 | Host sees the guest sliding | That test ran a build before the walking puppet (S3) or on one side only. Retest with the current build; not a design problem. | medium |
 | Only walking is animated; no eating, singing, hitting, no HP | We stream positions only. Animations, abilities, damage and health are events of the game that nobody captures. | high |
@@ -101,6 +101,14 @@ Layers, each with its own test:
 - **Together**: nests (G2), combat (G4, S16).
 - The old `World.cpp` (animal mirrors) stays as the L3 movement carrier; its species fallback must be replaced by the placeholder
   rule in G2, and its stray-removal stays until G1 makes the guest's own spawning irrelevant.
+
+## 6a. Measured facts (first real dump, host PC, creature stage of the owner's save)
+
+- 4188 nouns: 101 CreatureAnimal, 123 Herd, **101 Nest** (one per herd, spread over the planet), 74 Fruit, 1443 FruitGroup,
+  5 GamePlant, 1 Egg, 29 Rock, 1712 Obstacle, 534 GameplayMarker, 21 InteractiveOrnament, 17 HitSphere, 1 Player.
+- The 7 creature species of the scene are stock (`Spore_Content.package`, type crt 0x2B978C46, group 0x40626200); the avatar's
+  species was the owner's own creation. So the NPC models exist on every GOG install.
+- `coop modeltest` works: read a `bem` record (2890 bytes), wrote a 3022-byte DBPF, registered it, the profile is found.
 
 ## 6b. What the other mod (WoodyWizard/SporeCoop, MIT) taught us (read 2026-10-24)
 

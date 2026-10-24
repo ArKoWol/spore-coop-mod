@@ -162,6 +162,11 @@ player presses Continue.
   one: header version 3, index flags 4, entries `type, group, instance, offset, size|0x80000000, size, 0, 1`). Names are
   `id("...")` = FNV-1 of the lower-case name. A PNG of any size works for UTFWin images.
 
+- **Creature species of the creature stage** (measured with `coop dump`): the NPC species of a planet are stock data
+  (`Spore_Content.package`), not in the save. A save holds creature keys only; the avatar's own creature lives in
+  `EditorSaves.package`. `CoopModels\m_*.package` (see `Models.cpp`) is the safety net for species a guest cannot build.
+  A planet has about 100 animals, 100 herds and 100 nests. Plan and gates: `docs/SYNC_REDESIGN.md`.
+
 ## Open work / ideas
 - Load the received world automatically (`cGamePersistenceManager::LoadGame`, undocumented) instead of pressing Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
