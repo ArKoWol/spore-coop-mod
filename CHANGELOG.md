@@ -5,6 +5,10 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **`docs/HANDOFF_B.md`: work split after the first two-PC test** (docs only). The test showed two separate worlds and a
+  drifting puppet. Track A (ArKoWol): shared world, entity table, mirrors, guest AI/spawn neutered (S1, S2, M2).
+  Track B (exxecute): puppet walking animation first, then the other player's own creature model, start flow, sidecar.
+
 - **`update.bat` in the repo root** (calls `package\coop_update\update.bat`), next to `launch_spore_mod.bat` and
   `console.bat`. The updater no longer asks for the Spore folder when it can find it: besides `-GameDir`, the saved config,
   the folder above it and `test\SPORE_A`/`SPORE`, it now reads the game's registry entry (`installloc`). Players benefit
