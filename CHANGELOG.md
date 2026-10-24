@@ -5,6 +5,10 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- `update\update.bat` run straight from the repo no longer asks for the game folder: it finds `test\SPORE_A`, then `SPORE`
+  (junctions work). The files it writes next to itself (`coop_update.json`, `fix_spore_registry.ps1`, `docs\`) are now in
+  `.gitignore`. Players' installs (`<game>\coop_update`) behave as before.
+
 ## build-20261024-0925
 
 - Fixed joining: `coop join <id>` was rejected by the game ("Expecting at most 1 arguments"). Joining is now the one-argument commands `coopjoin <steamid>` and `coopudpjoin <ip>`; `coop host/udphost/status/abs/anim/noworld/sendworld/off` are unchanged. No protocol change.

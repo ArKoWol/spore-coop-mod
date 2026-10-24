@@ -3,6 +3,11 @@
 /test/
 /downloads/
 
+# written by update\update.ps1 when it is run from the repo
+/update/coop_update.json
+/update/fix_spore_registry.ps1
+/update/docs/
+
 # build output
 /coop_package/
 /coop_package.zip

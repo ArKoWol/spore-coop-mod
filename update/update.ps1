@@ -19,6 +19,11 @@ if (-not $config.repo) {
 # --- which game folder
 if (-not $GameDir) { $GameDir = $config.gameDir }
 if (-not $GameDir -and (Test-Path (Join-Path (Split-Path $here -Parent) 'SporebinEP1\SporeApp.exe'))) { $GameDir = Split-Path $here -Parent }
+# run from the repo (update\update.bat): the modded test copy first, then the game folder (either may be a junction)
+if (-not $GameDir) {
+    $GameDir = 'test\SPORE_A', 'SPORE' | ForEach-Object { Join-Path (Split-Path $here -Parent) $_ } |
+        Where-Object { Test-Path "$_\SporebinEP1\SporeApp.exe" } | Select-Object -First 1
+}
 if (-not $GameDir) { $GameDir = Read-Host 'Path to the Spore game folder (the one that contains SporebinEP1)' }
 $GameDir = $GameDir.Trim('"').TrimEnd('\')
 if (-not (Test-Path "$GameDir\SporebinEP1\SporeApp.exe")) { throw "SporebinEP1\SporeApp.exe not found in $GameDir" }
