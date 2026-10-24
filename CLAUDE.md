@@ -59,6 +59,7 @@ SporeApp.exe
 ```
 launch_spore_mod.bat    double-click: build, install, start the game, open the console (scripts\launch.ps1)
 console.bat             remote game console (scripts\console.ps1)
+update.bat              check GitHub for new commits / a new release and ask (package\coop_update\update.bat)
 CLAUDE.md CHANGELOG.md README.md
 docs/                   DESIGN.md (the co-op plan)
 mod/CoopMod/            the mod (C++), build.bat, make_assets.ps1
@@ -78,7 +79,10 @@ package/                what players get, laid out as in coop_package.zip
 - `package/` - the player files, in the same layout as inside `coop_package.zip`: `README.txt` (player instructions),
   `fix_spore_registry.ps1`, and `coop_update/` (`update.bat` / `update.ps1` / `repo.txt`): players run it to install or
   update from the latest GitHub release; run from the repo (`package\coop_update\update.bat`) it checks new commits and
-  releases and asks whether to pull, install the release, both or skip. It finds the repo by looking for `.git` above itself.
+  releases and asks whether to pull, install the release, both or skip (`update.bat` in the root calls it). It finds the
+  repo by looking for `.git` above itself, and the game by: `-GameDir`, the saved `coop_update.json`, the folder above it
+  (player install), `test\SPORE_A` / `SPORE` in the repo, then the game's own registry entry (`installloc`); it asks for
+  the path only if all of these fail.
 - `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
 

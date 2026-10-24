@@ -11,6 +11,7 @@ Status: early test. Creature stage only, no walking animation on the puppet, the
 ## Layout
 - `launch_spore_mod.bat` - one-step test launcher: builds, starts the game and opens a connected console that closes with the game.
 - `console.bat` - remote game console (type console commands from PowerShell).
+- `update.bat` - checks GitHub for new commits and a new release and asks what to do (pull / install).
 - `mod/CoopMod` - the mod (C++, Visual Studio 2022 Build Tools, x86). Build with `build.bat`.
 - `core/`, `tests/` - the replication core and its tests. `assets/` - the splash picture.
 - `scripts/` - developer tools: `setup.ps1`, `launch.ps1`, `console.ps1`, `make_package.ps1`, `publish.ps1`.

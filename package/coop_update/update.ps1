@@ -55,6 +55,12 @@ function Resolve-GameDir {
         $dir = 'test\SPORE_A', 'SPORE' | ForEach-Object { Join-Path $repoRoot $_ } |
             Where-Object { Test-Path "$_\SporebinEP1\SporeApp.exe" } | Select-Object -First 1
     }
+    # where the game says it is installed (written by its installer; the registry fix sets it too)
+    if (-not $dir) {
+        $dir = 'spore', 'spore_EP1' | ForEach-Object {
+            (Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Electronic Arts\$_" -ErrorAction SilentlyContinue).installloc
+        } | Where-Object { $_ -and (Test-Path "$($_.TrimEnd('\'))\SporebinEP1\SporeApp.exe") } | Select-Object -First 1
+    }
     return $dir
 }
 

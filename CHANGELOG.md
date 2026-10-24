@@ -5,6 +5,11 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **`update.bat` in the repo root** (calls `package\coop_update\update.bat`), next to `launch_spore_mod.bat` and
+  `console.bat`. The updater no longer asks for the Spore folder when it can find it: besides `-GameDir`, the saved config,
+  the folder above it and `test\SPORE_A`/`SPORE`, it now reads the game's registry entry (`installloc`). Players benefit
+  too (a fresh `coop_update` copy finds a GOG install by itself).
+
 - **Repository tidied up** (no code change): PowerShell tools moved to `scripts/` (`setup`, `launch`, `console`,
   `make_package`, `publish`), player files to `package/` in the zip's layout (`README.txt` was `coop_package_README.txt`,
   `fix_spore_registry.ps1` was in `local/`, `coop_update/` was `update/`), `DESIGN.md` to `docs/`. The double-click entry
