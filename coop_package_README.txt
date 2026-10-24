@@ -25,7 +25,9 @@ Playing together (test version)
    It prints "Your Steam ID: 7656...". Send that number to the other player.
 2. CLIENT: stay in the MAIN MENU (no game loaded). Open the console and type:   coopjoin 7656...
 3. The host sends its save game (about 3 MB) to the client automatically. The client console says
-   "coop: world received". The client's own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup.
+   "coop: world received". CLIENT: close and start the game again (the running game keeps its save files
+   locked); the received world is installed at startup and your own save is kept in
+   %APPDATA%\Spore\Games\Game0.coopbackup. Then type  coopjoin 7656...  again.
 4. CLIENT: choose Continue / load the game and enter the creature stage. Now both players are in the same
    world: a copy of the other player's creature appears at their position and follows them.
    (The copy uses your own creature's look for now, and slides without a walking animation. "coop anim" tries

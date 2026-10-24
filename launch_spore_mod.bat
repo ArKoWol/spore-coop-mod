@@ -32,7 +32,9 @@ if /i "%MODE%"=="dev" (
 rem separator so this session's lines are easy to find in the appended log
 >>"%GAME%\SporebinEP1\CoopMod.log" echo ===== %DATE% %TIME% launch (%MODE%) =====
 cd /d "%GAME%\SporebinEP1"
-start "" "SporeApp.exe"
+rem -w: windowed, so the game keeps running (and console.ps1 keeps working) while another window has focus;
+rem fullscreen Spore minimizes on focus loss and then runs no frames
+start "" "SporeApp.exe" -w
 exit /b 0
 
 :failed

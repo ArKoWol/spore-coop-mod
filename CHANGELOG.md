@@ -5,6 +5,14 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fixed: the client could not install the received world** ("could not install the received world", log
+  `install 0 (error 183)`). The running game keeps three files in `Game0` locked, so the world is now stored as
+  `Game0.coopready` and installed when the game starts next (before it opens the save). New client flow: `coopjoin`,
+  "world received", **restart the game**, `coopjoin` again, Continue. The copy the host sends on the second join is
+  ignored. Player README updated. No protocol change (host and client of the old build still talk).
+- **Remote console**: the mod listens on `127.0.0.1:27780`; `console.ps1` in the repo runs console commands from
+  PowerShell and shows the console output (`.\console.ps1` interactive, `.\console.ps1 "coop status"` one-shot).
+  Only works while the game window is not minimized, so `launch_spore_mod.bat` now starts the game windowed (`-w`).
 - `launch_spore_mod.bat` has modes: `dev` (default) now **builds** the mod before installing it, `release` installs the
   latest GitHub release into the test copy, `play` starts the game unchanged. It offers to close a running game and
   writes a `===== <date> launch (<mode>) =====` line into `CoopMod.log` so each session is easy to find.

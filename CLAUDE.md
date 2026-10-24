@@ -39,9 +39,14 @@ SporeApp.exe
   Steam ID; Steam relays the traffic. Channel 0 = state (unreliable), channel 1 = save-game files (reliable). UDP on port
   27777 is the fallback (no world transfer).
 - **World transfer**: when a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0`
-  (about 3 MB, 60 KB chunks, a few per frame because Steam's send buffer is small). The client installs them as its own
-  `Game0` (old one kept as `Game0.coopbackup`); the player then presses Continue. Both sides then share the planet, so
-  absolute positions (`sAbsolute`, default) line up.
+  (about 3 MB, 60 KB chunks, a few per frame because Steam's send buffer is small). The client stores them as
+  `Game0.coopready`; the game must be **restarted**, and `InstallPendingWorld()` (called from `DllMain`, before the game
+  opens its save) swaps it in as `Game0` (old one kept as `Game0.coopbackup`). The player joins again (the world the host
+  sends again is ignored in that run) and presses Continue. Both sides then share the planet, so absolute positions
+  (`sAbsolute`, default) line up.
+- **Remote console**: the mod listens on `127.0.0.1:27780` (local only); `console.ps1` sends lines that run as console
+  commands and gets the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread;
+  commands are queued and run on the main thread in `ConsoleUpdate`.
 - **Puppet**: a one-animal herd made with `GameNounManager.CreateHerd`; the animal shows up in `herd->mHerd` a few frames
   later; its AI is skipped by a detour on `cCreatureAnimal::NPCTickAI`; its transform is set with `SetPosition` /
   `SetOrientation` (smoothed). It is removed with `GameNounManager.DestroyInstance(herd)`.
@@ -52,7 +57,8 @@ SporeApp.exe
 - `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
 - `launch_spore_mod.bat [dev|release|play]` - starts the test copy: `dev` (default) builds and installs `staging\CoopMod.dll`,
-  `release` installs the latest GitHub release, `play` starts as is. Closes a running game first (asks).
+  `release` installs the latest GitHub release, `play` starts as is. Closes a running game first (asks). Starts windowed (`-w`).
+- `console.ps1` - remote game console: `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
 - `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
 
@@ -65,7 +71,8 @@ SporeApp.exe
 5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
 
 Two-PC test: host loads a game into the creature stage and types `coop host`, sends the printed Steam ID; the client stays
-in the main menu and types `coopjoin <id>`, then presses Continue after "world received".
+in the main menu and types `coopjoin <id>`; after "world received" it restarts the game, types `coopjoin <id>` again and
+presses Continue.
 
 ## Hard-won facts (do not rediscover these)
 - **Use the GOG build.** The Steam build updated in Oct 2024 has an encrypted exe that breaks ModAPI (workaround: downgrade
@@ -87,9 +94,17 @@ in the main menu and types `coopjoin <id>`, then presses Continue after "world r
 - A crash in `SporeModAPI.dll` / `SporeApp.exe` leaves Windows Event 1000 in the Application log with the fault offset;
   a clean exit writes "Shutting Down" in `spore_log.txt`.
 - `Simulator::IsCreatureGame()` is false in the main menu, which is where the client sits before the world arrives.
+- **The running game keeps `planetRecords.pkp`, `planetRecords.pkt` and `PlanetScripts.pld` in `Game0` open** (read share
+  only, `StarManager` databases) from startup, even in the main menu: `Game0` cannot be renamed or overwritten while the
+  game runs (MoveFile fails, then error 183). The galaxy is also already in memory. Hence the install-on-restart above.
+- **A minimized Spore runs no frames**: no update functions, no co-op networking, no remote console. Fullscreen Spore
+  minimizes as soon as it loses focus; `SporeApp.exe -w` runs windowed and keeps running (throttled) without focus.
+- The game prints its own console errors ("Expecting at least 1 arguments") outside `ArgScript::PrintF`;
+  `CheatManager.ProcessLine` returns false for them.
 - Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
 
 ## Open work / ideas
+- Restart the game automatically after the world arrives (and rejoin), instead of asking the player to.
 - Load the received world automatically (`cGamePersistenceManager::LoadGame`, undocumented) instead of pressing Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.

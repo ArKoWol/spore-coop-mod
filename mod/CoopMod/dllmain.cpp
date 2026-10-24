@@ -448,6 +448,9 @@ static void HandlePacket(const StatePacket& p)
 // The host sends the files of its save game folder (Games\Game0, about 3 MB) so the client can load the
 // same world. Files travel as reliable messages on channel 1, a few chunks per frame because Steam's send
 // buffer is small. The client's own save is kept as Game0.coopbackup.
+// The running game keeps planetRecords.pkp/.pkt and PlanetScripts.pld open (read share only) from startup,
+// so Game0 cannot be replaced while it runs: the received world waits in Game0.coopready and is installed
+// by InstallPendingWorld() when the next game starts, before the game opens its save.
 static const uint32_t kFileMagic = 0x4C465053;  // 'SPFL'
 static const uint32_t kChunk = 60 * 1024;
 static const int kFileChannel = 1;
@@ -494,6 +497,31 @@ static void DeleteDir(const std::string& dir)
 		FindClose(h);
 	}
 	RemoveDirectoryA(dir.c_str());
+}
+
+// Set when this run started by installing a received world: a world sent again (the client joins again
+// after the restart and the host sends on every first contact) is then ignored instead of asking for
+// another restart.
+static bool sWorldInstalledAtStart = false;
+static bool sWorldIgnoredNotice = false;
+
+// Called from DllMain, before the game opens anything in Game0.
+static void InstallPendingWorld()
+{
+	std::string games = GamesDir();
+	std::string ready = games + "\\Game0.coopready";
+	if (GetFileAttributesA(ready.c_str()) == INVALID_FILE_ATTRIBUTES) {
+		return;
+	}
+	std::string save = games + "\\Game0";
+	std::string backup = games + "\\Game0.coopbackup";
+	DeleteDir(backup);
+	bool hadSave = GetFileAttributesA(save.c_str()) != INVALID_FILE_ATTRIBUTES;
+	bool movedOld = !hadSave || MoveFileA(save.c_str(), backup.c_str()) != 0;
+	bool movedNew = movedOld && MoveFileA(ready.c_str(), save.c_str()) != 0;
+	sWorldInstalledAtStart = movedNew;
+	Logf("world: installed at start %d (backup %d, error %lu)", movedNew ? 1 : 0, (hadSave && movedOld) ? 1 : 0,
+		movedNew ? 0 : GetLastError());
 }
 
 static struct WorldSend
@@ -607,6 +635,15 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		return;
 	}
 
+	if (sWorldInstalledAtStart) {
+		if (!sWorldIgnoredNotice) {
+			sWorldIgnoredNotice = true;
+			Logf("world: already installed at start, ignoring the new copy");
+			App::ConsolePrintF("coop: the host's world was installed when the game started. Choose Continue.");
+		}
+		return;
+	}
+
 	std::string games = GamesDir();
 	std::string incoming = games + "\\Game0.coopincoming";
 	if (p.fileIndex == 0 && p.offset == 0) {
@@ -629,19 +666,16 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 
 	bool last = p.fileIndex + 1 == p.fileCount && p.offset + p.dataLen >= p.totalSize;
 	if (last) {
-		std::string save = games + "\\Game0";
-		std::string backup = games + "\\Game0.coopbackup";
-		DeleteDir(backup);
-		bool movedOld = MoveFileA(save.c_str(), backup.c_str()) != 0;
-		bool movedNew = MoveFileA(incoming.c_str(), save.c_str()) != 0;
-		Logf("world: received %d files, backup %d, install %d (error %lu)", (int)p.fileCount, movedOld ? 1 : 0,
-			movedNew ? 1 : 0, GetLastError());
-		if (movedNew) {
-			App::ConsolePrintF("coop: world received. Your old save is in Game0.coopbackup.");
-			App::ConsolePrintF("coop: now choose Continue / load the game and enter the creature stage.");
+		std::string ready = games + "\\Game0.coopready";
+		DeleteDir(ready);
+		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
+		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
+		if (staged) {
+			App::ConsolePrintF("coop: world received. Restart the game to install it (your old save goes to Game0.coopbackup),");
+			App::ConsolePrintF("coop: then  coopjoin  the host again and choose Continue.");
 		}
 		else {
-			App::ConsolePrintF("coop: could not install the received world (see CoopMod.log).");
+			App::ConsolePrintF("coop: could not store the received world (see CoopMod.log).");
 		}
 	}
 }
@@ -834,6 +868,147 @@ static void NetUpdate()
 	}
 }
 
+// ---------------------------------------------------------------- remote console
+// A local TCP port (127.0.0.1 only) that mirrors the game console: each line a client sends is run as a
+// console command, and everything printed to the console is sent back. Used by console.ps1 in the repo so
+// commands can be typed (or scripted) from PowerShell instead of in the game.
+// The socket lives on its own thread and queues the lines; the commands run on the main thread each frame.
+// A minimized game runs no frames (nor does the co-op networking), so commands wait until it is restored.
+static const uint16_t kConsolePort = 27780;
+static SOCKET sConsoleListen = INVALID_SOCKET;
+static SOCKET sConsoleClient = INVALID_SOCKET;
+static CRITICAL_SECTION sConsoleLock;
+static std::vector<std::string> sConsoleQueue;
+static ArgScript::PrintF_ptr sOrigPrintF = nullptr;
+
+static void ConsoleSend(const char* text)
+{
+	std::string line = std::string(text) + "\n";
+	EnterCriticalSection(&sConsoleLock);
+	if (sConsoleClient != INVALID_SOCKET) {
+		// the socket has a short send timeout: a stuck client is dropped rather than stalling the game
+		if (send(sConsoleClient, line.c_str(), (int)line.size(), 0) == SOCKET_ERROR) {
+			shutdown(sConsoleClient, SD_BOTH);
+		}
+	}
+	LeaveCriticalSection(&sConsoleLock);
+}
+
+// Detour of the game's ArgScript PrintF: copies console output to the remote console.
+static void* PrintF_detour(ArgScript::FormatParser* object, const char* str, ...)
+{
+	char buffer[2048];
+	va_list args;
+	va_start(args, str);
+	vsnprintf(buffer, sizeof(buffer), str, args);
+	va_end(args);
+	if (sConsoleClient != INVALID_SOCKET && object == App::GetConsoleStream()) {
+		ConsoleSend(buffer);
+	}
+	return sOrigPrintF(object, "%s", buffer);
+}
+
+static DWORD WINAPI ConsoleThread(void*)
+{
+	for (;;) {
+		SOCKET client = accept(sConsoleListen, nullptr, nullptr);
+		if (client == INVALID_SOCKET) {
+			return 0;  // the listening socket was closed (Dispose)
+		}
+		DWORD timeout = 200;
+		setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+		EnterCriticalSection(&sConsoleLock);
+		sConsoleClient = client;
+		LeaveCriticalSection(&sConsoleLock);
+		ConsoleSend("CoopMod remote console. Type console commands, e.g. coop status");
+
+		std::string input;
+		char buffer[1024];
+		int n;
+		while ((n = recv(client, buffer, sizeof(buffer), 0)) > 0) {
+			input.append(buffer, n);
+			size_t end;
+			while ((end = input.find('\n')) != std::string::npos) {
+				std::string line = input.substr(0, end);
+				input.erase(0, end + 1);
+				if (!line.empty() && line.back() == '\r') {
+					line.pop_back();
+				}
+				if (!line.empty()) {
+					EnterCriticalSection(&sConsoleLock);
+					sConsoleQueue.push_back(line);
+					LeaveCriticalSection(&sConsoleLock);
+				}
+			}
+		}
+		EnterCriticalSection(&sConsoleLock);
+		sConsoleClient = INVALID_SOCKET;
+		LeaveCriticalSection(&sConsoleLock);
+		closesocket(client);
+	}
+}
+
+static void ConsoleStart()
+{
+	InitializeCriticalSection(&sConsoleLock);
+	WSADATA wsa;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+		return;
+	}
+	sConsoleListen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	sockaddr_in local = {};
+	local.sin_family = AF_INET;
+	local.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	local.sin_port = htons(kConsolePort);
+	if (sConsoleListen == INVALID_SOCKET || bind(sConsoleListen, (sockaddr*)&local, sizeof(local)) != 0 ||
+		listen(sConsoleListen, 1) != 0) {
+		// a second game on the same PC: only the first one gets the remote console
+		Logf("console: port %u unavailable (%d)", (unsigned)kConsolePort, WSAGetLastError());
+		if (sConsoleListen != INVALID_SOCKET) {
+			closesocket(sConsoleListen);
+			sConsoleListen = INVALID_SOCKET;
+		}
+		WSACleanup();
+		return;
+	}
+	CloseHandle(CreateThread(nullptr, 0, ConsoleThread, nullptr, 0, nullptr));
+	Logf("console: listening on 127.0.0.1:%u", (unsigned)kConsolePort);
+}
+
+static void ConsoleStop()
+{
+	if (sConsoleListen == INVALID_SOCKET) {
+		return;
+	}
+	closesocket(sConsoleListen);  // ends the thread's accept()
+	sConsoleListen = INVALID_SOCKET;
+	EnterCriticalSection(&sConsoleLock);
+	if (sConsoleClient != INVALID_SOCKET) {
+		shutdown(sConsoleClient, SD_BOTH);  // ends its recv(); the thread closes the socket
+	}
+	LeaveCriticalSection(&sConsoleLock);
+}
+
+// Main thread, every frame: run the queued commands.
+static void ConsoleUpdate()
+{
+	if (sConsoleListen == INVALID_SOCKET) {
+		return;
+	}
+	std::vector<std::string> lines;
+	EnterCriticalSection(&sConsoleLock);
+	lines.swap(sConsoleQueue);
+	LeaveCriticalSection(&sConsoleLock);
+	for (const std::string& line : lines) {
+		Logf("console: %s", line.c_str());
+		ConsoleSend(("> " + line).c_str());
+		// the game prints its own parse errors ("Expecting at least 1 arguments") outside PrintF
+		if (!CheatManager.ProcessLine(line.c_str())) {
+			ConsoleSend("(the game rejected the command; its message is in the in-game console)");
+		}
+	}
+}
+
 static const char* kUsage =
 	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off";
 
@@ -973,12 +1148,18 @@ void Initialize()
 	App::AddUpdateFunction(NetUpdate);
 	CheatManager.AddCheat("stage", new StageCommand());
 	CheatManager.AddCheat("coophello", new CoopHelloCommand());
+	ConsoleStart();
+	App::AddUpdateFunction(ConsoleUpdate);
 	Logf("CoopMod initialized (protocol %u)", (unsigned)kProtocolVersion);
+	if (sWorldInstalledAtStart) {
+		App::ConsolePrintF("coop: the received world is installed. coopjoin the host again, then choose Continue.");
+	}
 }
 
 void Dispose()
 {
 	NetStop();
+	ConsoleStop();
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
 	Logf("CoopMod disposed");
@@ -987,6 +1168,8 @@ void Dispose()
 void AttachDetours()
 {
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
+	sOrigPrintF = ArgScript::PrintF;
+	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -994,6 +1177,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
+		InstallPendingWorld();
 		ModAPI::AddPostInitFunction(Initialize);
 		ModAPI::AddDisposeFunction(Dispose);
 
