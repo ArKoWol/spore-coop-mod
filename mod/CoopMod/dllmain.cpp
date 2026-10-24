@@ -1270,7 +1270,7 @@ static void NetUpdate()
 
 // ---------------------------------------------------------------- remote console
 // A local TCP port (127.0.0.1 only) that mirrors the game console: each line a client sends is run as a
-// console command, and everything printed to the console is sent back. Used by console.ps1 in the repo so
+// console command, and everything printed to the console is sent back. Used by scripts\console.ps1 in the repo so
 // commands can be typed (or scripted) from PowerShell instead of in the game.
 // The socket lives on its own thread and queues the lines; the commands run on the main thread each frame.
 // A minimized game runs no frames (nor does the co-op networking), so commands wait until it is restored.

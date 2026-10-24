@@ -6,7 +6,7 @@ param([int]$Seconds = 10)
 
 $root = Split-Path $PSScriptRoot -Parent
 $dir = Join-Path $root 'test\SPORE_A\SporebinEP1'
-$console = Join-Path $root 'console.ps1'
+$console = Join-Path $root 'scripts\console.ps1'
 
 function Send($commands) {
     $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $console @commands -Wait 3 2>&1 | Out-String

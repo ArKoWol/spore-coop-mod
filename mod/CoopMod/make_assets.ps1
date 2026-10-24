@@ -1,5 +1,5 @@
 # Builds mod\CoopMod\staging\CoopMod.package (a Spore DBPF package) from the files in assets\.
-# Called by build.bat; the launcher, make_package.ps1 and update.ps1 install it as <game>\Data\CoopMod.package.
+# Called by build.bat; scripts\launch.ps1, scripts\make_package.ps1 and update.ps1 install it as <game>\Data\CoopMod.package.
 #   assets\splash.png  ->  coopmod!splash.png  (the picture shown after the EA logo, 16:9, see CHANGELOG)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent

@@ -3,7 +3,7 @@
 # pass -IncludeSteamDll for a private hand-over.
 param([switch]$IncludeSteamDll, [string]$Repo)
 
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent  # the repo (this script lives in scripts\)
 $loader = (Get-ChildItem (Join-Path $root 'downloads') -Directory -Filter 'SporeModLoader-*' | Sort-Object Name | Select-Object -Last 1).FullName
 $dll = Join-Path $root 'mod\CoopMod\staging\CoopMod.dll'
 $out = Join-Path $root 'coop_package'
@@ -20,11 +20,11 @@ Copy-Item (Join-Path $root 'mod\CoopMod\staging\CoopMod.package') "$out\Data\Coo
 if ($IncludeSteamDll) {
     Copy-Item (Join-Path $root 'downloads\steam_api\steam_api_coop.dll') "$out\SporebinEP1\steam_api_coop.dll"
 }
-Copy-Item (Join-Path $root 'coop_package_README.txt') "$out\README.txt"
-Copy-Item (Join-Path $root 'local\fix_spore_registry.ps1') "$out\fix_spore_registry.ps1"
+Copy-Item (Join-Path $root 'package\README.txt') "$out\README.txt"
+Copy-Item (Join-Path $root 'package\fix_spore_registry.ps1') "$out\fix_spore_registry.ps1"
 New-Item -ItemType Directory -Force "$out\docs" | Out-Null
 Copy-Item (Join-Path $root 'CLAUDE.md'), (Join-Path $root 'CHANGELOG.md') "$out\docs\"
-Copy-Item (Join-Path $root 'update\update.ps1'), (Join-Path $root 'update\update.bat') "$out\coop_update\"
+Copy-Item (Join-Path $root 'package\coop_update\update.ps1'), (Join-Path $root 'package\coop_update\update.bat') "$out\coop_update\"
 if ($Repo) { Set-Content "$out\coop_update\repo.txt" $Repo -Encoding ascii }
 
 $zip = Join-Path $root 'coop_package.zip'

@@ -5,6 +5,13 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Repository tidied up** (no code change): PowerShell tools moved to `scripts/` (`setup`, `launch`, `console`,
+  `make_package`, `publish`), player files to `package/` in the zip's layout (`README.txt` was `coop_package_README.txt`,
+  `fix_spore_registry.ps1` was in `local/`, `coop_update/` was `update/`), `DESIGN.md` to `docs/`. The double-click entry
+  points stay in the root with the same names: `launch_spore_mod.bat`, `console.bat`; the updater from the repo is now
+  `package\coop_update\update.bat` (it finds the repo by `.git` above itself). The release zip has exactly the same files.
+  `local/` is now fully ignored. **Pull before you edit any of the moved files** (git follows the renames).
+
 ## build-20261024-1210
 
 - **Automatic restart and auto-join after a received world**: when the client has received the host's world the mod restarts the game by itself 3 s later (a hidden PowerShell helper waits for the game to end and starts `SporeApp.exe -w` again; the game is closed with `WM_CLOSE`, so it saves), the world is installed at that start as before, and the restarted game **joins the same host again by itself** (the host id waits in `Games\CoopAutoJoin.txt`, read once). The player no longer closes the game or types `coopjoin` a second time, only presses Continue. `launch.ps1` sets `COOP_CONSOLE_PS1` so the console window reopens after the restart. `COOP_NO_RESTART` keeps the old manual flow; `coop restart` restarts the game without a world (also a dev tool). A separate save slot cannot replace the restart: Spore only knows `Game0`. Tested here: restart (new process, new console window), install at start and auto-join from a simulated received world; not yet over a real transfer between two PCs. No protocol change.

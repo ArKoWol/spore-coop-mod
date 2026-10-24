@@ -4,5 +4,5 @@ rem start the game windowed and open a PowerShell console connected to it (it cl
 rem   launch_spore_mod.bat                 dev
 rem   launch_spore_mod.bat -Mode release   latest GitHub release
 rem   launch_spore_mod.bat -Mode play      as installed
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1" %*
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch.ps1" %*
 

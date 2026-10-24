@@ -1,10 +1,10 @@
 @echo off
-rem Builds CoopMod.dll and CoopMod.package (from assets\) into mod\CoopMod\staging (needs the VS Build Tools and the SDK libs, see setup.ps1).
+rem Builds CoopMod.dll and CoopMod.package (from assets\) into mod\CoopMod\staging (needs the VS Build Tools and the SDK libs, see scripts\setup.ps1).
 setlocal
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -property installationPath`) do set "VS=%%i"
 if not defined VS (
-  echo Visual Studio Build Tools not found. Run setup.ps1 first.
+  echo Visual Studio Build Tools not found. Run scripts\setup.ps1 first.
   exit /b 1
 )
 call "%VS%\VC\Auxiliary\Build\vcvars32.bat" >nul

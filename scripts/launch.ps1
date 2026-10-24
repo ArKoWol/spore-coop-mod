@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent  # the repo (this script lives in scripts\)
 $game = Join-Path $root 'test\SPORE_A'
 $gameDir = Join-Path $game 'SporebinEP1'
 $exe = Join-Path $gameDir 'SporeApp.exe'
@@ -23,7 +23,7 @@ $log = Join-Path $gameDir 'CoopMod.log'
 function Say($text) { Write-Host "[launch] $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host "[launch] $text" -ForegroundColor Red; Read-Host 'Press Enter to close'; exit 1 }
 
-if (-not (Test-Path $exe)) { Fail 'test\SPORE_A is missing. Run setup.ps1 -GameDir "<your Spore folder>" first.' }
+if (-not (Test-Path $exe)) { Fail 'test\SPORE_A is missing. Run scripts\setup.ps1 -GameDir "<your Spore folder>" first.' }
 if (-not (Get-Process steam -ErrorAction SilentlyContinue)) { Write-Host '[launch] Steam is not running: co-op over Steam will not work until you start it.' -ForegroundColor Yellow }
 
 # -- close a running game the normal way (it saves), kill it only if it does not react
@@ -40,7 +40,7 @@ switch ($Mode) {
     'dev' {
         if (-not $NoUpdateCheck) {
             # looks at GitHub for new commits of the repo and asks whether to pull them (silent when there is nothing new)
-            try { & (Join-Path $root 'update\update.ps1') -Check -Only repo } catch { Write-Host "[launch] update check failed: $($_.Exception.Message)" -ForegroundColor Yellow }
+            try { & (Join-Path $root 'package\coop_update\update.ps1') -Check -Only repo } catch { Write-Host "[launch] update check failed: $($_.Exception.Message)" -ForegroundColor Yellow }
         }
         Say 'building the mod...'
         & cmd /c "`"$root\mod\CoopMod\build.bat`" > `"$env:TEMP\coopmod_build.log`" 2>&1"
@@ -51,14 +51,14 @@ switch ($Mode) {
     }
     'release' {
         Say 'installing the latest release...'
-        try { & (Join-Path $root 'update\update.ps1') -GameDir $game -Install } catch { Fail "update failed: $($_.Exception.Message)" }
+        try { & (Join-Path $root 'package\coop_update\update.ps1') -GameDir $game -Install } catch { Fail "update failed: $($_.Exception.Message)" }
     }
 }
 
 # -- start the game (windowed: a minimized or unfocused fullscreen Spore runs no frames, so no co-op and no console)
 Add-Content $log "===== $(Get-Date -Format 'dd.MM.yyyy HH:mm:ss') launch ($Mode) =====" -Encoding ascii
 # the mod's automatic restart (after a received world) reopens this console through this variable
-$env:COOP_CONSOLE_PS1 = Join-Path $root 'console.ps1'
+$env:COOP_CONSOLE_PS1 = Join-Path $PSScriptRoot 'console.ps1'
 Start-Process $exe -ArgumentList '-w' -WorkingDirectory $gameDir
 Say 'game started, waiting for the mod...'
 
@@ -74,7 +74,7 @@ Start-Sleep -Milliseconds 700
 
 # -- the console window, connected to the game; it closes when the game exits
 if (-not $NoConsole) {
-    Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$root\console.ps1`"")
+    Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSScriptRoot\console.ps1`"")
     Say 'console window opened (it closes with the game). Type: coop host | coopjoin <steamid> | coop status | exit'
 }
 

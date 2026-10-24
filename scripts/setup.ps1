@@ -1,11 +1,11 @@
 # One-time developer setup: build tools, Spore ModAPI SDK, SporeModLoader, then builds the mod.
-# Usage:  .\setup.ps1 [-GameDir "D:\Games\SPORE"]
+# Usage:  .\scripts\setup.ps1 [-GameDir "D:\Games\SPORE"]
 #   -GameDir  your Spore folder (the one containing SporebinEP1); makes a test copy in test\SPORE_A with the mod installed.
 # Needs: Windows 10/11, winget (for the Build Tools), an internet connection. Run in a normal PowerShell window.
 param([string]$GameDir)
 
 $ErrorActionPreference = 'Stop'
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent  # the repo (this script lives in scripts\)
 $dl = Join-Path $root 'downloads'
 New-Item -ItemType Directory -Force $dl | Out-Null
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -78,11 +78,11 @@ if ($GameDir) {
         robocopy $GameDir $copy /E /NFL /NDL /NJH /NP /MT:8 | Out-Null
     }
     Write-Host 'Installing the loader, the Steam API file and the latest release into the test copy...'
-    & (Join-Path $root 'update\update.ps1') -GameDir $copy
+    & (Join-Path $root 'package\coop_update\update.ps1') -GameDir $copy
 }
 
 Write-Host ''
 Write-Host 'Done. Next:'
 Write-Host '  - change mod\CoopMod\dllmain.cpp, run mod\CoopMod\build.bat'
 if ($GameDir) { Write-Host '  - launch_spore_mod.bat builds, installs the new build into the test copy and starts the game' }
-Write-Host '  - publish.ps1 builds the package and publishes a GitHub release (needs gh auth login)'
+Write-Host '  - scripts\publish.ps1 builds the package and publishes a GitHub release (needs gh auth login)'

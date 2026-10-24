@@ -3,10 +3,10 @@
 /test/
 /downloads/
 
-# written by update\update.ps1 when it is run from the repo
-/update/coop_update.json
-/update/fix_spore_registry.ps1
-/update/docs/
+# written by package\coop_update\update.ps1 when it is run from the repo
+/package/coop_update/coop_update.json
+/package/coop_update/fix_spore_registry.ps1
+/package/coop_update/docs/
 
 # build output
 /coop_package/
@@ -17,9 +17,8 @@
 *.obj
 *.log
 
-# personal notes and machine-specific files; only the registry helper script is shared
-/local/*
-!/local/fix_spore_registry.ps1
+# personal notes and machine-specific files
+/local/
 
 # test build output
 /tests/out/

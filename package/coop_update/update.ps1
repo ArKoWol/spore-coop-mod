@@ -21,8 +21,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
-$repoRoot = Split-Path $here -Parent
-$inRepo = Test-Path (Join-Path $repoRoot '.git')
+# player install: <game>\coop_update\update.ps1 (the parent is the game folder);
+# repo checkout: <repo>\package\coop_update\update.ps1 (the repo is the nearest parent with .git)
+$parent = Split-Path $here -Parent
+$repoRoot = $parent
+while ($repoRoot -and -not (Test-Path (Join-Path $repoRoot '.git'))) { $repoRoot = Split-Path $repoRoot -Parent }
+$inRepo = [bool]$repoRoot
+if (-not $inRepo) { $repoRoot = $parent }
 $askMode = $Check -or ($inRepo -and -not $Install)
 $quiet = $Check -and $Only -eq 'repo'   # the launcher's check: say nothing unless there is something to decide
 $configPath = Join-Path $here 'coop_update.json'
@@ -44,8 +49,8 @@ if (-not $config.repo) {
 function Resolve-GameDir {
     $dir = $GameDir
     if (-not $dir) { $dir = $config.gameDir }
-    if (-not $dir -and (Test-Path (Join-Path $repoRoot 'SporebinEP1\SporeApp.exe'))) { $dir = $repoRoot }
-    # run from the repo (update\update.bat): the modded test copy first, then the game folder (either may be a junction)
+    if (-not $dir -and (Test-Path (Join-Path $parent 'SporebinEP1\SporeApp.exe'))) { $dir = $parent }
+    # run from the repo (package\coop_update\update.bat): the modded test copy first, then the game folder (either may be a junction)
     if (-not $dir) {
         $dir = 'test\SPORE_A', 'SPORE' | ForEach-Object { Join-Path $repoRoot $_ } |
             Where-Object { Test-Path "$_\SporebinEP1\SporeApp.exe" } | Select-Object -First 1

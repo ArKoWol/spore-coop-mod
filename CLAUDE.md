@@ -6,7 +6,7 @@ Claude, share this repo. Keep this file and `CHANGELOG.md` accurate: they are ho
 ## Rules for every change
 1. **Pull before you start** (`git pull`), commit small, push often.
 2. **Record every change in `CHANGELOG.md`** under `## Unreleased` (what changed, why, and who/what to be careful of).
-   `publish.ps1` turns the Unreleased section into the release notes and moves it under the new build tag.
+   `scripts\publish.ps1` turns the Unreleased section into the release notes and moves it under the new build tag.
 3. If the packet layout, save transfer or anything both players must agree on changes, **bump `kProtocolVersion`** in
    `mod/CoopMod/dllmain.cpp` and say so in the changelog. Players with different versions refuse each other on purpose.
 4. New knowledge about the game or ModAPI (a crash cause, an address, an API that works or does not) goes into the
@@ -16,7 +16,7 @@ Claude, share this repo. Keep this file and `CHANGELOG.md` accurate: they are ho
 6. Only one person publishes a release at a time (`latest` is simply the newest release). Tell the other before you do.
 7. Do not run destructive or outward-facing actions (publishing, deleting, force-push) without the owner's OK.
 
-> **Direction:** the current "everyone plays their own world" build is a demo. The real plan is in `DESIGN.md` (host-authoritative replicated world); read it before starting work on gameplay sync.
+> **Direction:** the current "everyone plays their own world" build is a demo. The real plan is in `docs/DESIGN.md` (host-authoritative replicated world); read it before starting work on gameplay sync.
 
 ## What this is
 An experimental co-op mod for Spore: Galactic Adventures, GOG build (exe `SporebinEP1\SporeApp.exe`, 3.1.0.29, unencrypted).
@@ -48,7 +48,7 @@ SporeApp.exe
   (`sAbsolute`, default) line up. The host treats a client that was silent for 10 s (`kReconnectMs`) or a different
   Steam ID as a new connection and sends the world again; the client ignores a world that arrives during a game, and
   prints "connected to the host" when the host's first packet arrives.
-- **Remote console**: the mod listens on `127.0.0.1:27780` (local only); `console.ps1` sends lines that run as console
+- **Remote console**: the mod listens on `127.0.0.1:27780` (local only); `scripts/console.ps1` sends lines that run as console
   commands and gets the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread;
   commands are queued and run on the main thread in `ConsoleUpdate`. One client at a time; a new one replaces the old.
 - **Puppet**: a one-animal herd made with `GameNounManager.CreateHerd`; the animal shows up in `herd->mHerd` a few frames
@@ -56,25 +56,38 @@ SporeApp.exe
   `SetOrientation` (smoothed). It is removed with `GameNounManager.DestroyInstance(herd)`.
 
 ## Repository layout
+```
+launch_spore_mod.bat    double-click: build, install, start the game, open the console (scripts\launch.ps1)
+console.bat             remote game console (scripts\console.ps1)
+CLAUDE.md CHANGELOG.md README.md
+docs/                   DESIGN.md (the co-op plan)
+mod/CoopMod/            the mod (C++), build.bat, make_assets.ps1
+core/  tests/           replication core (plain C++) and its tests
+assets/                 files packed into Data\CoopMod.package (splash.png)
+scripts/                developer tools (PowerShell)
+package/                what players get, laid out as in coop_package.zip
+```
 - `core/coop_core.h` - the replication core (plain C++, no game headers); `tests/` - its tests (`tests\run_core_tests.bat`) and `focus_test.ps1`.
-- `mod/CoopMod` - the mod (C++, VS 2022 Build Tools, x86). `build.bat` builds to `mod\CoopMod\staging\CoopMod.dll`.
-- `assets/` - files that go into `Data\CoopMod.package` (today `splash.png`, the picture after the EA logo).
-  `mod\CoopMod\make_assets.ps1` (run by `build.bat`) builds `staging\CoopMod.package`; the launcher (dev), `make_package.ps1`
-  and `update.ps1` install it as `<game>\Data\CoopMod.package`.
-- `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
-- `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release; from a repo checkout it checks new commits and releases and asks whether to pull, install the release, both or skip.
-- `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
-- `launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; before building it asks whether to pull when GitHub has new commits, `-NoUpdateCheck` skips that), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
-- `console.bat` / `console.ps1` - remote game console (use the .bat where script execution is disabled): `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
-- `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
+- `mod/CoopMod` - the mod (C++, VS 2022 Build Tools, x86). `build.bat` builds `mod\CoopMod\staging\CoopMod.dll` and,
+  through `make_assets.ps1`, `staging\CoopMod.package` from `assets/` (today `splash.png`, the picture after the EA logo).
+  The launcher (dev), `scripts\make_package.ps1` and `update.ps1` install the package as `<game>\Data\CoopMod.package`.
+- `scripts/setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
+- `scripts/launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; before building it asks whether to pull when GitHub has new commits, `-NoUpdateCheck` skips that), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
+- `scripts/console.ps1` (wrapped by `console.bat`, which also works where script execution is disabled) - remote game console: `console.bat` (interactive) or `console.bat "coop status" "coop host"` (one-shot).
+- `scripts/make_package.ps1`, `scripts/publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
+- `package/` - the player files, in the same layout as inside `coop_package.zip`: `README.txt` (player instructions),
+  `fix_spore_registry.ps1`, and `coop_update/` (`update.bat` / `update.ps1` / `repo.txt`): players run it to install or
+  update from the latest GitHub release; run from the repo (`package\coop_update\update.bat`) it checks new commits and
+  releases and asks whether to pull, install the release, both or skip. It finds the repo by looking for `.git` above itself.
+- `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
 
 ## Workflow
-1. `.\setup.ps1 -GameDir "<your Spore folder>"` once.
+1. `.\scripts\setup.ps1 -GameDir "<your Spore folder>"` once.
 2. Edit `mod/CoopMod/dllmain.cpp`.
 3. Run `launch_spore_mod.bat` (after your own `git pull`): it builds, closes a running game (the DLL is locked while it runs, hence `staging`), installs the build, starts the game and opens the connected console window (type `coop host` / `coopjoin <id>` there).
 4. Check `test\SPORE_A\SporebinEP1\CoopMod.log` (our log) and `spore_log.txt` (ModAPI log).
-5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
+5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\scripts\publish.ps1`. Players run `update.bat`.
 
 Two-PC test: host loads a game into the creature stage and types `coop host`, sends the printed Steam ID; the client stays
 in the main menu and types `coopjoin <id>`; after "world received" the game restarts itself, joins again by itself and the
@@ -85,7 +98,7 @@ player presses Continue.
   the exe to the March 2017 depot). ModAPI reports the GOG exe as platform `March2017`.
 - **GOG install can leave the registry incomplete** (`HKLM\SOFTWARE\WOW6432Node\Electronic Arts\spore*`): symptoms are
   alerts "Configuration Script Failed [2000]" and "data directory is missing or corrupt [1004]", even without mods.
-  Fix: `local/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package).
+  Fix: `package/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package).
 - **ArgScript**: `line.GetArguments(n)` accepts exactly `n` arguments: fewer gives "Expecting at least n arguments", more gives "Expecting at most n arguments" (the game prints it, our code is not reached). So every command has a fixed argument count: `coop <word>` (1 arg), `coopjoin <steamid>` (1 arg), `coopudpjoin <ip>` (1 arg). `GetArgumentsRange` was suspected of crashing the game and is avoided.
   Calling a cheat with zero arguments is rejected by the game itself ("Expecting at least 1 arguments").
 - **Move creatures with `Teleport(pos, rot)`, not `SetPosition`**: the creature's physics puts it back after

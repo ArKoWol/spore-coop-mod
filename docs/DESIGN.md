@@ -1,7 +1,7 @@
 ﻿# Co-op design v2: one shared world
 
 Status: agreed plan, written 2026-10-24 (v2.1: owner's decisions folded in). Nothing here is implemented yet except where
-marked. Read `CLAUDE.md` first (how the mod works today, facts we already verified).
+marked. Read `../CLAUDE.md` first (how the mod works today, facts we already verified).
 
 ## 1. Why the current build is a dead end
 
@@ -161,7 +161,7 @@ Constraint: a test needs both machines running at once. To make every session co
    entity states, own position and health, the last events) to the host on channel 4; the host writes both views, side by
    side, with a **desync verdict**, into its own `CoopMod.log`. One machine's log then answers "did they diverge, when, in
    what". The friend's Claude and mine read the same log.
-2. **Scripted scenarios through the remote console** on both PCs (`console.ps1 -Run`), with a known start state (prepared
+2. **Scripted scenarios through the remote console** on both PCs (`scripts/console.ps1 -Run`), with a known start state (prepared
    save, fixed positions). Each scenario prints `RESULT: PASS` or `FAIL` plus the reason. Scenario steps and expected
    results live in `TEST_PLAN.md` (to be written with M0) so both developers run the same thing.
 3. **Invariants as oracles** (never loosened to make a test pass): no duplicate netIds; every guest entity has a host id;
