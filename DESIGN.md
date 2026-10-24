@@ -1,4 +1,4 @@
-# Co-op design v2: one shared world
+﻿# Co-op design v2: one shared world
 
 Status: agreed plan, written 2026-10-24 (v2.1: owner's decisions folded in). Nothing here is implemented yet except where
 marked. Read `CLAUDE.md` first (how the mod works today, facts we already verified).
@@ -28,7 +28,10 @@ the next step is a different architecture, not more polish.
 | Pack ("socialize" followers) | **Not in v1.** Goals are done by hunting. Later. |
 | Guest disconnects | His creature **disappears**; his progress stays in the host's save and is restored when he comes back. |
 | Scope | Creature stage only until it is solid. |
-| Testing | **On two real PCs from the start** (a second copy on one PC, spike S6, is an optional extra). |
+| Testing | **On two real PCs from the start**, both developers can test together almost every day (so a second copy on one PC, spike S6, is low priority). |
+| Killing a player | No reward, no corpse: the victim just disappears and respawns at his nest. |
+| Audience | Private use between friends (no public distribution; the Steam API file comes from the players' own Steam games). |
+| Work split | As proposed in section 12. |
 
 ## 3. Core architecture: the host owns the world, the guest mirrors it
 
@@ -209,9 +212,10 @@ machine, only the skill descriptions; we write small equivalents as needed.
 - **Together**: nests/respawn (S9), animation (S3), combat (S4, S5, S10).
 Rules stay as in `CLAUDE.md`: pull first, small commits, changelog for every change, bump the protocol version.
 
-## 13. Open questions
+## 13. Remaining defaults (change them if you disagree)
 
-See the end of the chat discussion; remaining small ones have defaults: killing a player gives no reward and leaves no
-corpse; the guest receives full snapshots every 10 s; the host leaving ends the session; two players only (the core is
-written for up to four, tested with two); messages in English first; private use among friends (no public distribution of
-Valve's `steam_api.dll`).
+- the guest receives a full entity snapshot every 10 s; the host leaving ends the session for the guest (with a message);
+- two players only (the core is written for up to four, tested with two); host migration is not supported;
+- in-game messages are English first (Russian later if wanted);
+- the guest's own save is kept as `Game0.coopbackup`, never overwritten.
+
