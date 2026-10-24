@@ -5,7 +5,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
-- **One-step test launcher**: `launch.ps1` (wrapped by `launch_spore_mod.bat`, `host.bat`, `join.bat`) does everything for a test: closes a running game the normal way, `git pull` + build + install (`-Mode dev`, default; `release` installs the latest release, `play` starts as is), starts the game windowed, waits for the mod, and opens a PowerShell console window connected to the game (`console.ps1`, now with an interactive `spore` prompt and `-Run` for starting commands). `host.bat` also runs `coop host` and copies your Steam ID to the clipboard; `join.bat <id>` runs `coopjoin <id>` (no id: the last one, saved in `local\last_host.txt`, or it asks). Replaces the old batch-only `launch_spore_mod.bat` logic (modes, log separator and `-w` are kept). No protocol change.
+- **One-step test launcher**: `launch.ps1` (wrapped by `launch_spore_mod.bat`) closes a running game the normal way, does `git pull` + build + install (`-Mode dev`, default; `release` installs the latest release, `play` starts as is), starts the game windowed, waits for the mod and opens a PowerShell console window connected to the game (`console.ps1`, with an interactive `spore` prompt). **The console window closes by itself when the game exits.** Host and join stay manual commands in that console (`coop host`, `coopjoin <id>`). Replaces the old batch-only `launch_spore_mod.bat` logic (modes, log separator and `-w` are kept). No protocol change.
 
 - **Cleanup on exit** (partial fix for crashes/frozen processes when the game is closed): `Dispose()` now removes everything that points into the mod DLL before the loader unloads it: `SteamAPI_Shutdown` (after unregistering the session-request callback), the console thread is joined, both update listeners (`App::RemoveUpdateFunction`), all our cheats (`CheatManager.RemoveCheat`), and the `NPCTickAI` and `ArgScript::PrintF` detours are detached. **The exit crash is not gone yet**: with Steam initialized the game still ends with Windows Event 1000 (`0xC0000005`, module unknown, offset `0xFFFFFFFF`) right after our DLL is unloaded; a session that never touched Steam exits cleanly. No protocol change.
 
@@ -68,6 +68,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 

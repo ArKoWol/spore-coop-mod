@@ -48,7 +48,9 @@ $null = $ps.AddScript({
     param($s)
     $r = New-Object IO.StreamReader($s)
     while ($null -ne ($line = $r.ReadLine())) { [Console]::WriteLine($line) }
-    [Console]::WriteLine('(game closed the console)')
+    [Console]::WriteLine('(the game closed, closing this window)')
+    Start-Sleep -Seconds 1
+    [Environment]::Exit(0)  # the prompt is blocked in Read-Host: end the whole window together with the game
 }).AddArgument($stream)
 $null = $ps.BeginInvoke()
 Write-Host 'Spore console. Commands: coop host | coopjoin <steamid> | coop status | coop off | stage creature | exit' -ForegroundColor Cyan

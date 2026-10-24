@@ -13,7 +13,7 @@ Status: early test. Creature stage only, no walking animation on the puppet, the
 - `update/` - `update.bat`/`update.ps1`, the updater players run to get the latest release.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip` and publish it as a GitHub release.
 - `coop_package_README.txt` - player instructions (shipped inside the package).
-- `launch_spore_mod.bat`, `host.bat`, `join.bat <id>` (`launch.ps1`) - one-step test launcher: pulls, builds, starts the game and opens a connected console.
+- `launch_spore_mod.bat` (`launch.ps1`) - one-step test launcher: pulls, builds, starts the game and opens a connected console that closes with the game.
 
 Game files, Valve's `steam_api.dll` and save games are not part of this repository.
 
@@ -30,5 +30,6 @@ cd spore-coop-mod
 Edit `mod\CoopMod\dllmain.cpp`, build with `mod\CoopMod\build.bat` (output: `mod\CoopMod\staging\CoopMod.dll`),
 test with `launch_spore_mod.bat` (builds, installs and starts the game), release with `.\publish.ps1` (needs `gh auth login`).
 Bump `kProtocolVersion` in `dllmain.cpp` whenever the packet layout changes.
+
 
 
