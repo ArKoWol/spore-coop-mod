@@ -1,5 +1,7 @@
 ﻿// dllmain.cpp : entry point for the CoopMod DLL.
 #include "stdafx.h"
+#include "Entities.h"
+#include "Log.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
 
 #include <winsock2.h>
@@ -13,18 +15,6 @@
 #include <vector>
 
 #pragma comment(lib, "ws2_32.lib")
-
-static void Logf(const char* format, ...)
-{
-	if (FILE* f = fopen("CoopMod.log", "a")) {
-		va_list args;
-		va_start(args, format);
-		vfprintf(f, format, args);
-		va_end(args);
-		fputc('\n', f);
-		fclose(f);
-	}
-}
 
 // The puppet must not run the game's wandering AI, otherwise it fights the position we set.
 static Simulator::cCreatureAnimal* sPuppetRaw = nullptr;
@@ -939,11 +929,43 @@ static std::string IndicatorText()
 
 static bool sDisposed = false;
 
+// Frame statistics (`coop fps`): game frames per second and whether the game window has the focus. A game that
+// stops running when it is not in the foreground freezes the other player's mirror of the host's world.
+static bool sFpsLog = false;
+static DWORD sFpsStart = 0;
+static int sFpsFrames = 0;
+static int sFps = 0;
+
+static bool GameWindowFocused()
+{
+	DWORD pid = 0;
+	GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+	return pid == GetCurrentProcessId();
+}
+
+static void FrameStats()
+{
+	DWORD now = GetTickCount();
+	if (!sFpsStart) {
+		sFpsStart = now;
+	}
+	++sFpsFrames;
+	if (now - sFpsStart >= 2000) {
+		sFps = (int)(sFpsFrames * 1000 / (now - sFpsStart));
+		if (sFpsLog) {
+			Logf("fps: %d (game window %s)", sFps, GameWindowFocused() ? "focused" : "NOT focused");
+		}
+		sFpsFrames = 0;
+		sFpsStart = now;
+	}
+}
+
 static void NetUpdate()
 {
 	if (sDisposed) {
 		return;
 	}
+	FrameStats();
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
 	if (sTransport == Transport::None) {
@@ -1227,7 +1249,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop dump | coop fps | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1272,6 +1294,14 @@ public:
 			else {
 				App::ConsolePrintF("coop: needs a Steam connection with a client");
 			}
+		}
+		else if (strcmp(sub, "fps") == 0) {
+			sFpsLog = !sFpsLog;
+			App::ConsolePrintF("coop: %d frames per second now (game window %s); logging fps %s", sFps,
+				GameWindowFocused() ? "focused" : "NOT focused", sFpsLog ? "on" : "off");
+		}
+		else if (strcmp(sub, "dump") == 0) {
+			DumpEntities();
 		}
 		else if (strcmp(sub, "anim") == 0) {
 			sAnim = !sAnim;
@@ -1383,6 +1413,38 @@ void Initialize()
 static HANDLE(WINAPI* sOrigCreateMutexA)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR) = CreateMutexA;
 static bool sMultiInstance = false;
 
+// Always windowed. A fullscreen Spore is minimized by Windows as soon as it loses the focus (Alt+Tab) and then runs no
+// frames at all: for the host that freezes the whole shared world for the other player. The game takes `-w` from its
+// command line, so the mod adds it (the hooks hand the game a command line with " -w" appended). Set the environment
+// variable COOP_FULLSCREEN to keep the game's own mode. Static buffers, no std::string: see the allocator note in Dispose.
+static LPSTR(WINAPI* sOrigGetCommandLineA)() = GetCommandLineA;
+static LPWSTR(WINAPI* sOrigGetCommandLineW)() = GetCommandLineW;
+static bool sForceWindowed = false;
+
+static LPSTR WINAPI GetCommandLineA_hook()
+{
+	static char line[4096];
+	if (!line[0]) {
+		strncpy_s(line, sOrigGetCommandLineA(), _TRUNCATE);
+		if (!strstr(line, " -w")) {
+			strncat_s(line, " -w", _TRUNCATE);
+		}
+	}
+	return line;
+}
+
+static LPWSTR WINAPI GetCommandLineW_hook()
+{
+	static wchar_t line[4096];
+	if (!line[0]) {
+		wcsncpy_s(line, sOrigGetCommandLineW(), _TRUNCATE);
+		if (!wcsstr(line, L" -w")) {
+			wcsncat_s(line, L" -w", _TRUNCATE);
+		}
+	}
+	return line;
+}
+
 static HANDLE WINAPI CreateMutexA_hook(LPSECURITY_ATTRIBUTES attributes, BOOL initialOwner, LPCSTR name)
 {
 	HANDLE handle = sOrigCreateMutexA(attributes, initialOwner, name);
@@ -1414,6 +1476,10 @@ void Dispose()
 	if (sMultiInstance) {
 		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
 	}
+	if (sForceWindowed) {
+		DetourDetach((PVOID*)&sOrigGetCommandLineA, (PVOID)GetCommandLineA_hook);
+		DetourDetach((PVOID*)&sOrigGetCommandLineW, (PVOID)GetCommandLineW_hook);
+	}
 	CommitDetours();
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
@@ -1438,6 +1504,11 @@ void AttachDetours()
 	if (getenv("COOP_MULTI")) {
 		sMultiInstance = true;
 		DetourAttach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
+	}
+	if (!getenv("COOP_FULLSCREEN")) {
+		sForceWindowed = true;
+		DetourAttach((PVOID*)&sOrigGetCommandLineA, (PVOID)GetCommandLineA_hook);
+		DetourAttach((PVOID*)&sOrigGetCommandLineW, (PVOID)GetCommandLineW_hook);
 	}
 }
 
@@ -1527,6 +1598,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	}
 	return TRUE;
 }
+
 
 
 

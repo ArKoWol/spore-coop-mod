@@ -5,6 +5,11 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **M0 replication core** (`core/coop_core.h`, plain C++ without Spore or Windows headers) and its tests (`tests/core_tests.cpp`, run `tests\run_core_tests.bat`, prints `ALL OK`): entity table with netIds, wire format, host side (`Spawn/Update/Destroy`, deltas, full snapshots, reliable events), guest side with stale-state rejection, tombstones and reconcile-on-full. The tests run a fake world through a network with loss, duplicates and reordering (and a 100-tick total blackout) with oracles for unknown ids, resurrected ids, going back in time and final equality, plus mutation twins (each protection switched off once must make a test fail). The test rig found a real bug on the first run (a late duplicate delta recreated a destroyed entity after a full snapshot had cleared its tombstone) and it is fixed; 500 seeds pass. Not used by the mod yet (the game adapter comes next).
+- **S1 `coop dump`**: lists every entity (the game's nouns, `GameNounManager.mNouns`) with position, species and health to the console, `CoopMod.log` and `CoopDump.txt`. New files `Entities.cpp/h`; `Logf` moved to `Log.cpp/h`. Compiles; not yet run in a creature stage.
+- **`coop fps`** toggles logging of frames per second and whether the game window has the focus (`fps:` lines in `CoopMod.log`). `tests/focus_test.ps1` uses it plus two dumps to check whether the world keeps simulating while another window has the focus (run it with the game in the creature stage). Measured so far: windowed Spore runs about 50 fps in the main menu with or without the focus.
+- **The game is always started windowed**: the mod hands the game a command line with ` -w` appended (hooks on `GetCommandLineA/W`), so a plain shortcut behaves like the launcher. A fullscreen Spore is minimized when it loses the focus (Alt+Tab) and runs no frames, which freezes the shared world for the other player. Set the environment variable `COOP_FULLSCREEN` to keep the game's own mode.
+
 - **Design v2.1** (`DESIGN.md`): why the current "everyone in their own world, puppets see each other" build is a dead end, and the agreed plan with the owner's decisions: host-authoritative replicated world, each player has their own creature and progress (all in the host's save through a sidecar), new co-op game that skips the cell stage, stage change only when both reached the goal and both finished the editor, PvP with respawn at the own nest, guest spawns next to the host with his own nest, no pack in v1, guest creature disappears on disconnect, tests on two PCs with in-band telemetry. Spikes S1-S11, milestones M0-M7, risks, work split between the two developers. Nothing implemented yet except the next item.
 - **Test aid `COOP_MULTI=1`**: with this environment variable a second game copy gets a private mutex and gets past Spore's "other instance of the game is already running" check (logged as `multi:`). Combine with a separate `APPDATA` to keep saves apart. First finding: the second copy then crashes at `SporeApp.exe+0x29de23` (null read) shortly after start; cause not found yet (spike S6). No effect without the variable.
 
@@ -79,6 +84,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 

@@ -56,6 +56,7 @@ SporeApp.exe
   `SetOrientation` (smoothed). It is removed with `GameNounManager.DestroyInstance(herd)`.
 
 ## Repository layout
+- `core/coop_core.h` - the replication core (plain C++, no game headers); `tests/` - its tests (`tests\run_core_tests.bat`) and `focus_test.ps1`.
 - `mod/CoopMod` - the mod (C++, VS 2022 Build Tools, x86). `build.bat` builds to `mod\CoopMod\staging\CoopMod.dll`.
 - `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
@@ -130,6 +131,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 
