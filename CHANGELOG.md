@@ -5,6 +5,9 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Design v2** (`DESIGN.md`): why the current "everyone in their own world, puppets see each other" build is a dead end, and the plan for real co-op: host-authoritative replicated world (the guest mirrors the host's animals, nests, plants; players own only their avatars; damage/eating go through the host), spikes S1-S7 for the unknowns, milestones M0-M6 with acceptance tests, code split, test strategy, decisions needed from the owner. Nothing implemented yet except the next item.
+- **Test aid `COOP_MULTI=1`**: with this environment variable a second game copy gets a private mutex and gets past Spore's "other instance of the game is already running" check (logged as `multi:`). Combine with a separate `APPDATA` to keep saves apart. First finding: the second copy then crashes at `SporeApp.exe+0x29de23` (null read) shortly after start; cause not found yet (spike S6). No effect without the variable.
+
 - **Exit crash: solved / was a misreading.** The Event 1000 at offset `0xFFFFFFFF` we both took for an exit crash comes
   from `SteamAPI_Init` (Steam's `CSERHelper.dll` provokes and handles an access violation on purpose): it is logged
   about a second after `coop host` / `coopjoin` while the game keeps running. Tested with and without Steam on top of
@@ -76,6 +79,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 

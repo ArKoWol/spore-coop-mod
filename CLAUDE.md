@@ -16,6 +16,8 @@ Claude, share this repo. Keep this file and `CHANGELOG.md` accurate: they are ho
 6. Only one person publishes a release at a time (`latest` is simply the newest release). Tell the other before you do.
 7. Do not run destructive or outward-facing actions (publishing, deleting, force-push) without the owner's OK.
 
+> **Direction:** the current "everyone plays their own world" build is a demo. The real plan is in `DESIGN.md` (host-authoritative replicated world); read it before starting work on gameplay sync.
+
 ## What this is
 An experimental co-op mod for Spore: Galactic Adventures, GOG build (exe `SporebinEP1\SporeApp.exe`, 3.1.0.29, unencrypted).
 Two players see each other as creatures in the creature stage and play on the same planet.
@@ -128,6 +130,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 

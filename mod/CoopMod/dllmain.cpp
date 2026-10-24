@@ -1377,6 +1377,23 @@ void Initialize()
 	}
 }
 
+// Test aid: Spore refuses to start a second copy ("other instance of the game is already running", a named mutex).
+// With the environment variable COOP_MULTI set, a second copy gets an unnamed mutex instead, so two games can run
+// on one PC (give the second one its own APPDATA so the saves do not clash).
+static HANDLE(WINAPI* sOrigCreateMutexA)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR) = CreateMutexA;
+static bool sMultiInstance = false;
+
+static HANDLE WINAPI CreateMutexA_hook(LPSECURITY_ATTRIBUTES attributes, BOOL initialOwner, LPCSTR name)
+{
+	HANDLE handle = sOrigCreateMutexA(attributes, initialOwner, name);
+	if (name && handle && GetLastError() == ERROR_ALREADY_EXISTS) {
+		Logf("multi: mutex '%s' already existed, using a private one", name);
+		CloseHandle(handle);
+		handle = sOrigCreateMutexA(attributes, initialOwner, nullptr);
+	}
+	return handle;
+}
+
 void Dispose()
 {
 	// The loader unloads this DLL right after Dispose. Everything that still points into it must go first,
@@ -1394,6 +1411,9 @@ void Dispose()
 	PrepareDetours(sModule);
 	NPCTickAI_detour::detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
+	if (sMultiInstance) {
+		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
+	}
 	CommitDetours();
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
@@ -1415,6 +1435,10 @@ void AttachDetours()
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
 	sOrigPrintF = ArgScript::PrintF;
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
+	if (getenv("COOP_MULTI")) {
+		sMultiInstance = true;
+		DetourAttach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
+	}
 }
 
 // ---------------------------------------------------------------- crash log
