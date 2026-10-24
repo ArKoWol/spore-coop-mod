@@ -54,6 +54,7 @@ try {
     Copy-Item "$pkg\SporeModLoader\ModLibs\*" "$GameDir\SporeModLoader\ModLibs\" -Force
     if (Test-Path "$pkg\README.txt") { Copy-Item "$pkg\README.txt" "$GameDir\COOP_README.txt" -Force }
     if (Test-Path "$pkg\fix_spore_registry.ps1") { Copy-Item "$pkg\fix_spore_registry.ps1" $here -Force }
+    if (Test-Path "$pkg\docs") { Copy-Item "$pkg\docs" $here -Recurse -Force }  # CLAUDE.md + CHANGELOG.md
 }
 finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

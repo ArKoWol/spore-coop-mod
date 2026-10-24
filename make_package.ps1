@@ -20,6 +20,8 @@ if ($IncludeSteamDll) {
 }
 Copy-Item (Join-Path $root 'coop_package_README.txt') "$out\README.txt"
 Copy-Item (Join-Path $root 'local\fix_spore_registry.ps1') "$out\fix_spore_registry.ps1"
+New-Item -ItemType Directory -Force "$out\docs" | Out-Null
+Copy-Item (Join-Path $root 'CLAUDE.md'), (Join-Path $root 'CHANGELOG.md') "$out\docs\"
 Copy-Item (Join-Path $root 'update\update.ps1'), (Join-Path $root 'update\update.bat') "$out\coop_update\"
 if ($Repo) { Set-Content "$out\coop_update\repo.txt" $Repo -Encoding ascii }
 
@@ -28,4 +30,5 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path "$out\*" -DestinationPath $zip
 Get-ChildItem $out -Recurse -File | Select-Object @{n='file';e={$_.FullName.Substring($out.Length + 1)}}, Length
 "$zip  $((Get-Item $zip).Length) bytes  sha256 $((Get-FileHash $zip).Hash)"
+
 
