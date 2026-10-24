@@ -5,6 +5,11 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **README rewritten** (docs only): `README.md` now says what works and what does not yet, what you need, how to install
+  and play, the console commands, a troubleshooting table, the developer quick start and the repository layout.
+  `package/README.txt` (the player instructions in the zip) is brought up to date: the updater finds the game by itself,
+  the creature walks, the game restarts and rejoins by itself, what is not shared yet.
+
 - **Creature models travel with the session (S8, gate G2) and a dump to find out why animals looked wrong.** The cause of
   "every animal has our species' model" is that a save holds only creature keys; the bodies (`bem` records) live in the host's
   `EditorSaves.package` / `Pollination.package`. New `Models.cpp/.h`: the guest asks the host (`kMsgModelReq`) for every species

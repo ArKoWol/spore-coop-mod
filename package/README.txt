@@ -1,48 +1,69 @@
-﻿SPORE CO-OP TEST (CoopMod)
-==========================
+﻿SPORE CO-OP (test build)
+========================
 
-What you need
-- Spore + Galactic Adventures, GOG "SPORE Collection" version (exe SporebinEP1\SporeApp.exe, version 3.1.0.29).
-  The current Steam build does not work with mods; if you have Steam, ask for the downgrade steps.
-- Steam installed, running and logged in (the connection goes through Steam as "Spacewar", no port forwarding).
-- The game must start normally BEFORE installing the mod.
-
-Install (first time)
-1. Extract this package anywhere and run  coop_update\update.bat . Close the game first.
-   It asks for your Spore folder (the one that contains SporebinEP1), downloads the newest mod build, installs it,
-   and finds the Steam API file (steam_api_coop.dll) in your Steam games.
-2. Start the game by running <game>\SporebinEP1\SporeApp.exe (or the GOG shortcut).
-3. To update later, run  coop_update\update.bat  again (from the same place).
-4. If you get "Configuration Script Failed [2000]" or "data directory is missing or corrupt [1004]":
-   open PowerShell as Administrator and run
-     .\fix_spore_registry.ps1 -GameDir "<game folder>"
-   (it is installed next to update.bat)
-Both players must run update.bat before playing: different mod versions refuse to talk to each other
-("different mod version" message in the console).
-Playing together (test version)
-1. HOST: load your game and get into the CREATURE stage. Let the game save (it autosaves; leaving a nest also saves).
-   Open the console (Ctrl+Shift+C) and type:   coop host
-   It prints "Your Steam ID: 7656...". Send that number to the other player.
-2. CLIENT: stay in the MAIN MENU (no game loaded). Open the console and type:   coopjoin 7656...
-3. The host sends its save game (about 3 MB) to the client automatically. The client console says "coop: world received".
-   **The game then restarts by itself** after 3 seconds (the running game keeps its save files locked), installs the received world
-   at startup (your own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup; a later join keeps it and uses coopbackup2, 3, ...)
-   and **joins the host again automatically**. You do not have to type anything. (Set the environment variable COOP_NO_RESTART
-   to turn the automatic restart off; then restart the game yourself and type  coopjoin 7656...  again.)
-4. CLIENT: choose Continue / load the game and enter the creature stage. Now both players are in the same
-   world: a copy of the other player's creature appears at their position and follows them.
-   (The copy uses your own creature's look for now, and slides without a walking animation. "coop anim" tries
-   to make it walk; it is experimental and may crash the game.)
-5. If you load the world again after the client left, type  coopjoin 7656...  again.
-   Host: "coop sendworld" sends the save again, "coop noworld" turns the automatic sending off.
-6. If Steam does not work, there is a fallback over plain UDP (no world transfer, move the save by hand):
-     host: coop udphost         client: coopudpjoin <host IP>      (UDP port 27777; needs VPN or port forwarding)
-Commands: coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off
-Log file: <game>\SporebinEP1\CoopMod.log - send it if something goes wrong.
+Two players play the creature stage of Spore on the same planet and see each other's creature.
+This is an early test made by two friends: it can crash the game. Back up your saves
+(%APPDATA%\Spore\Games) before you try it.
 
 
+WHAT YOU NEED
+-------------
+- Spore + Galactic Adventures, GOG "SPORE Collection" (SporebinEP1\SporeApp.exe, version 3.1.0.29).
+  The current Steam version of Spore does NOT work with mods.
+- Steam installed, running and logged in on both PCs. The connection goes through Steam
+  (as the free test app "Spacewar"), no port forwarding.
+- The game must start normally BEFORE you install the mod.
 
 
+INSTALL / UPDATE
+----------------
+1. Close the game.
+2. Run  coop_update\update.bat  (from the folder where you extracted this package).
+   It finds your Spore folder, installs the newest build and copies the Steam API file
+   (steam_api_coop.dll) from one of your Steam games. Run it again any time to update.
+3. Both players must have the same version. Otherwise the console says "different mod version"
+   and the games refuse each other: both run update.bat.
 
 
+PLAY TOGETHER
+-------------
+The game always starts in a window. Do not minimize it while you play: a minimized game stops,
+and so does the co-op. The console opens with Ctrl+Shift+C.
 
+1. HOST: load your game and go into the CREATURE stage. Type   coop host
+   It prints "Your Steam ID: 7656...". Send that number to your friend.
+2. GUEST: stay in the MAIN MENU (no game loaded). Type   coopjoin 7656...
+3. GUEST: the host's world arrives ("coop: world received"). Your game closes and starts again
+   by itself, installs the world and connects to the host again. You do not type anything.
+   Your own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup (later joins: coopbackup2, 3, ...).
+4. GUEST: press Continue and enter the creature stage. The window title says
+   "CO-OP: you are in the HOST's world".
+
+What you see: the other player's creature walks next to you (for now it has YOUR creature's look).
+What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
+
+If the guest leaves and comes back, just type  coopjoin 7656...  again.
+
+
+COMMANDS
+--------
+coop host              host over Steam (prints your Steam ID)
+coopjoin <steamid>     join a host, from the main menu
+coop status            what is connected
+coop off               leave the session
+coop sendworld         host: send the world to the guest again
+coop noworld           host: do not send the world automatically
+coop udphost           fallback without Steam: host over UDP port 27777 (needs VPN or port forwarding,
+coopudpjoin <ip>       no world transfer: copy the save by hand)
+coop echo              try it alone: a copy of your creature follows you
+
+
+PROBLEMS
+--------
+- "Configuration Script Failed [2000]" or "data directory is missing or corrupt [1004]":
+  open PowerShell as Administrator in the coop_update folder and run
+     .\fix_spore_registry.ps1 -GameDir "<your Spore folder>"
+- "Another instance of the game is already running" right after a crash: restart Windows.
+- To turn the automatic restart off, set the environment variable COOP_NO_RESTART=1;
+  then restart the game yourself after "world received" and type coopjoin again.
+- Anything else: send  <Spore folder>\SporebinEP1\CoopMod.log  to the developers.
