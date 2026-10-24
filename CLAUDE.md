@@ -84,6 +84,8 @@ presses Continue.
   Fix: `local/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package).
 - **ArgScript**: `line.GetArguments(n)` accepts exactly `n` arguments: fewer gives "Expecting at least n arguments", more gives "Expecting at most n arguments" (the game prints it, our code is not reached). So every command has a fixed argument count: `coop <word>` (1 arg), `coopjoin <steamid>` (1 arg), `coopudpjoin <ip>` (1 arg). `GetArgumentsRange` was suspected of crashing the game and is avoided.
   Calling a cheat with zero arguments is rejected by the game itself ("Expecting at least 1 arguments").
+- **Move creatures with `Teleport(pos, rot)`, not `SetPosition`**: the creature's physics puts it back after
+  `SetPosition` (the SDK says so on `cSpatialObject::Teleport`); `SetOrientation` alone does stick.
 - **Do not call `cCreatureAnimal::Create` without a herd**: it crashes right after spawning. Use `CreateHerd`.
 - **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is behind the experimental `coop anim` switch.
 - Creature stage is on a **sphere**: positions and orientations are full 3D values; copy them as they are, never assume a

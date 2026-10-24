@@ -1,5 +1,6 @@
 ﻿// dllmain.cpp : entry point for the CoopMod DLL.
 #include "stdafx.h"
+#include <Spore/Simulator/SubSystem/UIEventLog.h>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -474,6 +475,9 @@ struct FilePacket
 #pragma pack(pop)
 static const size_t kFileHeader = offsetof(FilePacket, data);
 
+// Written into a received world (Game0.coopready, later Game0): the host's Steam ID.
+static const char* kSaveHostFile = "coop_host.txt";
+
 static std::string GamesDir()
 {
 	const char* appdata = getenv("APPDATA");
@@ -675,6 +679,11 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 
 	bool last = p.fileIndex + 1 == p.fileCount && p.offset + p.dataLen >= p.totalSize;
 	if (last) {
+		// remember whose world this is, so the co-op indicator can tell the host's world from the player's own
+		if (FILE* f = fopen((incoming + "\\" + kSaveHostFile).c_str(), "w")) {
+			fprintf(f, "%llu\n", (unsigned long long)sPeerSteamId);
+			fclose(f);
+		}
 		std::string ready = games + "\\Game0.coopready";
 		DeleteDir(ready);
 		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
@@ -797,8 +806,117 @@ static void SteamReceiveFiles()
 	}
 }
 
+// ---------------------------------------------------------------- co-op indicator
+// Shows the co-op state where the player sees it: in the game window's title, and as an event log message
+// (the alerts on the left of the screen) when the creature stage starts. Most important for the client:
+// whether the loaded save really is the host's world or the player's own.
+static HWND sGameWindow = nullptr;
+static std::wstring sBaseTitle;
+static std::string sIndicator;
+static uint32_t sEventId = 0;
+static bool sEventTried = false;
+
+// Steam ID of the host whose world Games\Game0 holds (written when the world is received), 0 if none.
+static uint64_t SaveHostId()
+{
+	unsigned long long id = 0;
+	if (FILE* f = fopen((GamesDir() + "\\Game0\\" + kSaveHostFile).c_str(), "r")) {
+		if (fscanf(f, "%llu", &id) != 1) {
+			id = 0;
+		}
+		fclose(f);
+	}
+	return id;
+}
+
+static BOOL CALLBACK FindGameWindow(HWND hwnd, LPARAM)
+{
+	DWORD pid = 0;
+	GetWindowThreadProcessId(hwnd, &pid);
+	if (pid == GetCurrentProcessId() && IsWindowVisible(hwnd) && !GetWindow(hwnd, GW_OWNER)) {
+		sGameWindow = hwnd;
+		return FALSE;
+	}
+	return TRUE;
+}
+
+// The event log item is borrowed from the space stage popups; guarded in case it misbehaves outside space.
+static uint32_t ShowEventGuarded(const char16_t* text)
+{
+	uint32_t event = 0;
+	__try {
+		event = UIEventLog.ShowEvent(id("GenericMissionProgress"), GroupIDs::SpacePopups);
+		if (event) {
+			UIEventLog.SetDescription(event, text);
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		event = 0;
+	}
+	return event;
+}
+
+static void UpdateIndicator(const std::string& text, bool inGame)
+{
+	if (text != sIndicator) {
+		sIndicator = text;
+		if (!sGameWindow) {
+			EnumWindows(FindGameWindow, 0);
+		}
+		if (sGameWindow) {
+			if (sBaseTitle.empty()) {
+				wchar_t title[256] = {};
+				GetWindowTextW(sGameWindow, title, 256);
+				sBaseTitle = title;
+			}
+			std::wstring full = sBaseTitle;
+			if (!text.empty()) {
+				full += L"  |  " + std::wstring(text.begin(), text.end());
+			}
+			SetWindowTextW(sGameWindow, full.c_str());
+		}
+		sEventTried = false;  // a new state gets a new message
+	}
+	if (!inGame) {
+		sEventTried = false;  // show it again on the next entry into the creature stage
+		sEventId = 0;
+		return;
+	}
+	if (!sEventTried && !text.empty()) {
+		sEventTried = true;
+		std::u16string text16(text.begin(), text.end());
+		if (sEventId) {
+			UIEventLog.SetDescription(sEventId, text16.c_str());
+		}
+		else {
+			sEventId = ShowEventGuarded(text16.c_str());
+			Logf("indicator: event log item %u", sEventId);
+		}
+	}
+}
+
+static std::string IndicatorText()
+{
+	if (sTransport == Transport::None) {
+		return "";
+	}
+	if (sIsHost) {
+		return sHavePeer && sReceived ? "CO-OP HOST: a player is connected" : "CO-OP HOST: waiting for a player";
+	}
+	if (!sHostSeen) {
+		return "CO-OP: connecting to the host...";
+	}
+	uint64_t saveHost = SaveHostId();
+	if (sTransport == Transport::Steam && saveHost != sPeerSteamId) {
+		return "CO-OP: connected, but this save is YOUR OWN world, not the host's";
+	}
+	return "CO-OP: you are in the HOST's world";
+}
+
 static void NetUpdate()
 {
+	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
+	UpdateIndicator(IndicatorText(), inGame);
 	if (sTransport == Transport::None) {
 		return;
 	}
@@ -814,7 +932,6 @@ static void NetUpdate()
 	}
 
 	DWORD now = GetTickCount();
-	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	if (sHavePeer && now - sLastSend >= kSendIntervalMs) {
 		sLastSend = now;
 		if (inGame) {
@@ -875,19 +992,22 @@ static void NetUpdate()
 			}
 		}
 
-		sPuppet->SetOrientation(Math::Quaternion(sPuppetRot[0], sPuppetRot[1], sPuppetRot[2], sPuppetRot[3]));
+		// SetPosition alone is undone by the creature's physics (only the orientation stuck): Teleport moves the
+		// creature and recalculates its physics.
+		Math::Quaternion rot(sPuppetRot[0], sPuppetRot[1], sPuppetRot[2], sPuppetRot[3]);
 		if (sAnim) {
 			// Experimental: let the game walk the puppet (gives leg animation); correct it when it falls behind.
+			sPuppet->SetOrientation(rot);
 			if (now - sLastWalkTo >= 100) {
 				sLastWalkTo = now;
 				sPuppet->WalkTo(1, sPuppetPos, sPuppetPos, 0.5f, 1.0f);
 			}
 			if ((sPuppetPos - sPuppet->GetPosition()).Length() > 4.0f) {
-				sPuppet->SetPosition(sPuppetPos);
+				sPuppet->Teleport(sPuppetPos, rot);
 			}
 		}
 		else {
-			sPuppet->SetPosition(sPuppetPos);
+			sPuppet->Teleport(sPuppetPos, rot);
 		}
 	}
 }

@@ -5,6 +5,14 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fixed: the puppet only turned on the spot and never moved** (on host and client). `SetPosition` is undone by the
+  creature's physics; the puppet is now moved with `Teleport(position, orientation)`. Both players need this build.
+- **Co-op indicator**: the game window title shows the co-op state, and entering the creature stage shows it as an
+  event log message (left side of the screen). For the client it says whether the loaded save is the host's world
+  ("CO-OP: you are in the HOST's world") or the player's own ("...this save is YOUR OWN world, not the host's").
+  A received world now carries `coop_host.txt` (the host's Steam ID) to tell them apart. The event log item is borrowed
+  from the space popups (`GenericMissionProgress`); whether it shows in the creature stage is not verified yet.
+
 - **Fixed: the host sent the world only once per hosting session**, so a client that restarted (to install the world)
   or joined again got nothing and saw no message. The host now treats a client silent for 10 s, or a different Steam ID,
   as a new connection ("client reconnected") and sends the world again; the client ignores a world arriving during a
