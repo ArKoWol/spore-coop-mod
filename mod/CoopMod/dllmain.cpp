@@ -447,7 +447,7 @@ static void HandlePacket(const StatePacket& p)
 
 // The host sends the files of its save game folder (Games\Game0, about 3 MB) so the client can load the
 // same world. Files travel as reliable messages on channel 1, a few chunks per frame because Steam's send
-// buffer is small. The client's own save is kept as Game0.coopbackup.
+// buffer is small. The client's own save is kept as Game0.coopbackup (later ones: coopbackup2, 3, ...).
 // The running game keeps planetRecords.pkp/.pkt and PlanetScripts.pld open (read share only) from startup,
 // so Game0 cannot be replaced while it runs: the received world waits in Game0.coopready and is installed
 // by InstallPendingWorld() when the next game starts, before the game opens its save.
@@ -514,14 +514,18 @@ static void InstallPendingWorld()
 		return;
 	}
 	std::string save = games + "\\Game0";
+	// Never delete an earlier backup: the first one holds the player's own save. Use the first free name:
+	// Game0.coopbackup, Game0.coopbackup2, Game0.coopbackup3, ...
 	std::string backup = games + "\\Game0.coopbackup";
-	DeleteDir(backup);
+	for (int n = 2; GetFileAttributesA(backup.c_str()) != INVALID_FILE_ATTRIBUTES && n < 1000; ++n) {
+		backup = games + "\\Game0.coopbackup" + std::to_string(n);
+	}
 	bool hadSave = GetFileAttributesA(save.c_str()) != INVALID_FILE_ATTRIBUTES;
 	bool movedOld = !hadSave || MoveFileA(save.c_str(), backup.c_str()) != 0;
 	bool movedNew = movedOld && MoveFileA(ready.c_str(), save.c_str()) != 0;
 	sWorldInstalledAtStart = movedNew;
-	Logf("world: installed at start %d (backup %d, error %lu)", movedNew ? 1 : 0, (hadSave && movedOld) ? 1 : 0,
-		movedNew ? 0 : GetLastError());
+	Logf("world: installed at start %d (backup %d as %s, error %lu)", movedNew ? 1 : 0, (hadSave && movedOld) ? 1 : 0,
+		backup.c_str(), movedNew ? 0 : GetLastError());
 }
 
 static struct WorldSend
@@ -671,7 +675,7 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
 		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
 		if (staged) {
-			App::ConsolePrintF("coop: world received. Restart the game to install it (your old save goes to Game0.coopbackup),");
+			App::ConsolePrintF("coop: world received. Restart the game to install it (your old save is kept as a Game0.coopbackup folder),");
 			App::ConsolePrintF("coop: then  coopjoin  the host again and choose Continue.");
 		}
 		else {
@@ -1193,5 +1197,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	}
 	return TRUE;
 }
+
 
 

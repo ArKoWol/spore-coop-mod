@@ -41,7 +41,7 @@ SporeApp.exe
 - **World transfer**: when a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0`
   (about 3 MB, 60 KB chunks, a few per frame because Steam's send buffer is small). The client stores them as
   `Game0.coopready`; the game must be **restarted**, and `InstallPendingWorld()` (called from `DllMain`, before the game
-  opens its save) swaps it in as `Game0` (old one kept as `Game0.coopbackup`). The player joins again (the world the host
+  opens its save) swaps it in as `Game0` (the old one is kept as `Game0.coopbackup`, never deleted; later installs use `coopbackup2`, `coopbackup3`, ...). The player joins again (the world the host
   sends again is ignored in that run) and presses Continue. Both sides then share the planet, so absolute positions
   (`sAbsolute`, default) line up.
 - **Remote console**: the mod listens on `127.0.0.1:27780` (local only); `console.ps1` sends lines that run as console
@@ -109,5 +109,6 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
