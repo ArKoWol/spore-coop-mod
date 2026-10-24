@@ -1,14 +1,13 @@
-# One-step test launcher: (pull and build, or update), start the game windowed and open a PowerShell console
+﻿# One-step test launcher: (build, or update from the latest release), start the game windowed and open a PowerShell console
 # connected to it. The console window closes by itself when the game exits.
 # Usually started through launch_spore_mod.bat.
 #
-#   .\launch.ps1                       dev: git pull, build, install, start, open the console
+#   .\launch.ps1                       dev: build, install, start, open the console (no git pull: run git pull yourself)
 #   .\launch.ps1 -Mode release         install the latest GitHub release (what players get) instead of building
 #   .\launch.ps1 -Mode play            start whatever is installed
-#   -NoPull skips git pull in dev mode, -NoConsole does not open the console window.
+#   -NoConsole does not open the console window.
 param(
     [ValidateSet('dev', 'release', 'play')][string]$Mode = 'dev',
-    [switch]$NoPull,
     [switch]$NoConsole
 )
 
@@ -37,12 +36,6 @@ if ($running) {
 # -- get the mod
 switch ($Mode) {
     'dev' {
-        if (-not $NoPull -and (Test-Path (Join-Path $root '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
-            Say 'git pull...'
-            $out = git -C $root pull --ff-only 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) { Write-Host "[launch] git pull did not work (continuing with what you have):`n$out" -ForegroundColor Yellow }
-            else { Write-Host $out.Trim() }
-        }
         Say 'building the mod...'
         & cmd /c "`"$root\mod\CoopMod\build.bat`" > `"$env:TEMP\coopmod_build.log`" 2>&1"
         if ($LASTEXITCODE -ne 0) { Get-Content "$env:TEMP\coopmod_build.log" -Tail 25; Fail 'the build failed, the game was not started.' }
@@ -75,3 +68,4 @@ if (-not $NoConsole) {
     Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$root\console.ps1`"")
     Say 'console window opened (it closes with the game). Type: coop host | coopjoin <steamid> | coop status | exit'
 }
+

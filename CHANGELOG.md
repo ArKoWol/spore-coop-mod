@@ -5,6 +5,8 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **The launcher no longer runs `git pull`** (`launch.ps1`, so `launch_spore_mod.bat` too): in `dev` mode it only builds and installs. Pull yourself when you want the other developer's changes. The `-NoPull` switch is gone. No protocol change.
+
 - **M0 replication core** (`core/coop_core.h`, plain C++ without Spore or Windows headers) and its tests (`tests/core_tests.cpp`, run `tests\run_core_tests.bat`, prints `ALL OK`): entity table with netIds, wire format, host side (`Spawn/Update/Destroy`, deltas, full snapshots, reliable events), guest side with stale-state rejection, tombstones and reconcile-on-full. The tests run a fake world through a network with loss, duplicates and reordering (and a 100-tick total blackout) with oracles for unknown ids, resurrected ids, going back in time and final equality, plus mutation twins (each protection switched off once must make a test fail). The test rig found a real bug on the first run (a late duplicate delta recreated a destroyed entity after a full snapshot had cleared its tombstone) and it is fixed; 500 seeds pass. Not used by the mod yet (the game adapter comes next).
 - **S1 `coop dump`**: lists every entity (the game's nouns, `GameNounManager.mNouns`) with position, species and health to the console, `CoopMod.log` and `CoopDump.txt`. New files `Entities.cpp/h`; `Logf` moved to `Log.cpp/h`. Compiles; not yet run in a creature stage.
 - **`coop fps`** toggles logging of frames per second and whether the game window has the focus (`fps:` lines in `CoopMod.log`). `tests/focus_test.ps1` uses it plus two dumps to check whether the world keeps simulating while another window has the focus (run it with the game in the creature stage). Measured so far: windowed Spore runs about 50 fps in the main menu with or without the focus.
@@ -84,6 +86,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 
