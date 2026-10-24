@@ -292,6 +292,9 @@ static bool sIsHost = false;
 static uint32_t sSeq = 0;
 static DWORD sLastSend = 0;
 static uint32_t sReceived = 0;
+static DWORD sLastReceive = 0;
+static bool sHostSeen = false;    // client: the host has answered since the last join
+static const DWORD kReconnectMs = 10000;
 
 // Absolute mode (default) puts the puppet exactly where the remote avatar is, which only makes sense when
 // both players are on the same planet (the host sends its save, see "world transfer"). Relative mode shows
@@ -327,6 +330,7 @@ static void NetStop()
 	sGotFirst = false;
 	sHaveLatest = false;
 	sReceived = 0;
+	sHostSeen = false;
 }
 
 static bool UdpStart(bool host, const char* ip, uint16_t port)
@@ -639,11 +643,12 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		return;
 	}
 
-	if (sWorldInstalledAtStart) {
+	// Only take a world in the main menu of a run that has not just installed one; the host also sends it
+	// when it thinks the client reconnected (see SteamReceive), which can happen in the middle of a game.
+	if (sWorldInstalledAtStart || Simulator::IsCreatureGame()) {
 		if (!sWorldIgnoredNotice) {
 			sWorldIgnoredNotice = true;
-			Logf("world: already installed at start, ignoring the new copy");
-			App::ConsolePrintF("coop: the host's world was installed when the game started. Choose Continue.");
+			Logf("world: ignoring the host's copy (%s)", sWorldInstalledAtStart ? "installed at start" : "in a game");
 		}
 		return;
 	}
@@ -740,15 +745,30 @@ static void SteamReceive()
 						WarnVersion("message version");
 					}
 					else if (p.magic == kMagic) {
-					if (sIsHost && !sHavePeer && p.sender) {
+					DWORD now = GetTickCount();
+					// A client that was silent for a while (it restarted the game, e.g. to install the world) or a
+					// different client counts as a new connection and gets the world again; a client that has just
+					// installed it ignores the copy.
+					bool reconnect = sHavePeer && (p.sender != sPeerSteamId || now - sLastReceive > kReconnectMs);
+					if (sIsHost && p.sender && (!sHavePeer || reconnect)) {
 						sPeerSteamId = p.sender;
 						sHavePeer = true;
-						Logf("steam: client connected, Steam ID %llu", (unsigned long long)p.sender);
-						App::ConsolePrintF("coop: client connected (Steam ID %llu)", (unsigned long long)p.sender);
+						Logf("steam: client %s, Steam ID %llu", reconnect ? "reconnected" : "connected", (unsigned long long)p.sender);
+						App::ConsolePrintF("coop: client %s (Steam ID %llu)", reconnect ? "reconnected" : "connected",
+							(unsigned long long)p.sender);
 						if (sSendWorld) {
 							WorldSendStart();
 						}
 					}
+					if (!sIsHost && !sHostSeen) {
+						sHostSeen = true;
+						Logf("steam: host answered");
+						App::ConsolePrintF("coop: connected to the host.");
+						if (sWorldInstalledAtStart) {
+							App::ConsolePrintF("coop: the host's world is installed. Choose Continue and enter the creature stage.");
+						}
+					}
+					sLastReceive = now;
 					HandlePacket(p);
 				}
 			}
@@ -912,24 +932,69 @@ static void* PrintF_detour(ArgScript::FormatParser* object, const char* str, ...
 	return sOrigPrintF(object, "%s", buffer);
 }
 
+static void ConsoleDropClient()
+{
+	EnterCriticalSection(&sConsoleLock);
+	SOCKET old = sConsoleClient;
+	sConsoleClient = INVALID_SOCKET;
+	LeaveCriticalSection(&sConsoleLock);
+	if (old != INVALID_SOCKET) {
+		closesocket(old);
+	}
+}
+
 static DWORD WINAPI ConsoleThread(void*)
 {
+	std::string input;
 	for (;;) {
-		SOCKET client = accept(sConsoleListen, nullptr, nullptr);
-		if (client == INVALID_SOCKET) {
-			return 0;  // the listening socket was closed (Dispose)
+		SOCKET listener = sConsoleListen;
+		SOCKET client = sConsoleClient;
+		if (listener == INVALID_SOCKET) {
+			ConsoleDropClient();
+			return 0;  // closed by Dispose
 		}
-		DWORD timeout = 200;
-		setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-		EnterCriticalSection(&sConsoleLock);
-		sConsoleClient = client;
-		LeaveCriticalSection(&sConsoleLock);
-		ConsoleSend("CoopMod remote console. Type console commands, e.g. coop status");
+		fd_set readable;
+		FD_ZERO(&readable);
+		FD_SET(listener, &readable);
+		if (client != INVALID_SOCKET) {
+			FD_SET(client, &readable);
+		}
+		timeval wait = { 0, 500 * 1000 };
+		if (select(0, &readable, nullptr, nullptr, &wait) == SOCKET_ERROR) {
+			if (sConsoleListen == INVALID_SOCKET) {
+				ConsoleDropClient();
+				return 0;
+			}
+			Sleep(100);
+			continue;
+		}
 
-		std::string input;
-		char buffer[1024];
-		int n;
-		while ((n = recv(client, buffer, sizeof(buffer), 0)) > 0) {
+		if (FD_ISSET(listener, &readable)) {
+			SOCKET incoming = accept(listener, nullptr, nullptr);
+			if (incoming != INVALID_SOCKET) {
+				// a new client replaces the old one (e.g. a forgotten interactive console)
+				if (client != INVALID_SOCKET) {
+					ConsoleSend("(another console connected; this one is closed)");
+					ConsoleDropClient();
+				}
+				DWORD timeout = 200;
+				setsockopt(incoming, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+				EnterCriticalSection(&sConsoleLock);
+				sConsoleClient = incoming;
+				LeaveCriticalSection(&sConsoleLock);
+				input.clear();
+				ConsoleSend("CoopMod remote console. Type console commands, e.g. coop status");
+			}
+			continue;
+		}
+
+		if (client != INVALID_SOCKET && FD_ISSET(client, &readable)) {
+			char buffer[1024];
+			int n = recv(client, buffer, sizeof(buffer), 0);
+			if (n <= 0) {
+				ConsoleDropClient();
+				continue;
+			}
 			input.append(buffer, n);
 			size_t end;
 			while ((end = input.find('\n')) != std::string::npos) {
@@ -945,10 +1010,6 @@ static DWORD WINAPI ConsoleThread(void*)
 				}
 			}
 		}
-		EnterCriticalSection(&sConsoleLock);
-		sConsoleClient = INVALID_SOCKET;
-		LeaveCriticalSection(&sConsoleLock);
-		closesocket(client);
 	}
 }
 
@@ -984,13 +1045,9 @@ static void ConsoleStop()
 	if (sConsoleListen == INVALID_SOCKET) {
 		return;
 	}
-	closesocket(sConsoleListen);  // ends the thread's accept()
-	sConsoleListen = INVALID_SOCKET;
-	EnterCriticalSection(&sConsoleLock);
-	if (sConsoleClient != INVALID_SOCKET) {
-		shutdown(sConsoleClient, SD_BOTH);  // ends its recv(); the thread closes the socket
-	}
-	LeaveCriticalSection(&sConsoleLock);
+	SOCKET listener = sConsoleListen;
+	sConsoleListen = INVALID_SOCKET;  // the thread sees it within half a second, drops the client and ends
+	closesocket(listener);
 }
 
 // Main thread, every frame: run the queued commands.

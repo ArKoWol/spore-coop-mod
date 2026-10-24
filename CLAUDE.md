@@ -43,10 +43,12 @@ SporeApp.exe
   `Game0.coopready`; the game must be **restarted**, and `InstallPendingWorld()` (called from `DllMain`, before the game
   opens its save) swaps it in as `Game0` (the old one is kept as `Game0.coopbackup`, never deleted; later installs use `coopbackup2`, `coopbackup3`, ...). The player joins again (the world the host
   sends again is ignored in that run) and presses Continue. Both sides then share the planet, so absolute positions
-  (`sAbsolute`, default) line up.
+  (`sAbsolute`, default) line up. The host treats a client that was silent for 10 s (`kReconnectMs`) or a different
+  Steam ID as a new connection and sends the world again; the client ignores a world that arrives during a game, and
+  prints "connected to the host" when the host's first packet arrives.
 - **Remote console**: the mod listens on `127.0.0.1:27780` (local only); `console.ps1` sends lines that run as console
   commands and gets the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread;
-  commands are queued and run on the main thread in `ConsoleUpdate`.
+  commands are queued and run on the main thread in `ConsoleUpdate`. One client at a time; a new one replaces the old.
 - **Puppet**: a one-animal herd made with `GameNounManager.CreateHerd`; the animal shows up in `herd->mHerd` a few frames
   later; its AI is skipped by a detour on `cCreatureAnimal::NPCTickAI`; its transform is set with `SetPosition` /
   `SetOrientation` (smoothed). It is removed with `GameNounManager.DestroyInstance(herd)`.

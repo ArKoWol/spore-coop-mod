@@ -5,6 +5,13 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fixed: the host sent the world only once per hosting session**, so a client that restarted (to install the world)
+  or joined again got nothing and saw no message. The host now treats a client silent for 10 s, or a different Steam ID,
+  as a new connection ("client reconnected") and sends the world again; the client ignores a world arriving during a
+  game (and after installing one at start). The client now prints "coop: connected to the host." (plus "Choose
+  Continue" after an install) when the host answers. Host-side fix: the **host** needs this build. No protocol change.
+- Remote console: a new `console.ps1` connection replaces a forgotten one instead of waiting behind it.
+
 - Added `console.bat`, a wrapper for `console.ps1` that bypasses the PowerShell execution policy for that one run (scripts are disabled by default on many PCs: "execution of scripts is disabled on this system").
 
 - **Fixed: a second world install deleted the player's own save backup.** `InstallPendingWorld()` used to wipe `Game0.coopbackup` before every install, so after two joins the first backup (the player's own save) was gone. It now keeps every backup and uses the first free name (`Game0.coopbackup`, `coopbackup2`, `coopbackup3`, ...). No protocol change.
