@@ -31,6 +31,9 @@ if (-not $inRepo) { $repoRoot = $parent }
 $askMode = $Check -or ($inRepo -and -not $Install)
 $quiet = $Check -and $Only -eq 'repo'   # the launcher's check: say nothing unless there is something to decide
 $configPath = Join-Path $here 'coop_update.json'
+# the updater lived in <repo>\update before the repo was tidied up: take its saved settings (game folder) along
+$oldConfig = Join-Path $repoRoot 'update\coop_update.json'
+if ($inRepo -and -not (Test-Path $configPath) -and (Test-Path $oldConfig)) { Copy-Item $oldConfig $configPath }
 $config = if (Test-Path $configPath) { Get-Content $configPath -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
 $headers = @{ 'User-Agent' = 'spore-coop-updater' }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12

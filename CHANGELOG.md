@@ -9,6 +9,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
   `console.bat`. The updater no longer asks for the Spore folder when it can find it: besides `-GameDir`, the saved config,
   the folder above it and `test\SPORE_A`/`SPORE`, it now reads the game's registry entry (`installloc`). Players benefit
   too (a fresh `coop_update` copy finds a GOG install by itself).
+  After the move to `package/coop_update` it also takes the saved settings from the old `update/coop_update.json`.
 
 - **Repository tidied up** (no code change): PowerShell tools moved to `scripts/` (`setup`, `launch`, `console`,
   `make_package`, `publish`), player files to `package/` in the zip's layout (`README.txt` was `coop_package_README.txt`,
