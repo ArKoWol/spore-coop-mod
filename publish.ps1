@@ -24,6 +24,10 @@ $changelog = [regex]::Replace($changelog, '(?m)^## Unreleased', "## Unreleased`r
 Set-Content $changelogPath $changelog -Encoding utf8
 
 & "$PSScriptRoot\make_package.ps1" -Repo $repo | Select-Object -Last 1
-gh release create $tag "$PSScriptRoot\coop_package.zip" "$PSScriptRoot\CLAUDE.md" "$PSScriptRoot\CHANGELOG.md" --repo $repo --title $tag --notes $Notes --latest
+$notesFile = Join-Path $env:TEMP "coop_release_notes.md"
+Set-Content $notesFile $Notes -Encoding utf8
+gh release create $tag "$PSScriptRoot\coop_package.zip" "$PSScriptRoot\CLAUDE.md" "$PSScriptRoot\CHANGELOG.md" --repo $repo --title $tag --notes-file $notesFile --latest
+if ($LASTEXITCODE -ne 0) { throw "gh release create failed (exit $LASTEXITCODE). CHANGELOG.md was already edited: undo with git checkout CHANGELOG.md." }
 "Published $tag to $repo. CHANGELOG.md was updated: commit and push it."
+
 
