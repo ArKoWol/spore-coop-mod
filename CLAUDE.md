@@ -58,7 +58,7 @@ SporeApp.exe
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
 - `launch_spore_mod.bat [dev|release|play]` - starts the test copy: `dev` (default) builds and installs `staging\CoopMod.dll`,
   `release` installs the latest GitHub release, `play` starts as is. Closes a running game first (asks). Starts windowed (`-w`).
-- `console.ps1` - remote game console: `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
+- `console.bat` / `console.ps1` - remote game console (use the .bat where script execution is disabled): `.\console.ps1` (interactive) or `.\console.ps1 "coop status" "coop host"` (one-shot).
 - `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
 
@@ -109,6 +109,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 
