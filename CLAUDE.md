@@ -51,14 +51,16 @@ SporeApp.exe
 - `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
-- `launch_spore_mod.bat` - copies `staging\CoopMod.dll` into the test copy and starts the game.
+- `launch_spore_mod.bat [dev|release|play]` - starts the test copy: `dev` (default) builds and installs `staging\CoopMod.dll`,
+  `release` installs the latest GitHub release, `play` starts as is. Closes a running game first (asks).
 - `coop_package_README.txt` - player instructions shipped in the package. `local/` - ignored personal notes.
 - Not in git: `SPORE/` (game), `test/SPORE_A` (test copy), `downloads/` (SDK, loader), `coop_package*`.
 
 ## Workflow
 1. `.\setup.ps1 -GameDir "<your Spore folder>"` once.
-2. Edit `mod/CoopMod/dllmain.cpp`, run `mod\CoopMod\build.bat`.
-3. Close the game, run `launch_spore_mod.bat` (the DLL is locked while the game runs, hence `staging`).
+2. Edit `mod/CoopMod/dllmain.cpp`.
+3. Run `launch_spore_mod.bat`: it builds, closes the game if needed (the DLL is locked while it runs, hence `staging`),
+   installs the build and starts the game. Each launch writes a `===== ... launch (mode) =====` line into `CoopMod.log`.
 4. Check `test\SPORE_A\SporebinEP1\CoopMod.log` (our log) and `spore_log.txt` (ModAPI log).
 5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
 

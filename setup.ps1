@@ -84,5 +84,5 @@ if ($GameDir) {
 Write-Host ''
 Write-Host 'Done. Next:'
 Write-Host '  - change mod\CoopMod\dllmain.cpp, run mod\CoopMod\build.bat'
-if ($GameDir) { Write-Host '  - launch_spore_mod.bat copies the new build into the test copy and starts the game' }
+if ($GameDir) { Write-Host '  - launch_spore_mod.bat builds, installs the new build into the test copy and starts the game' }
 Write-Host '  - publish.ps1 builds the package and publishes a GitHub release (needs gh auth login)'

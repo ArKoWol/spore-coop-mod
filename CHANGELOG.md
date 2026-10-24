@@ -5,6 +5,9 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- `launch_spore_mod.bat` has modes: `dev` (default) now **builds** the mod before installing it, `release` installs the
+  latest GitHub release into the test copy, `play` starts the game unchanged. It offers to close a running game and
+  writes a `===== <date> launch (<mode>) =====` line into `CoopMod.log` so each session is easy to find.
 - `update\update.bat` run straight from the repo no longer asks for the game folder: it finds `test\SPORE_A`, then `SPORE`
   (junctions work). The files it writes next to itself (`coop_update.json`, `fix_spore_registry.ps1`, `docs\`) are now in
   `.gitignore`. Players' installs (`<game>\coop_update`) behave as before.
