@@ -24,6 +24,7 @@ $here = $PSScriptRoot
 $repoRoot = Split-Path $here -Parent
 $inRepo = Test-Path (Join-Path $repoRoot '.git')
 $askMode = $Check -or ($inRepo -and -not $Install)
+$quiet = $Check -and $Only -eq 'repo'   # the launcher's check: say nothing unless there is something to decide
 $configPath = Join-Path $here 'coop_update.json'
 $config = if (Test-Path $configPath) { Get-Content $configPath -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
 $headers = @{ 'User-Agent' = 'spore-coop-updater' }
@@ -176,8 +177,8 @@ if ($repo) {
         $repo.Commits | ForEach-Object { Write-Host "    $_" }
         if ($repo.Behind -gt $repo.Commits.Count) { Write-Host "    ... and $($repo.Behind - $repo.Commits.Count) more" }
     }
-    else { Note 'repo: up to date with GitHub.' }
-    if ($repo.Ahead -gt 0) { Note "you have $($repo.Ahead) local commit(s) that are not on GitHub yet." }
+    elseif (-not $quiet) { Note 'repo: up to date with GitHub.' }
+    if ($repo.Ahead -gt 0 -and -not $quiet) { Note "you have $($repo.Ahead) local commit(s) that are not on GitHub yet." }
 }
 if ($release) {
     if ($releaseNew) { Note "release $($release.Tag) is available (installed: $(if ($config.installed) { $config.installed } else { 'none' }))." }
