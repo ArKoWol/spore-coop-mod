@@ -937,8 +937,13 @@ static std::string IndicatorText()
 	return "CO-OP: you are in the HOST's world";
 }
 
+static bool sDisposed = false;
+
 static void NetUpdate()
 {
+	if (sDisposed) {
+		return;
+	}
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
 	if (sTransport == Transport::None) {
@@ -1375,7 +1380,7 @@ void Initialize()
 void Dispose()
 {
 	// The loader unloads this DLL right after Dispose. Everything that still points into it must go first,
-	// otherwise the game calls freed code on exit (crash or frozen process, Event 1000 at offset 0xffffffff).
+	// otherwise the game or Steam would call freed code.
 	NetStop();
 	SteamStop();
 	ConsoleStop();
@@ -1392,6 +1397,16 @@ void Dispose()
 	CommitDetours();
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
+	// ModAPI routes our new/delete to the game's allocator. Static destructors normally run at FreeLibrary, while
+	// the game still lives; if they ever ran at process exit instead (DLL pinned or not unloaded), a static
+	// std::string/std::vector still holding memory would crash in the game's free. Free them now to be safe.
+	sDisposed = true;
+	sWorld = WorldSend();
+	std::string().swap(sIndicator);
+	std::wstring().swap(sBaseTitle);
+	EnterCriticalSection(&sConsoleLock);
+	std::vector<std::string>().swap(sConsoleQueue);
+	LeaveCriticalSection(&sConsoleLock);
 	Logf("CoopMod disposed");
 }
 
@@ -1402,12 +1417,68 @@ void AttachDetours()
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 }
 
+// ---------------------------------------------------------------- crash log
+// Logs access violations into CoopMod.log with the thread, the faulting address and the modules found on the
+// stack, so a crash (for example the one on exit after Steam was started) can be traced without a debugger.
+static PVOID sCrashHandler = nullptr;
+static int sCrashLogged = 0;
+
+static void DescribeAddress(DWORD address, char* out, size_t size)
+{
+	HMODULE module = nullptr;
+	char path[MAX_PATH] = "?";
+	if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+		(LPCSTR)(uintptr_t)address, &module) && module) {
+		GetModuleFileNameA(module, path, MAX_PATH);
+		const char* name = strrchr(path, '\\');
+		snprintf(out, size, "%s+0x%lx", name ? name + 1 : path, (unsigned long)(address - (DWORD)(uintptr_t)module));
+	}
+	else {
+		snprintf(out, size, "%08lx", (unsigned long)address);
+	}
+}
+
+static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info)
+{
+	if (info->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION || sCrashLogged >= 3) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+	++sCrashLogged;
+	const CONTEXT* c = info->ContextRecord;
+	char where[MAX_PATH + 32];
+	DescribeAddress((DWORD)(uintptr_t)info->ExceptionRecord->ExceptionAddress, where, sizeof(where));
+	Logf("crash: access violation in thread %lu at %s (eip %08lx esp %08lx, %s %08lx)", GetCurrentThreadId(), where,
+		c->Eip, c->Esp, info->ExceptionRecord->ExceptionInformation[0] ? "writing" : "reading",
+		(unsigned long)info->ExceptionRecord->ExceptionInformation[1]);
+	// return addresses on the stack that point into a loaded module
+	const DWORD* stack = (const DWORD*)(uintptr_t)c->Esp;
+	int shown = 0;
+	for (int i = 0; i < 256 && shown < 16; ++i) {
+		DWORD value;
+		__try {
+			value = stack[i];
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			break;
+		}
+		HMODULE module = nullptr;
+		if (value > 0x10000 && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			(LPCSTR)(uintptr_t)value, &module) && module) {
+			DescribeAddress(value, where, sizeof(where));
+			Logf("crash:   [esp+%03x] %s", i * 4, where);
+			++shown;
+		}
+	}
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
 		sModule = hModule;
+		sCrashHandler = AddVectoredExceptionHandler(1, CrashHandler);
 		InstallPendingWorld();
 		ModAPI::AddPostInitFunction(Initialize);
 		ModAPI::AddDisposeFunction(Dispose);
@@ -1418,6 +1489,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 		break;
 
 	case DLL_PROCESS_DETACH:
+		// lpReserved is null when the DLL is unloaded with FreeLibrary, non-null when the process ends
+		// lpReserved is null when the loader unloads us with FreeLibrary (it does, right after Dispose)
+		Logf("CoopMod detached (%s)", lpReserved ? "process exit" : "FreeLibrary");
+		if (sCrashHandler) {
+			RemoveVectoredExceptionHandler(sCrashHandler);
+		}
+		break;
+
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:
 		break;

@@ -103,7 +103,23 @@ presses Continue.
   minimizes as soon as it loses focus; `SporeApp.exe -w` runs windowed and keeps running (throttled) without focus.
 - The game prints its own console errors ("Expecting at least 1 arguments") outside `ArgScript::PrintF`;
   `CheatManager.ProcessLine` returns false for them.
-- **Exit crash with Steam (open)**: every session that initialized Steam (`coop host` / `coopjoin`) ends with Windows Event 1000, `0xC0000005` at offset `0xFFFFFFFF` (module unknown), right after the loader unloads our DLL; sessions that never touch Steam exit cleanly. A crashed Spore can stay frozen in the Windows error dialog, which looks like a stuck process. Already done in `Dispose()`: `SteamAPI_Shutdown`, join the console thread, remove the update listeners and cheats, detach the detours (see CHANGELOG). Still unknown which pointer survives: ideas are Steam's own threads/overlay, or the relay (`InitRelayNetworkAccess`). The remote console makes this easy to test: launch, `console.ps1 "coop host"`, close the window, look at Event 1000.
+- **The "exit crash with Steam" was not an exit crash.** `SteamAPI_Init` itself makes Windows log Event 1000
+  (`0xC0000005`, offset `0xFFFFFFFF`, module unknown): Steam's `CSERHelper.dll` deliberately writes to `0xFFFFFFFF`,
+  handles the exception and reports it; the event appears about a second after `coop host` / `coopjoin` while the game
+  keeps running. Ignore that one. Verified 2026-10-24: with and without Steam the game exits with code 0, "Shutting
+  Down" in `spore_log.txt` and no event after the close. Check a real exit crash by its time (after the close) and by
+  the `crash:` lines in `CoopMod.log`.
+- **The loader unloads the mod with `FreeLibrary` right after `Dispose`** ("CoopMod detached (FreeLibrary)" in the
+  log), while the game still runs: everything pointing into the DLL must be removed in `Dispose` (done: Steam,
+  console thread, update listeners, cheats, detours). Do **not** pin the DLL: static destructors then run at process
+  exit, and since **ModAPI routes our `new`/`delete` to the game's allocator**, a static `std::string`/`std::vector`
+  holding memory crashes in the game's free (`SporeApp.exe+0x527270`) because the game's heap is already gone.
+  `Dispose` also frees our static containers as a safety net.
+- **Crash log**: a vectored exception handler (`CrashHandler`) writes access violations to `CoopMod.log` as
+  `crash:` lines with the thread, the address and the modules on the stack (first 3 only; the first one is usually
+  the harmless Steam one above). To map `CoopMod.dll+0x...` to a function, relink with `set LINK=/MAP:<file>`.
+- **A crashed or killed Spore can leave an unkillable process** after the AMD driver resets (`LiveKernelEvent 117`);
+  a new game then hangs at startup or says "Another instance of the game is already running". Only a reboot clears it.
 - Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
 
 ## Open work / ideas

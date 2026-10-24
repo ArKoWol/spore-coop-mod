@@ -5,6 +5,14 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Exit crash: solved / was a misreading.** The Event 1000 at offset `0xFFFFFFFF` we both took for an exit crash comes
+  from `SteamAPI_Init` (Steam's `CSERHelper.dll` provokes and handles an access violation on purpose): it is logged
+  about a second after `coop host` / `coopjoin` while the game keeps running. Tested with and without Steam on top of
+  ArKoWol's cleanup: exit code 0, "Shutting Down", no event after the close. Details in CLAUDE.md "Hard-won facts".
+- **Crash log in `CoopMod.log`**: access violations are logged as `crash:` lines (address, thread, modules on the
+  stack). Found with it: ModAPI routes our `new`/`delete` to the game's allocator, so static containers must not be
+  destroyed after the game's heap is gone; `Dispose` now frees them, and the DLL must not be pinned in memory.
+
 - **One-step test launcher**: `launch.ps1` (wrapped by `launch_spore_mod.bat`) closes a running game the normal way, does `git pull` + build + install (`-Mode dev`, default; `release` installs the latest release, `play` starts as is), starts the game windowed, waits for the mod and opens a PowerShell console window connected to the game (`console.ps1`, with an interactive `spore` prompt). **The console window closes by itself when the game exits.** Host and join stay manual commands in that console (`coop host`, `coopjoin <id>`). Replaces the old batch-only `launch_spore_mod.bat` logic (modes, log separator and `-w` are kept). No protocol change.
 
 - **Cleanup on exit** (partial fix for crashes/frozen processes when the game is closed): `Dispose()` now removes everything that points into the mod DLL before the loader unloads it: `SteamAPI_Shutdown` (after unregistering the session-request callback), the console thread is joined, both update listeners (`App::RemoveUpdateFunction`), all our cheats (`CheatManager.RemoveCheat`), and the `NPCTickAI` and `ArgScript::PrintF` detours are detached. **The exit crash is not gone yet**: with Steam initialized the game still ends with Windows Event 1000 (`0xC0000005`, module unknown, offset `0xFFFFFFFF`) right after our DLL is unloaded; a session that never touched Steam exits cleanly. No protocol change.
