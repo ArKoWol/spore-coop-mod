@@ -30,3 +30,4 @@ cd spore-coop-mod
 Edit `mod\CoopMod\dllmain.cpp`, build with `mod\CoopMod\build.bat` (output: `mod\CoopMod\staging\CoopMod.dll`),
 test with `launch_spore_mod.bat`, release with `.\publish.ps1` (needs `gh auth login`).
 Bump `kProtocolVersion` in `dllmain.cpp` whenever the packet layout changes.
+

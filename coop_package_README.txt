@@ -23,19 +23,20 @@ Playing together (test version)
 1. HOST: load your game and get into the CREATURE stage. Let the game save (it autosaves; leaving a nest also saves).
    Open the console (Ctrl+Shift+C) and type:   coop host
    It prints "Your Steam ID: 7656...". Send that number to the other player.
-2. CLIENT: stay in the MAIN MENU (no game loaded). Open the console and type:   coop join 7656...
+2. CLIENT: stay in the MAIN MENU (no game loaded). Open the console and type:   coopjoin 7656...
 3. The host sends its save game (about 3 MB) to the client automatically. The client console says
    "coop: world received". The client's own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup.
 4. CLIENT: choose Continue / load the game and enter the creature stage. Now both players are in the same
    world: a copy of the other player's creature appears at their position and follows them.
    (The copy uses your own creature's look for now, and slides without a walking animation. "coop anim" tries
    to make it walk; it is experimental and may crash the game.)
-5. If you load the world again after the client left, type  coop join 7656...  again.
+5. If you load the world again after the client left, type  coopjoin 7656...  again.
    Host: "coop sendworld" sends the save again, "coop noworld" turns the automatic sending off.
 6. If Steam does not work, there is a fallback over plain UDP (no world transfer, move the save by hand):
-     host: coop udphost         client: coop udpjoin <host IP>      (UDP port 27777; needs VPN or port forwarding)
-Commands: coop host | coop join <steamid> | coop udphost | coop udpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off
+     host: coop udphost         client: coopudpjoin <host IP>      (UDP port 27777; needs VPN or port forwarding)
+Commands: coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off
 Log file: <game>\SporebinEP1\CoopMod.log - send it if something goes wrong.
+
 
 
 

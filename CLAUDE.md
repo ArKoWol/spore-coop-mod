@@ -1,4 +1,4 @@
-# Spore co-op mod: project guide (read this first)
+﻿# Spore co-op mod: project guide (read this first)
 
 This file is for people and AI assistants (Claude Code) working on the project. Two developers, each with their own
 Claude, share this repo. Keep this file and `CHANGELOG.md` accurate: they are how we understand each other.
@@ -29,7 +29,7 @@ SporeApp.exe
     SporeModLoader\ModLibs\CoopMod.dll          -> OUR MOD (source: mod\CoopMod\dllmain.cpp)
       steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar)
 ```
-- **Console commands** (Ctrl+Shift+C in game): `coop host`, `coop join <steamid>`, `coop udphost`, `coop udpjoin <ip>`,
+- **Console commands** (Ctrl+Shift+C in game): `coop host`, `coopjoin <steamid>`, `coop udphost`, `coopudpjoin <ip>`,
   `coop status`, `coop abs`, `coop anim`, `coop noworld`, `coop sendworld`, `coop off`, plus `stage <name>` and `coophello`.
   The game rejects a command without arguments, so every command has at least one word.
 - **Each frame** (`App::AddUpdateFunction(NetUpdate)`): pump Steam callbacks, receive packets, send our avatar's
@@ -63,7 +63,7 @@ SporeApp.exe
 5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
 
 Two-PC test: host loads a game into the creature stage and types `coop host`, sends the printed Steam ID; the client stays
-in the main menu and types `coop join <id>`, then presses Continue after "world received".
+in the main menu and types `coopjoin <id>`, then presses Continue after "world received".
 
 ## Hard-won facts (do not rediscover these)
 - **Use the GOG build.** The Steam build updated in Oct 2024 has an encrypted exe that breaks ModAPI (workaround: downgrade
@@ -71,7 +71,7 @@ in the main menu and types `coop join <id>`, then presses Continue after "world 
 - **GOG install can leave the registry incomplete** (`HKLM\SOFTWARE\WOW6432Node\Electronic Arts\spore*`): symptoms are
   alerts "Configuration Script Failed [2000]" and "data directory is missing or corrupt [1004]", even without mods.
   Fix: `local/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package).
-- **ArgScript**: use `line.GetArguments(n)`; `GetArgumentsRange` was suspected of crashing the game, so it is avoided.
+- **ArgScript**: `line.GetArguments(n)` accepts exactly `n` arguments: fewer gives "Expecting at least n arguments", more gives "Expecting at most n arguments" (the game prints it, our code is not reached). So every command has a fixed argument count: `coop <word>` (1 arg), `coopjoin <steamid>` (1 arg), `coopudpjoin <ip>` (1 arg). `GetArgumentsRange` was suspected of crashing the game and is avoided.
   Calling a cheat with zero arguments is rejected by the game itself ("Expecting at least 1 arguments").
 - **Do not call `cCreatureAnimal::Create` without a herd**: it crashes right after spawning. Use `CreateHerd`.
 - **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is behind the experimental `coop anim` switch.
@@ -92,3 +92,5 @@ in the main menu and types `coop join <id>`, then presses Continue after "world 
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
+

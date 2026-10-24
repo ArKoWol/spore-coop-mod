@@ -1,4 +1,4 @@
-// dllmain.cpp : entry point for the CoopMod DLL.
+﻿// dllmain.cpp : entry point for the CoopMod DLL.
 #include "stdafx.h"
 
 #include <winsock2.h>
@@ -835,7 +835,7 @@ static void NetUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop join <steamid> | coop udphost | coop udpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -854,40 +854,20 @@ public:
 		if (strcmp(sub, "host") == 0) {
 			if (SteamHostStart()) {
 				App::ConsolePrintF("coop: hosting over Steam. Your Steam ID: %llu", (unsigned long long)sSteam.myId);
-				App::ConsolePrintF("coop: give it to the other player: coop join %llu", (unsigned long long)sSteam.myId);
+				App::ConsolePrintF("coop: give it to the other player: coopjoin %llu", (unsigned long long)sSteam.myId);
 			}
 			else {
 				App::ConsolePrintF("coop: Steam failed (see CoopMod.log). Fallback: coop udphost");
 			}
 		}
-		else if (strcmp(sub, "join") == 0) {
-			auto joinArgs = line.GetArguments(2);  // reports "Expecting at least 2 arguments" itself
-			if (!joinArgs) {
-				return;
-			}
-			uint64_t id = _strtoui64(joinArgs[1], nullptr, 10);
-			if (id == 0) {
-				App::ConsolePrintF("coop: '%s' is not a Steam ID (a long number). For an IP use coop udpjoin.", joinArgs[1]);
-				return;
-			}
-			if (SteamJoinStart(id)) {
-				App::ConsolePrintF("coop: connecting over Steam, your Steam ID: %llu", (unsigned long long)sSteam.myId);
-			}
-			else {
-				App::ConsolePrintF("coop: Steam failed (see CoopMod.log). Fallback: coop udpjoin <ip>");
-			}
+		else if (strcmp(sub, "join") == 0 || strcmp(sub, "udpjoin") == 0) {
+			// The game's command parser accepts exactly the argument count we ask for, so joining is a
+			// separate one-argument command.
+			App::ConsolePrintF("coop: use  coopjoin <steamid>  (or  coopudpjoin <ip>)  without the space after coop");
 		}
 		else if (strcmp(sub, "udphost") == 0) {
 			bool ok = UdpStart(true, nullptr, kDefaultPort);
 			App::ConsolePrintF("coop: %s", ok ? "hosting over UDP (port 27777), waiting for a client" : "failed to start (see CoopMod.log)");
-		}
-		else if (strcmp(sub, "udpjoin") == 0) {
-			auto joinArgs = line.GetArguments(2);
-			if (!joinArgs) {
-				return;
-			}
-			bool ok = UdpStart(false, joinArgs[1], kDefaultPort);
-			App::ConsolePrintF("coop: %s", ok ? "connecting over UDP" : "failed to start (see CoopMod.log)");
 		}
 		else if (strcmp(sub, "noworld") == 0) {
 			sSendWorld = !sSendWorld;
@@ -934,9 +914,62 @@ public:
 	}
 };
 
+// coopjoin <steamid>: join a Steam host, from the main menu or from a game.
+class CoopJoinCommand : public ArgScript::ICommand
+{
+public:
+	void ParseLine(const ArgScript::Line& line) override
+	{
+		auto args = line.GetArguments(1);
+		if (!args) {
+			return;
+		}
+		Logf("coopjoin %s", args[0]);
+		uint64_t id = _strtoui64(args[0], nullptr, 10);
+		if (id == 0) {
+			App::ConsolePrintF("coop: '%s' is not a Steam ID (a long number). For an IP use coopudpjoin.", args[0]);
+			return;
+		}
+		if (SteamJoinStart(id)) {
+			App::ConsolePrintF("coop: connecting over Steam, your Steam ID: %llu", (unsigned long long)sSteam.myId);
+		}
+		else {
+			App::ConsolePrintF("coop: Steam failed (see CoopMod.log). Fallback: coopudpjoin <ip>");
+		}
+	}
+
+	const char* GetDescription(ArgScript::DescriptionMode mode) const override
+	{
+		return "coopjoin <steamid>: join a co-op host over Steam.";
+	}
+};
+
+// coopudpjoin <ip>: join a host over plain UDP (port 27777).
+class CoopUdpJoinCommand : public ArgScript::ICommand
+{
+public:
+	void ParseLine(const ArgScript::Line& line) override
+	{
+		auto args = line.GetArguments(1);
+		if (!args) {
+			return;
+		}
+		Logf("coopudpjoin %s", args[0]);
+		bool ok = UdpStart(false, args[0], kDefaultPort);
+		App::ConsolePrintF("coop: %s", ok ? "connecting over UDP" : "failed to start (see CoopMod.log)");
+	}
+
+	const char* GetDescription(ArgScript::DescriptionMode mode) const override
+	{
+		return "coopudpjoin <ip>: join a co-op host over plain UDP.";
+	}
+};
+
 void Initialize()
 {
 	CheatManager.AddCheat("coop", new CoopCommand());
+	CheatManager.AddCheat("coopjoin", new CoopJoinCommand());
+	CheatManager.AddCheat("coopudpjoin", new CoopUdpJoinCommand());
 	App::AddUpdateFunction(NetUpdate);
 	CheatManager.AddCheat("stage", new StageCommand());
 	CheatManager.AddCheat("coophello", new CoopHelloCommand());
@@ -976,3 +1009,5 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	}
 	return TRUE;
 }
+
+
