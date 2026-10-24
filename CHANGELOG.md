@@ -5,6 +5,8 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Automatic restart and auto-join after a received world**: when the client has received the host's world the mod restarts the game by itself 3 s later (a hidden PowerShell helper waits for the game to end and starts `SporeApp.exe -w` again; the game is closed with `WM_CLOSE`, so it saves), the world is installed at that start as before, and the restarted game **joins the same host again by itself** (the host id waits in `Games\CoopAutoJoin.txt`, read once). The player no longer closes the game or types `coopjoin` a second time, only presses Continue. `launch.ps1` sets `COOP_CONSOLE_PS1` so the console window reopens after the restart. `COOP_NO_RESTART` keeps the old manual flow; `coop restart` restarts the game without a world (also a dev tool). A separate save slot cannot replace the restart: Spore only knows `Game0`. Tested here: restart (new process, new console window), install at start and auto-join from a simulated received world; not yet over a real transfer between two PCs. No protocol change.
+
 - **Splash picture is in**: `assets/splash.png` is now exxecute's art (both developers, "The best mod ever") instead of the
   red placeholder. To change it, replace that file (PNG 1920x1080) and build.
 
@@ -97,6 +99,7 @@ Format: one bullet per change: what, why, and anything the other developer must 
 - Found that the GOG build works with ModAPI (the Steam build of Oct 2024 does not); fixed the incomplete GOG registry entries.
 - Built the toolchain (VS 2022 Build Tools, Spore ModAPI SDK, SporeModLoader) and a test mod.
 - Puppet spawning: `cCreatureAnimal::Create` without a herd crashes; `CreateHerd` works.
+
 
 
 

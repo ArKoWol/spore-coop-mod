@@ -1,4 +1,4 @@
-﻿# One-step test launcher: (build, or update from the latest release), start the game windowed and open a PowerShell console
+# One-step test launcher: (build, or update from the latest release), start the game windowed and open a PowerShell console
 # connected to it. The console window closes by itself when the game exits.
 # Usually started through launch_spore_mod.bat.
 #
@@ -57,6 +57,8 @@ switch ($Mode) {
 
 # -- start the game (windowed: a minimized or unfocused fullscreen Spore runs no frames, so no co-op and no console)
 Add-Content $log "===== $(Get-Date -Format 'dd.MM.yyyy HH:mm:ss') launch ($Mode) =====" -Encoding ascii
+# the mod's automatic restart (after a received world) reopens this console through this variable
+$env:COOP_CONSOLE_PS1 = Join-Path $root 'console.ps1'
 Start-Process $exe -ArgumentList '-w' -WorkingDirectory $gameDir
 Say 'game started, waiting for the mod...'
 

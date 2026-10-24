@@ -42,9 +42,9 @@ SporeApp.exe
   27777 is the fallback (no world transfer).
 - **World transfer**: when a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0`
   (about 3 MB, 60 KB chunks, a few per frame because Steam's send buffer is small). The client stores them as
-  `Game0.coopready`; the game must be **restarted**, and `InstallPendingWorld()` (called from `DllMain`, before the game
-  opens its save) swaps it in as `Game0` (the old one is kept as `Game0.coopbackup`, never deleted; later installs use `coopbackup2`, `coopbackup3`, ...). The player joins again (the world the host
-  sends again is ignored in that run) and presses Continue. Both sides then share the planet, so absolute positions
+  `Game0.coopready`; the game is then **restarted by the mod itself** (3 s later: a hidden PowerShell `%TEMP%\coop_restart.ps1` waits for the process to end and starts `SporeApp.exe -w` again, and reopens the console window if the launcher set `COOP_CONSOLE_PS1`; the game is closed with `WM_CLOSE`, so it saves; `COOP_NO_RESTART` turns this off; `coop restart` tests it without a world), and `InstallPendingWorld()` (called from `DllMain`, before the game
+  opens its save) swaps it in as `Game0` (the old one is kept as `Game0.coopbackup`, never deleted; later installs use `coopbackup2`, `coopbackup3`, ...). The host id is left in `Games\CoopAutoJoin.txt` (read once and deleted), so the restarted game **joins the host again by itself** (`Initialize`); the world the host
+  sends again is ignored in that run; the player only presses Continue. Both sides then share the planet, so absolute positions
   (`sAbsolute`, default) line up. The host treats a client that was silent for 10 s (`kReconnectMs`) or a different
   Steam ID as a new connection and sends the world again; the client ignores a world that arrives during a game, and
   prints "connected to the host" when the host's first packet arrives.
@@ -77,8 +77,8 @@ SporeApp.exe
 5. Update `CHANGELOG.md`, commit, push. To ship: build, then `.\publish.ps1`. Players run `update.bat`.
 
 Two-PC test: host loads a game into the creature stage and types `coop host`, sends the printed Steam ID; the client stays
-in the main menu and types `coopjoin <id>`; after "world received" it restarts the game, types `coopjoin <id>` again and
-presses Continue.
+in the main menu and types `coopjoin <id>`; after "world received" the game restarts itself, joins again by itself and the
+player presses Continue.
 
 ## Hard-won facts (do not rediscover these)
 - **Use the GOG build.** The Steam build updated in Oct 2024 has an encrypted exe that breaks ModAPI (workaround: downgrade
@@ -138,11 +138,11 @@ presses Continue.
   `id("...")` = FNV-1 of the lower-case name. A PNG of any size works for UTFWin images.
 
 ## Open work / ideas
-- Restart the game automatically after the world arrives (and rejoin), instead of asking the player to.
 - Load the received world automatically (`cGamePersistenceManager::LoadGame`, undocumented) instead of pressing Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 

@@ -648,6 +648,38 @@ static void InstallPendingWorld()
 		backup.c_str(), movedNew ? 0 : GetLastError());
 }
 
+// After a world is received the mod restarts the game by itself (the running game keeps Game0 locked, so the world is
+// installed at the next start) and joins the same host again at that start. The host's Steam ID travels in
+// Games\CoopAutoJoin.txt, which is read once and deleted. COOP_NO_RESTART turns the automatic restart off.
+static const char* kAutoJoinFile = "CoopAutoJoin.txt";
+static DWORD sRestartAt = 0;  // GetTickCount() deadline of the restart, 0 = none planned
+static bool sRestartDone = false;
+
+static std::string AutoJoinPath() { return GamesDir() + "\\" + kAutoJoinFile; }
+
+static void WriteAutoJoin(uint64_t hostId)
+{
+	if (FILE* f = fopen(AutoJoinPath().c_str(), "w")) {
+		fprintf(f, "%llu\n", (unsigned long long)hostId);
+		fclose(f);
+	}
+}
+
+// Returns the host id left by the previous run and deletes the file; 0 if there is none.
+static uint64_t TakeAutoJoin()
+{
+	unsigned long long id = 0;
+	std::string path = AutoJoinPath();
+	if (FILE* f = fopen(path.c_str(), "r")) {
+		if (fscanf(f, "%llu", &id) != 1) {
+			id = 0;
+		}
+		fclose(f);
+		DeleteFileA(path.c_str());
+	}
+	return id;
+}
+
 static struct WorldSend
 {
 	bool active = false;
@@ -800,7 +832,12 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		DeleteDir(ready);
 		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
 		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
-		if (staged) {
+		if (staged && !getenv("COOP_NO_RESTART")) {
+			WriteAutoJoin(sPeerSteamId);
+			sRestartAt = GetTickCount() + 3000;
+			App::ConsolePrintF("coop: world received. The game restarts by itself in 3 s and joins the host again (your old save is kept as a Game0.coopbackup folder).");
+		}
+		else if (staged) {
 			App::ConsolePrintF("coop: world received. Restart the game to install it (your old save is kept as a Game0.coopbackup folder),");
 			App::ConsolePrintF("coop: then  coopjoin  the host again and choose Continue.");
 		}
@@ -1058,12 +1095,82 @@ static void FrameStats()
 	}
 }
 
+// Starts a hidden PowerShell that waits for this game to end and then starts it again (with `-w`); when the launcher
+// set COOP_CONSOLE_PS1 it also reopens the console window once the mod's console port is up again.
+static void LaunchRestartHelper()
+{
+	wchar_t exe[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, exe, MAX_PATH);
+	std::wstring dir = exe;
+	dir.erase(dir.find_last_of(L'\\'));
+	wchar_t temp[MAX_PATH] = {};
+	GetTempPathW(MAX_PATH, temp);
+	std::wstring script = std::wstring(temp) + L"coop_restart.ps1";
+	const wchar_t* console = _wgetenv(L"COOP_CONSOLE_PS1");
+
+	FILE* f = _wfopen(script.c_str(), L"w, ccs=UTF-8");
+	if (!f) {
+		Logf("restart: cannot write the helper script");
+		return;
+	}
+	fwprintf(f,
+		L"param([int]$GamePid, [string]$Exe, [string]$Dir, [string]$Console)\n"
+		L"Wait-Process -Id $GamePid -Timeout 90 -ErrorAction SilentlyContinue\n"
+		L"Start-Sleep -Seconds 1\n"
+		L"Start-Process -FilePath $Exe -ArgumentList '-w' -WorkingDirectory $Dir\n"
+		L"if ($Console -and (Test-Path $Console)) {\n"
+		L"  for ($i = 0; $i -lt 120; $i++) {\n"
+		L"    Start-Sleep -Milliseconds 750\n"
+		L"    $c = New-Object Net.Sockets.TcpClient\n"
+		L"    try { $c.Connect('127.0.0.1', 27780); $c.Close(); Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',('\"' + $Console + '\"'); break } catch { }\n"
+		L"  }\n"
+		L"}\n");
+	fclose(f);
+
+	std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + L"\" -GamePid " +
+		std::to_wstring(GetCurrentProcessId()) + L" -Exe \"" + exe + L"\" -Dir \"" + dir + L"\"";
+	if (console && *console) {
+		command += std::wstring(L" -Console \"") + console + L"\"";
+	}
+	STARTUPINFOW startup = { sizeof(startup) };
+	PROCESS_INFORMATION process = {};
+	if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, temp, &startup, &process)) {
+		CloseHandle(process.hThread);
+		CloseHandle(process.hProcess);
+		Logf("restart: helper started, the game will start again after it exits");
+	}
+	else {
+		Logf("restart: could not start the helper (error %lu)", GetLastError());
+	}
+}
+
+// Main thread: when the planned time has come, start the helper and close the game the normal way (WM_CLOSE, so it saves).
+static void RunRestartIfDue()
+{
+	if (!sRestartAt || sRestartDone || (int)(GetTickCount() - sRestartAt) < 0) {
+		return;
+	}
+	sRestartDone = true;
+	LaunchRestartHelper();
+	if (!sGameWindow) {
+		EnumWindows(FindGameWindow, 0);
+	}
+	if (sGameWindow) {
+		PostMessageW(sGameWindow, WM_CLOSE, 0, 0);
+	}
+	else {
+		Logf("restart: no game window found, close the game by hand");
+		App::ConsolePrintF("coop: close the game by hand, it will start again by itself.");
+	}
+}
+
 static void NetUpdate()
 {
 	if (sDisposed) {
 		return;
 	}
 	FrameStats();
+	RunRestartIfDue();
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
 	if (sTransport == Transport::None) {
@@ -1347,7 +1454,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop dump | coop fps | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1392,6 +1499,12 @@ public:
 			else {
 				App::ConsolePrintF("coop: needs a Steam connection with a client");
 			}
+		}
+		else if (strcmp(sub, "restart") == 0) {
+			// the same restart that follows a received world, without the world: closes the game and starts it again
+			sRestartDone = false;
+			sRestartAt = GetTickCount() + 1000;
+			App::ConsolePrintF("coop: restarting the game in 1 s...");
 		}
 		else if (strcmp(sub, "fps") == 0) {
 			sFpsLog = !sFpsLog;
@@ -1500,7 +1613,18 @@ void Initialize()
 	ConsoleStart();
 	sConsoleListener = App::AddUpdateFunction(ConsoleUpdate);
 	Logf("CoopMod initialized (protocol %u)", (unsigned)kProtocolVersion);
-	if (sWorldInstalledAtStart) {
+	// A restart caused by a received world: the world is installed (DllMain), now join the same host again.
+	uint64_t autoJoin = TakeAutoJoin();
+	if (autoJoin && sWorldInstalledAtStart) {
+		Logf("autojoin: joining host %llu", (unsigned long long)autoJoin);
+		if (SteamJoinStart(autoJoin)) {
+			App::ConsolePrintF("coop: the received world is installed, joining the host again automatically...");
+		}
+		else {
+			App::ConsolePrintF("coop: the received world is installed, but joining failed (see CoopMod.log): coopjoin %llu", (unsigned long long)autoJoin);
+		}
+	}
+	else if (sWorldInstalledAtStart) {
 		App::ConsolePrintF("coop: the received world is installed. coopjoin the host again, then choose Continue.");
 	}
 }
@@ -1700,6 +1824,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	}
 	return TRUE;
 }
+
 
 
 

@@ -24,10 +24,11 @@ Playing together (test version)
    Open the console (Ctrl+Shift+C) and type:   coop host
    It prints "Your Steam ID: 7656...". Send that number to the other player.
 2. CLIENT: stay in the MAIN MENU (no game loaded). Open the console and type:   coopjoin 7656...
-3. The host sends its save game (about 3 MB) to the client automatically. The client console says
-   "coop: world received". CLIENT: close and start the game again (the running game keeps its save files
-   locked); the received world is installed at startup and your own save is kept in
-   %APPDATA%\Spore\Games\Game0.coopbackup (a later join keeps it and uses coopbackup2, 3, ...). Then type  coopjoin 7656...  again.
+3. The host sends its save game (about 3 MB) to the client automatically. The client console says "coop: world received".
+   **The game then restarts by itself** after 3 seconds (the running game keeps its save files locked), installs the received world
+   at startup (your own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup; a later join keeps it and uses coopbackup2, 3, ...)
+   and **joins the host again automatically**. You do not have to type anything. (Set the environment variable COOP_NO_RESTART
+   to turn the automatic restart off; then restart the game yourself and type  coopjoin 7656...  again.)
 4. CLIENT: choose Continue / load the game and enter the creature stage. Now both players are in the same
    world: a copy of the other player's creature appears at their position and follows them.
    (The copy uses your own creature's look for now, and slides without a walking animation. "coop anim" tries
@@ -38,6 +39,7 @@ Playing together (test version)
      host: coop udphost         client: coopudpjoin <host IP>      (UDP port 27777; needs VPN or port forwarding)
 Commands: coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop anim | coop noworld | coop sendworld | coop status | coop off
 Log file: <game>\SporebinEP1\CoopMod.log - send it if something goes wrong.
+
 
 
 
