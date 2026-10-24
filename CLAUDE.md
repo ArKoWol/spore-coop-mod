@@ -105,6 +105,7 @@ presses Continue.
   minimizes as soon as it loses focus; `SporeApp.exe -w` runs windowed and keeps running (throttled) without focus.
 - The game prints its own console errors ("Expecting at least 1 arguments") outside `ArgScript::PrintF`;
   `CheatManager.ProcessLine` returns false for them.
+- **Exit crash with Steam (open)**: every session that initialized Steam (`coop host` / `coopjoin`) ends with Windows Event 1000, `0xC0000005` at offset `0xFFFFFFFF` (module unknown), right after the loader unloads our DLL; sessions that never touch Steam exit cleanly. A crashed Spore can stay frozen in the Windows error dialog, which looks like a stuck process. Already done in `Dispose()`: `SteamAPI_Shutdown`, join the console thread, remove the update listeners and cheats, detach the detours (see CHANGELOG). Still unknown which pointer survives: ideas are Steam's own threads/overlay, or the relay (`InitRelayNetworkAccess`). The remote console makes this easy to test: launch, `console.ps1 "coop host"`, close the window, look at Event 1000.
 - Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
 
 ## Open work / ideas
@@ -113,6 +114,7 @@ presses Continue.
 - Puppet with the remote player's own creature (send the species key / model), walking animation, combat/damage sync.
 - Shared NPCs and nests (host authority), stage transitions with a "ready" barrier, late join, disconnect handling.
 - Other stages (tribe, civ, space). Save model: host save is canonical, the guest keeps a separate save.
+
 
 
 

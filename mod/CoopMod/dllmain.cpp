@@ -182,6 +182,9 @@ static struct SteamApi
 	SteamMessageRelease_t Release = nullptr;
 } sSteam;
 
+static SteamVoid_t sSteamShutdown = nullptr;
+static SteamSetSessionRequestCallback_t sSteamSetRequestCallback = nullptr;
+
 // Called by Steam when an unknown user first messages us; the identity is the first field of the request.
 static void __cdecl OnSessionRequest(void* request)
 {
@@ -237,7 +240,8 @@ static bool SteamStart()
 		&& SteamLoadProc(sSteam.CloseSession, "SteamAPI_ISteamNetworkingMessages_CloseSessionWithUser")
 		&& SteamLoadProc(sSteam.Release, "SteamAPI_SteamNetworkingMessage_t_Release")
 		&& SteamLoadProc(setRequestCallback, "SteamAPI_ISteamNetworkingUtils_SetGlobalCallback_MessagesSessionRequest")
-		&& SteamLoadProc(initRelay, "SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess");
+		&& SteamLoadProc(initRelay, "SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess")
+		&& SteamLoadProc(sSteamShutdown, "SteamAPI_Shutdown");
 	if (!ok) {
 		return false;
 	}
@@ -253,11 +257,31 @@ static bool SteamStart()
 	sSteam.messages = getMessages();
 	sSteam.sockets = getSockets();
 	sSteam.utils = getUtils();
+	sSteamSetRequestCallback = setRequestCallback;
 	setRequestCallback(sSteam.utils, OnSessionRequest);
 	initRelay(sSteam.utils);
 	sSteam.ready = true;
 	Logf("steam: ready, my Steam ID %llu", (unsigned long long)sSteam.myId);
 	return true;
+}
+
+// Called from Dispose. Steam keeps its own threads and holds a callback into this DLL, and the loader unloads
+// the DLL right after Dispose: without shutting Steam down, a Steam thread calls into freed memory and the
+// game process crashes or hangs on exit (Windows Event 1000, fault offset 0xffffffff).
+static void SteamStop()
+{
+	if (!sSteam.ready) {
+		return;
+	}
+	sSteam.ready = false;
+	if (sSteamSetRequestCallback) {
+		sSteamSetRequestCallback(sSteam.utils, nullptr);
+	}
+	if (sSteamShutdown) {
+		sSteamShutdown();
+	}
+	sSteam.messages = sSteam.sockets = sSteam.utils = nullptr;
+	Logf("steam: shut down");
 }
 
 // ---------------------------------------------------------------- network
@@ -1024,6 +1048,7 @@ static SOCKET sConsoleClient = INVALID_SOCKET;
 static CRITICAL_SECTION sConsoleLock;
 static std::vector<std::string> sConsoleQueue;
 static ArgScript::PrintF_ptr sOrigPrintF = nullptr;
+static HANDLE sConsoleThread = nullptr;
 
 static void ConsoleSend(const char* text)
 {
@@ -1156,7 +1181,7 @@ static void ConsoleStart()
 		WSACleanup();
 		return;
 	}
-	CloseHandle(CreateThread(nullptr, 0, ConsoleThread, nullptr, 0, nullptr));
+	sConsoleThread = CreateThread(nullptr, 0, ConsoleThread, nullptr, 0, nullptr);
 	Logf("console: listening on 127.0.0.1:%u", (unsigned)kConsolePort);
 }
 
@@ -1168,6 +1193,12 @@ static void ConsoleStop()
 	SOCKET listener = sConsoleListen;
 	sConsoleListen = INVALID_SOCKET;  // the thread sees it within half a second, drops the client and ends
 	closesocket(listener);
+	// The thread's code lives in this DLL: wait until it has really ended, the DLL is unloaded after Dispose.
+	if (sConsoleThread) {
+		WaitForSingleObject(sConsoleThread, 3000);
+		CloseHandle(sConsoleThread);
+		sConsoleThread = nullptr;
+	}
 }
 
 // Main thread, every frame: run the queued commands.
@@ -1321,16 +1352,20 @@ public:
 	}
 };
 
+static HMODULE sModule = nullptr;
+static eastl::intrusive_ptr<App::UpdateMessageListener> sNetListener;
+static eastl::intrusive_ptr<App::UpdateMessageListener> sConsoleListener;
+
 void Initialize()
 {
 	CheatManager.AddCheat("coop", new CoopCommand());
 	CheatManager.AddCheat("coopjoin", new CoopJoinCommand());
 	CheatManager.AddCheat("coopudpjoin", new CoopUdpJoinCommand());
-	App::AddUpdateFunction(NetUpdate);
+	sNetListener = App::AddUpdateFunction(NetUpdate);
 	CheatManager.AddCheat("stage", new StageCommand());
 	CheatManager.AddCheat("coophello", new CoopHelloCommand());
 	ConsoleStart();
-	App::AddUpdateFunction(ConsoleUpdate);
+	sConsoleListener = App::AddUpdateFunction(ConsoleUpdate);
 	Logf("CoopMod initialized (protocol %u)", (unsigned)kProtocolVersion);
 	if (sWorldInstalledAtStart) {
 		App::ConsolePrintF("coop: the received world is installed. coopjoin the host again, then choose Continue.");
@@ -1339,8 +1374,22 @@ void Initialize()
 
 void Dispose()
 {
+	// The loader unloads this DLL right after Dispose. Everything that still points into it must go first,
+	// otherwise the game calls freed code on exit (crash or frozen process, Event 1000 at offset 0xffffffff).
 	NetStop();
+	SteamStop();
 	ConsoleStop();
+	App::RemoveUpdateFunction(sNetListener);
+	App::RemoveUpdateFunction(sConsoleListener);
+	sNetListener = nullptr;
+	sConsoleListener = nullptr;
+	for (const char* cheat : { "coop", "coopjoin", "coopudpjoin", "stage", "coophello" }) {
+		CheatManager.RemoveCheat(cheat);
+	}
+	PrepareDetours(sModule);
+	NPCTickAI_detour::detach();
+	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
+	CommitDetours();
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
 	Logf("CoopMod disposed");
@@ -1358,6 +1407,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
+		sModule = hModule;
 		InstallPendingWorld();
 		ModAPI::AddPostInitFunction(Initialize);
 		ModAPI::AddDisposeFunction(Dispose);
