@@ -40,6 +40,7 @@ switch ($Mode) {
         & cmd /c "`"$root\mod\CoopMod\build.bat`" > `"$env:TEMP\coopmod_build.log`" 2>&1"
         if ($LASTEXITCODE -ne 0) { Get-Content "$env:TEMP\coopmod_build.log" -Tail 25; Fail 'the build failed, the game was not started.' }
         Copy-Item (Join-Path $root 'mod\CoopMod\staging\CoopMod.dll') (Join-Path $game 'SporeModLoader\ModLibs\CoopMod.dll') -Force
+        Copy-Item (Join-Path $root 'mod\CoopMod\staging\CoopMod.package') (Join-Path $game 'Data\CoopMod.package') -Force
         Say 'installed the local build.'
     }
     'release' {

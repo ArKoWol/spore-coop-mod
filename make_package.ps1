@@ -15,6 +15,8 @@ New-Item -ItemType Directory -Force "$out\SporebinEP1", "$out\SporeModLoader\Cor
 Copy-Item "$loader\SporebinEP1\dinput8.dll" "$out\SporebinEP1\"
 Copy-Item "$loader\SporeModLoader\CoreLibs\*" "$out\SporeModLoader\CoreLibs\"
 Copy-Item $dll "$out\SporeModLoader\ModLibs\CoopMod.dll"
+New-Item -ItemType Directory -Force "$out\Data" | Out-Null
+Copy-Item (Join-Path $root 'mod\CoopMod\staging\CoopMod.package') "$out\Data\CoopMod.package"  # the splash picture
 if ($IncludeSteamDll) {
     Copy-Item (Join-Path $root 'downloads\steam_api\steam_api_coop.dll') "$out\SporebinEP1\steam_api_coop.dll"
 }

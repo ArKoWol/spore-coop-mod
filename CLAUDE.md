@@ -58,6 +58,9 @@ SporeApp.exe
 ## Repository layout
 - `core/coop_core.h` - the replication core (plain C++, no game headers); `tests/` - its tests (`tests\run_core_tests.bat`) and `focus_test.ps1`.
 - `mod/CoopMod` - the mod (C++, VS 2022 Build Tools, x86). `build.bat` builds to `mod\CoopMod\staging\CoopMod.dll`.
+- `assets/` - files that go into `Data\CoopMod.package` (today `splash.png`, the picture after the EA logo).
+  `mod\CoopMod\make_assets.ps1` (run by `build.bat`) builds `staging\CoopMod.package`; the launcher (dev), `make_package.ps1`
+  and `update.ps1` install it as `<game>\Data\CoopMod.package`.
 - `setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `update/` - `update.bat` / `update.ps1`: players run it to install or update from the latest GitHub release.
 - `make_package.ps1`, `publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
@@ -124,6 +127,15 @@ presses Continue.
 - **A crashed or killed Spore can leave an unkillable process** after the AMD driver resets (`LiveKernelEvent 117`);
   a new game then hangs at startup or says "Another instance of the game is already running". Only a reboot clears it.
 - Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
+- **Intro splash**: the whole intro (EA logo, Maxis, Spore logo) is **one movie**, `0x7af7df4f` (type `0x376840d7`, EA VP6:
+  `MVhd` + `MV0K`/`MV0F` chunks, video only, 1280x720 @ 29.97, in `Spore_EP1_Data.package`), started through
+  `MovieSystem::PlayMovie` about 5.7 s after launch; its first 4 s (the EA logo) cannot be skipped. Our splash pauses it at
+  4 s (`PauseMovie`), shows a UTFWin window with `coopmod!splash.png` (a UTFWin window **is drawn over a paused movie**) and
+  continues after 2.5 s. **Detour movie methods on `Movie::IMovieSystem`, not `MovieSystem`**: `MovieSystem` derives from
+  `ILayer` first, the game passes `this` as the `IMovieSystem` part, and virtual calls on a `MovieSystem*` crashed.
+- **Own resources**: a DBPF package with uncompressed entries works when dropped into `Data\` (`make_assets.ps1` writes
+  one: header version 3, index flags 4, entries `type, group, instance, offset, size|0x80000000, size, 0, 1`). Names are
+  `id("...")` = FNV-1 of the lower-case name. A PNG of any size works for UTFWin images.
 
 ## Open work / ideas
 - Restart the game automatically after the world arrives (and rejoin), instead of asking the player to.

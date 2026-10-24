@@ -3,6 +3,7 @@
 #include "Entities.h"
 #include "Log.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
+#include <Spore/Movie/MovieSystem.h>
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -27,6 +28,103 @@ member_detour(NPCTickAI_detour, Simulator::cCreatureAnimal, void(float))
 			return;
 		}
 		original_function(this, deltaTime);
+	}
+};
+
+// ---------------------------------------------------------------- intro splash
+// Our own picture for a few seconds after the EA logo. The intro is a single movie (EA logo, Maxis, Spore
+// logo; the first 4 s, the EA logo, cannot be skipped), so the movie is paused when the EA part is over, a
+// UTFWin window with the picture is shown on top, and the movie continues afterwards. The picture is a PNG in
+// Data\CoopMod.package (group "coopmod", instance "splash"); without it there is no splash.
+static const uint32_t kIntroMovie = 0x7af7df4f;   // Spore_EP1_Data, type 0x376840d7 (EA VP6)
+static const DWORD kSplashAfterMs = 4000;         // into the intro movie: the end of the EA logo
+static const DWORD kSplashShowMs = 2500;
+
+static struct Splash
+{
+	int state = 0;  // 0 waiting for the intro, 1 intro playing, 2 showing our picture, 3 done
+	DWORD since = 0;
+	UTFWin::IWindow* backdrop = nullptr;
+} sSplash;
+
+static bool SplashShow(Movie::IMovieSystem* movies)
+{
+	ImagePtr image;
+	if (!UTFWin::Image::GetImage(ResourceKey(id("splash"), TypeIDs::png, id("coopmod")), image) || !image) {
+		Logf("splash: no picture in CoopMod.package, skipped");
+		return false;
+	}
+	UTFWin::IWindow* main = WindowManager.GetMainWindow();
+	if (!main) {
+		return false;
+	}
+	const Math::Rectangle& screen = main->GetArea();
+	float w = screen.GetWidth(), h = screen.GetHeight();
+	// fit 16:9 into the window, centred, black around it
+	float pw = w, ph = w * 9.0f / 16.0f;
+	if (ph > h) {
+		ph = h;
+		pw = h * 16.0f / 9.0f;
+	}
+	auto backdrop = new UTFWin::Window();
+	backdrop->SetFillColor(Math::Color(0, 0, 0, 255));
+	backdrop->SetArea(Math::Rectangle(0, 0, w, h));
+	auto picture = new UTFWin::Window();
+	auto drawable = new UTFWin::ImageDrawable();
+	drawable->SetImage(image.get());
+	picture->SetDrawable(drawable);
+	picture->SetArea(Math::Rectangle((w - pw) / 2, (h - ph) / 2, (w + pw) / 2, (h + ph) / 2));
+	backdrop->AddWindow(picture);
+	main->AddWindow(backdrop);
+	main->BringToFront(backdrop);
+	sSplash.backdrop = backdrop;
+	movies->PauseMovie();
+	Logf("splash: shown (%.0fx%.0f in %.0fx%.0f)", pw, ph, w, h);
+	return true;
+}
+
+static void SplashHide(Movie::IMovieSystem* movies)
+{
+	if (sSplash.backdrop) {
+		if (UTFWin::IWindow* main = WindowManager.GetMainWindow()) {
+			main->RemoveWindow(sSplash.backdrop);
+		}
+		sSplash.backdrop = nullptr;
+	}
+	movies->ContinueMovie();
+	Logf("splash: hidden");
+}
+
+// The game calls these with `this` pointing at the IMovieSystem part of MovieSystem (its second base class),
+// so the detours are declared on IMovieSystem; declared on MovieSystem, virtual calls on `this` crashed.
+member_detour(PlayMovie_detour, Movie::IMovieSystem, bool(const ResourceKey&, const Movie::cMoviePlayInfo&))
+{
+	bool detoured(const ResourceKey& key, const Movie::cMoviePlayInfo& info)
+	{
+		bool result = original_function(this, key, info);
+		Logf("movie: play %08x!%08x.%08x -> %d", key.groupID, key.instanceID, key.typeID, result ? 1 : 0);
+		if (result && key.instanceID == kIntroMovie && sSplash.state == 0) {
+			sSplash.state = 1;
+			sSplash.since = GetTickCount();
+		}
+		return result;
+	}
+};
+
+member_detour(MovieUpdate_detour, Movie::IMovieSystem, void(uint32_t))
+{
+	void detoured(uint32_t deltaMS)
+	{
+		original_function(this, deltaMS);
+		DWORD now = GetTickCount();
+		if (sSplash.state == 1 && now - sSplash.since >= kSplashAfterMs) {
+			sSplash.since = now;
+			sSplash.state = (this->MovieIsPlaying() && SplashShow(this)) ? 2 : 3;
+		}
+		else if (sSplash.state == 2 && now - sSplash.since >= kSplashShowMs) {
+			sSplash.state = 3;
+			SplashHide(this);
+		}
 	}
 };
 
@@ -1472,6 +1570,8 @@ void Dispose()
 	}
 	PrepareDetours(sModule);
 	NPCTickAI_detour::detach();
+	PlayMovie_detour::detach();
+	MovieUpdate_detour::detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (sMultiInstance) {
 		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
@@ -1499,6 +1599,8 @@ void Dispose()
 void AttachDetours()
 {
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
+	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
+	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
 	sOrigPrintF = ArgScript::PrintF;
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (getenv("COOP_MULTI")) {

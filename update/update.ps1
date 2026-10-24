@@ -57,6 +57,7 @@ try {
     New-Item -ItemType Directory -Force "$GameDir\SporeModLoader\CoreLibs", "$GameDir\SporeModLoader\ModLibs" | Out-Null
     Copy-Item "$pkg\SporeModLoader\CoreLibs\*" "$GameDir\SporeModLoader\CoreLibs\" -Force
     Copy-Item "$pkg\SporeModLoader\ModLibs\*" "$GameDir\SporeModLoader\ModLibs\" -Force
+    if (Test-Path "$pkg\Data") { Copy-Item "$pkg\Data\*" "$GameDir\Data\" -Force }  # CoopMod.package (splash picture)
     if (Test-Path "$pkg\README.txt") { Copy-Item "$pkg\README.txt" "$GameDir\COOP_README.txt" -Force }
     if (Test-Path "$pkg\fix_spore_registry.ps1") { Copy-Item "$pkg\fix_spore_registry.ps1" $here -Force }
     if (Test-Path "$pkg\docs") { Copy-Item "$pkg\docs" $here -Recurse -Force }  # CLAUDE.md + CHANGELOG.md

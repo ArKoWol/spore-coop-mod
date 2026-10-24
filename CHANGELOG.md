@@ -5,6 +5,11 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Intro splash**: our own picture for 2.5 s after the EA logo, then the intro continues (Maxis, Spore logo). The intro is
+  one movie, so the mod pauses it after the EA part and shows a window on top. The picture is `assets/splash.png`
+  (1920x1080, 16:9; keep the important part in the middle ~1440x1080); today a **red placeholder** until exxecute's art
+  is in. New `mod\CoopMod\make_assets.ps1` (run by `build.bat`) packs it into `CoopMod.package`, which the launcher,
+  `make_package.ps1` (`Data\` in the zip) and `update.ps1` install into `<game>\Data\`. No protocol change.
 - **The launcher no longer runs `git pull`** (`launch.ps1`, so `launch_spore_mod.bat` too): in `dev` mode it only builds and installs. Pull yourself when you want the other developer's changes. The `-NoPull` switch is gone. No protocol change.
 
 - **M0 replication core** (`core/coop_core.h`, plain C++ without Spore or Windows headers) and its tests (`tests/core_tests.cpp`, run `tests\run_core_tests.bat`, prints `ALL OK`): entity table with netIds, wire format, host side (`Spawn/Update/Destroy`, deltas, full snapshots, reliable events), guest side with stale-state rejection, tombstones and reconcile-on-full. The tests run a fake world through a network with loss, duplicates and reordering (and a 100-tick total blackout) with oracles for unknown ids, resurrected ids, going back in time and final equality, plus mutation twins (each protection switched off once must make a test fail). The test rig found a real bug on the first run (a late duplicate delta recreated a destroyed entity after a full snapshot had cleared its tombstone) and it is fixed; 500 seeds pass. Not used by the mod yet (the game adapter comes next).
