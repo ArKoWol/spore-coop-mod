@@ -7,6 +7,7 @@
 #include "stdafx.h"
 #include "CoopMenu.h"
 #include "MenuWorlds.h"
+#include "CoopNet.h"
 #include "../Log.h"
 #include "../Models.h"
 #include "../RecentHosts.h"
@@ -34,17 +35,17 @@ namespace
 {
 	const char* kStarName = "CO-OP";
 	const int kWidth = 560;
-	const DWORD kStubDownloadMs = 3000;
+	const DWORD kAnswerTimeoutMs = 20000;  // no answer from the host: it is not hosting, or Steam cannot reach it
+	const DWORD kWorldTimeoutMs = 30000;   // the host answered but no world arrives
 	const float kPlanetGap = 16;  // from the planet's centre window to ours (the planet overlaps our window a little: intended)
 
-	enum class State { List, Downloading, Ready, Error };
+	enum class State { List, Connecting, Downloading, Restarting, Ready, Error };
 
 	struct Friend
 	{
 		std::string name;    // UTF-8
 		std::string detail;  // second line
 		uint64_t steamId = 0;
-		bool test = false;   // the stub entry: a local save instead of a host
 	};
 
 	struct Button
@@ -67,9 +68,9 @@ namespace
 	State sState = State::List;
 	bool sVisible = false;
 	bool sDirty = false;
-	DWORD sDownloadStart = 0;
-	int sDownloadFriend = -1;
-	int sProgressShown = -1;
+	DWORD sJoinStart = 0;      // when the join was started
+	DWORD sHostSeenAt = 0;     // when the host answered
+	int sProgressShown = -1;   // percent drawn last
 	int sHover = -1;  // action of the button under the mouse (drawn lighter)
 	bool sPlayRequested = false;  // our Play button: the load starts from Update, outside the UI message
 	DWORD sPressedAt = 0;         // when our Play pressed the card's Play (to try a second way if nothing happened)
@@ -149,11 +150,6 @@ namespace
 			f.detail = detail;
 			ui.friends.push_back(f);
 		}
-		Friend test;
-		test.name = "Test friend";
-		test.detail = "one-PC test: a copy of your own save";
-		test.test = true;
-		ui.friends.push_back(test);
 	}
 
 	// ------------------------------------------------------------------ drawing
@@ -316,9 +312,17 @@ namespace
 				Gdiplus::RectF(left, plate.Y + plate.Height - 48, width - 200, 34));
 			AddButton(g, Gdiplus::RectF(right - 196, plate.Y + plate.Height - 50, 196, 34), L"Join by Steam ID", kById, false);
 		}
+		else if (sState == State::Connecting) {
+			Text(g, Wide("Connecting to " + ui.worldOf + "..."), 20, true, ink, Gdiplus::RectF(left, y, width, 30));
+			Text(g, L"Your friend must be hosting: creature stage, then coop host.", 13, false, soft, Gdiplus::RectF(left, y + 36, width, 22));
+			AddButton(g, Gdiplus::RectF(right - 110, plate.Y + plate.Height - 52, 110, 36), L"Cancel", kCancel, false);
+		}
+		else if (sState == State::Restarting) {
+			Text(g, Wide(ui.worldOf + "'s world is here"), 20, true, green, Gdiplus::RectF(left, y, width, 30));
+			Text(g, L"The game restarts by itself to open it. Your own worlds are kept.", 13, false, ink, Gdiplus::RectF(left, y + 36, width, 22));
+		}
 		else if (sState == State::Downloading) {
-			DWORD elapsed = GetTickCount() - sDownloadStart;
-			float progress = std::min(1.0f, elapsed / (float)kStubDownloadMs);
+			float progress = std::min(1.0f, CoopNet::State().progress);
 			Text(g, Wide("Joining " + ui.worldOf + "'s world"), 20, true, ink, Gdiplus::RectF(left, y, width, 30));
 			Gdiplus::RectF groove(left, y + 42, width, 20);
 			FillRound(g, groove, 10, C(255, 70, 80, 98), C(255, 120, 130, 148));
@@ -328,7 +332,7 @@ namespace
 				Gloss(g, fill, 8, 140);
 			}
 			wchar_t line[96];
-			swprintf(line, 96, L"Downloading the world   %.1f / 3.1 MB", 3.1f * progress);
+			swprintf(line, 96, L"Downloading the world   %d%%", (int)(progress * 100));
 			Text(g, line, 13, false, soft, Gdiplus::RectF(left, y + 66, width, 22));
 			AddButton(g, Gdiplus::RectF(right - 110, plate.Y + plate.Height - 52, 110, 36), L"Cancel", kCancel, false);
 		}
@@ -391,15 +395,17 @@ namespace
 		}
 		const Friend& f = ui.friends[index];
 		ui.worldOf = f.name;
-		if (!f.test) {
-			// the real download (host's save over Steam) is the next step; in the stub stage every friend uses the test save
-			Logf("menu: join %s (%llu): stub, using the test save", f.name.c_str(), (unsigned long long)f.steamId);
-		}
-		sDownloadFriend = index;
-		sDownloadStart = GetTickCount();
-		sProgressShown = -1;
-		sState = State::Downloading;
+		Logf("menu: join %s (%llu)", f.name.c_str(), (unsigned long long)f.steamId);
 		sDirty = true;
+		if (!CoopNet::Join(f.steamId)) {
+			ui.error = "Steam did not start. Is Steam running and are you logged in?";
+			sState = State::Error;
+			return;
+		}
+		sJoinStart = GetTickCount();
+		sHostSeenAt = 0;
+		sProgressShown = -1;
+		sState = State::Connecting;
 	}
 
 	// "Join by Steam ID": the ID comes from the clipboard (17 digits, 7656...); it is added to the list as a friend and joined
@@ -439,31 +445,65 @@ namespace
 		StartJoin(0);
 	}
 
-	void FinishJoin()
+	// the name of a host: remembered name, Steam name, or the id
+	std::string HostName(uint64_t id)
 	{
+		for (size_t i = 0; i < 10; ++i) {
+			uint64_t known = 0;
+			long long when = 0;
+			char name[128] = {};
+			if (!RecentHosts::Get(i, known, name, sizeof(name), when)) {
+				break;
+			}
+			if (known == id && name[0]) {
+				return name;
+			}
+		}
+		std::string steam = CoopNet::Name(id);
+		return steam.empty() || steam == "[unknown]" ? std::to_string(id) : steam;
+	}
+
+	// follows a running join: answer, world download, restart; errors when nothing happens
+	void FollowJoin()
+	{
+		if (sState != State::Connecting && sState != State::Downloading) {
+			return;
+		}
 		Ui& ui = U();
-		// stub: the CO-OP save already is a copy of one of the player's own saves (made with the star). A save from another
-		// universe crashed the load (SporeApp.exe+0x7babe2, spike J8), so the real join must also bring the host's planet data.
-		std::string target = sStar ? MenuWorlds::SavePath(sStar->get()) : "";
-		std::string source = target;
-		if (target.empty()) {
-			ui.error = "The CO-OP star has no save file.";
+		CoopNet::JoinState s = CoopNet::State();
+		DWORD now = GetTickCount();
+		if (s.versionMismatch) {
+			ui.error = ui.worldOf + " runs another version of the mod. Both run update.bat, then try again.";
+		}
+		else if (!s.hostSeen && now - sJoinStart > kAnswerTimeoutMs) {
+			ui.error = ui.worldOf + " does not answer. Is " + ui.worldOf + " hosting (creature stage, coop host)?";
+		}
+		else if (s.hostSeen && !s.receiving && sHostSeenAt && now - sHostSeenAt > kWorldTimeoutMs) {
+			ui.error = ui.worldOf + " answered but sends no world. Ask " + ui.worldOf + " to type coop sendworld.";
+		}
+		if (!ui.error.empty()) {
+			Logf("menu: join failed: %s", ui.error.c_str());
+			CoopNet::Cancel();
 			sState = State::Error;
 			sDirty = true;
 			return;
 		}
-		bool copied = GetFileAttributesA(target.c_str()) != INVALID_FILE_ATTRIBUTES;
-		Logf("menu: world of %s installed on the CO-OP star: %s -> %s: %s", ui.worldOf.c_str(), source.c_str(), target.c_str(),
-			copied ? "ok" : "FAILED");
-		if (!copied) {
-			ui.error = "Could not write the world into the CO-OP save.";
-			sState = State::Error;
+		if (s.hostSeen && !sHostSeenAt) {
+			sHostSeenAt = now;
 		}
-		else {
-			MenuWorlds::RenameWorld(sStar->get(), ("CO-OP: " + ui.worldOf).c_str());
-			sState = State::Ready;
+		if (s.staged) {
+			Logf("menu: world of %s received, the game restarts", ui.worldOf.c_str());
+			sState = State::Restarting;
+			sDirty = true;
 		}
-		sDirty = true;
+		else if (s.receiving) {
+			int percent = (int)(s.progress * 100);
+			if (sState != State::Downloading || percent / 2 != sProgressShown / 2) {
+				sState = State::Downloading;
+				sProgressShown = percent;
+				sDirty = true;
+			}
+		}
 	}
 
 	void StartJoin(int index);
@@ -508,6 +548,10 @@ namespace
 					sPlayRequested = true;
 				}
 				else if (b.action == kCancel || b.action == kBack) {
+					if (b.action == kCancel) {
+						CoopNet::Cancel();
+					}
+					U().error.clear();
 					sState = State::List;
 					LoadFriends();
 					sDirty = true;
@@ -837,6 +881,16 @@ namespace CoopMenu
 			if (star) {
 				sStar = new cStarRecordPtr(star);
 				Logf("menu: CO-OP star %08x added", star->mKey.internalValue);
+				CoopNet::JoinState s = CoopNet::State();
+				if (s.installedAtStart && s.host && sState != State::Ready) {
+					// the host's world was installed at this start (and the mod joins the host again): the CO-OP star is a
+					// copy of the host's newest creature save, so Play enters the host's world
+					U().worldOf = HostName(s.host);
+					MenuWorlds::RenameWorld(star, ("CO-OP: " + U().worldOf).c_str());
+					sState = State::Ready;
+					sDirty = true;
+					Logf("menu: the host's world (%s) is installed: CO-OP star ready", U().worldOf.c_str());
+				}
 			}
 			else {
 				sStarFailed = true;  // e.g. a new universe without any save to copy from
@@ -945,17 +999,7 @@ namespace CoopMenu
 			}
 			Logf("menu: our Play ignored (state %d, selected %08x)", (int)sState, selected);
 		}
-		if (sState == State::Downloading) {
-			DWORD elapsed = GetTickCount() - sDownloadStart;
-			int step = (int)(elapsed * 10 / kStubDownloadMs);
-			if (elapsed >= kStubDownloadMs) {
-				FinishJoin();
-			}
-			else if (step != sProgressShown) {
-				sProgressShown = step;
-				sDirty = true;
-			}
-		}
+		FollowJoin();
 		if (sVisible && (sDirty || (sPanel && !sPanel->IsVisible()))) {
 			Redraw();
 		}
@@ -997,14 +1041,6 @@ namespace CoopMenu
 			start = start->GetParent();
 		}
 		DumpTree(start, 0, 5);
-	}
-
-	void MarkReady()
-	{
-		U().worldOf = "Debug (own save)";
-		sState = State::Ready;
-		sDirty = true;
-		Logf("menu: marked ready without a download (the CO-OP save is still the copy of your own save)");
 	}
 
 	void Open()

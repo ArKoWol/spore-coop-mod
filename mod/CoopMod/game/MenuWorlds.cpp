@@ -405,11 +405,24 @@ namespace MenuWorlds
 			Print("addworld: needs at least one saved game in this universe (the template)");
 			return nullptr;
 		}
-		// template: a creature-stage save if there is one
+		// template: the creature-stage save played last (newest .spo), so in a host's installed universe it is the host's
+		// current world; any save if there is no creature-stage one
 		cStarRecord* tmpl = stars->mSavedGameStarRecords[0].get();
+		FILETIME newest = {};
 		for (const cStarRecordPtr& s : stars->mSavedGameStarRecords) {
-			if (s && s->mTechLevel == TechLevel::Creature) {
-				tmpl = s.get();
+			if (!s || s->mTechLevel != TechLevel::Creature || IsAdded(s.get())) {
+				continue;
+			}
+			for (const cPlanetRecordPtr& p : s->GetPlanetRecords()) {
+				if (!p || p->mTechLevel != s->mTechLevel || !p->mGeneratedTerrainKey.instanceID) {
+					continue;
+				}
+				WIN32_FILE_ATTRIBUTE_DATA info;
+				std::string spo = Game0Dir() + Narrow(p->mName) + ".spo";
+				if (GetFileAttributesExA(spo.c_str(), GetFileExInfoStandard, &info) && CompareFileTime(&info.ftLastWriteTime, &newest) > 0) {
+					newest = info.ftLastWriteTime;
+					tmpl = s.get();
+				}
 				break;
 			}
 		}

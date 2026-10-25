@@ -5,8 +5,9 @@
 // world is stored as the CO-OP star's save, so the game's own Play loads it. Play on the CO-OP star before a world is
 // chosen opens the window instead of loading.
 //
-// Stub stage (one PC): "downloading" copies a local save (a save of another universe if there is one, to test that it
-// loads on our star) instead of receiving the host's save over Steam.
+// Join: a real Steam join (CoopNet, the same as `coopjoin`). The host sends its whole Game0; the game restarts by itself
+// and installs it (the player's own Game0 is kept as a backup); after the restart the CO-OP star is a copy of the host's
+// newest creature save, marked ready, and the card's Play enters it while the mod joins the host again.
 #pragma once
 
 namespace CoopMenu
@@ -26,9 +27,6 @@ namespace CoopMenu
 
 	// coop carddump: logs the window tree around the CO-OP star's card (looking for its Play button)
 	void DumpCard();
-
-	// coop menuready: debug, lets Play load the CO-OP star with the copy of the own save it starts with
-	void MarkReady();
 
 	// Dispose: removes the window, the star and its save, frees GDI+
 	void Shutdown();

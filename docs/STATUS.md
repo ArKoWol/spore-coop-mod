@@ -40,7 +40,7 @@ Animals that waited for their species were never announced (25 of 99 reached the
 | J6 | Play on such a star loads its copied save | passed 2026-10-25 |
 | J7 | does the galaxy save keep the star | open |
 | J8 | a save from another universe works on our star | failed 2026-10-25 (load crashes, `FACTS.md` section 6) |
-| J5 | our own window over the menu | works on 1 PC 2026-10-25 (CO-OP star + window, stubs) |
+| J5 | our own window over the menu | works on 2 PCs 2026-10-25 (CO-OP star + window, real join through the restart) |
 | - | CO-OP star after leaving a game without saving | known bug: it vanishes until the next start (GitHub issue) |
 | J1-J4 | save-area redirect, `LoadGame` from the mod, Rich Presence, fetch before start | open |
 
@@ -48,7 +48,7 @@ Animals that waited for their species were never announced (25 of 99 reached the
 | Who | Area | Now |
 |---|---|---|
 | ArKoWol + Claude | world truth and lifecycle: dump, objects, events, telemetry, the plan | next: `PLAN.md` section 7 step 1 |
-| exxecute + Claude | how the other player looks and acts (models, animation, walking), join flow and menu UI | CO-OP star bug, then the real join (host's save over Steam) |
+| exxecute + Claude | how the other player looks and acts (models, animation, walking), join flow and menu UI | CO-OP star bug (GitHub issue), join without the restart |
 
 ## 4. Known gaps in the repo
 - `README.md`'s player table is kept short and points here.

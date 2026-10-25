@@ -6,6 +6,7 @@
 #include "RecentHosts.h"
 #include "game/MenuWorlds.h"
 #include "game/CoopMenu.h"
+#include "game/CoopNet.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -681,6 +682,8 @@ static void DeleteDir(const std::string& dir)
 // after the restart and the host sends on every first contact) is then ignored instead of asking for
 // another restart.
 static bool sWorldInstalledAtStart = false;
+static float sWorldProgress = -1;  // client: share of the world received (0..1), -1 = none arriving (CoopNet::State)
+static bool sWorldStaged = false;
 static bool sWorldIgnoredNotice = false;
 
 // Called from DllMain, before the game opens anything in Game0.
@@ -879,6 +882,9 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		return;
 	}
 
+	if (p.fileCount && p.totalSize) {
+		sWorldProgress = (p.fileIndex + (float)(p.offset + p.dataLen) / p.totalSize) / p.fileCount;
+	}
 	bool last = p.fileIndex + 1 == p.fileCount && p.offset + p.dataLen >= p.totalSize;
 	if (last) {
 		// remember whose world this is, so the co-op indicator can tell the host's world from the player's own
@@ -889,6 +895,7 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 		std::string ready = games + "\\Game0.coopready";
 		DeleteDir(ready);
 		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
+		sWorldStaged = staged;
 		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
 		if (staged && !getenv("COOP_NO_RESTART")) {
 			WriteAutoJoin(sPeerSteamId);
@@ -1448,6 +1455,43 @@ static void RememberHostRetry()
 	}
 }
 
+namespace CoopNet
+{
+	bool Join(uint64_t hostId)
+	{
+		sWarnedVersion = false;
+		sWorldProgress = -1;
+		sWorldStaged = false;
+		sHostSeen = false;
+		return SteamJoinStart(hostId);
+	}
+
+	void Cancel()
+	{
+		NetStop();
+		sWorldProgress = -1;
+	}
+
+	JoinState State()
+	{
+		JoinState s;
+		s.joining = sTransport == Transport::Steam && !sIsHost;
+		s.hostSeen = sHostSeen;
+		s.versionMismatch = sWarnedVersion;
+		s.receiving = sWorldProgress >= 0;
+		s.progress = sWorldProgress < 0 ? 0 : sWorldProgress;
+		s.staged = sWorldStaged;
+		s.installedAtStart = sWorldInstalledAtStart;
+		s.host = s.joining ? sPeerSteamId : SaveHostId();
+		return s;
+	}
+
+	std::string Name(uint64_t steamId)
+	{
+		return SteamName(steamId);
+	}
+}
+
 static void NetUpdate()
 {
 	if (sDisposed) {
@@ -1795,9 +1839,6 @@ public:
 		}
 		else if (strcmp(sub, "carddump") == 0) {
 			CoopMenu::DumpCard();
-		}
-		else if (strcmp(sub, "menuready") == 0) {
-			CoopMenu::MarkReady();
 		}
 		else if (strcmp(sub, "ggefind") == 0) {
 			MenuWorlds::FindSelected();

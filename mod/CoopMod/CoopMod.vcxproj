@@ -53,6 +53,7 @@
     <ClInclude Include="game\PuppetMotion.h" />
     <ClInclude Include="game\MenuWorlds.h" />
     <ClInclude Include="game\CoopMenu.h" />
+    <ClInclude Include="game\CoopNet.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />

@@ -120,7 +120,6 @@ $commands = @(
     @('coop menureload', 'enter the main menu mode again'),
     @('coop ggefind', 'spike: find the selected test world in the menu object'),
     @('coop menu', 'open the CO-OP window'),
-    @('coop menuready', 'dev: mark the CO-OP star ready (own save)'),
     @('coop carddump', 'dev: log the window tree of the CO-OP star card'),
     @('stage cell', 'switch to the cell stage'),
     @('stage creature', 'switch to the creature stage'),
