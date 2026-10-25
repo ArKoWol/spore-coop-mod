@@ -5,6 +5,20 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Spike: a new world in the open universe, without restarting (exxecute).** `game/MenuWorlds.cpp` adds `coop slots` (lists the
+  saved-game stars of the galaxy), `coop addworld` / `coop addcenter` (makes an empty test world `testN` on a free star next to a
+  save / near the galaxy's centre: save flag, stage, a planet with the save's terrain, a copy of its `.spo`), `coop delworld`
+  (undoes it, deletes the copied `.spo`) and `coop menureload`. Result: **the main menu shows the new world at once**, with its
+  card (name, "Creature Stage", date, creature), no restart and no UI rebuild. Calling `GlobalGGEUI::InitializeUI` / `Initialize`
+  again was tried and makes the game crash at exit, so it is not used. Loading such a world (does `LoadGame` / Play on it work,
+  does the galaxy save keep it) is the next step. Plan: `docs/JOIN_FLOW.md`. No protocol change.
+  Follow-up spikes the same day: **Play on the test world loads its copied save** (J6 passed); Play does **not** go through
+  `cGamePersistenceManager::LoadGame` (vtable slot 0x10, hooked with `coop holdplay`: never called) but through
+  `cGameModeManager::SetActiveModeByName("LoadGame")` plus a `kMessageLoadGame`; the game enters the menu with
+  `SetActiveModeAt` / `SetActiveModeByName("GalaxyGameEntry")`, never `SetActiveMode`. **The selected star of the menu is at
+  `[GlobalGGEUI + 0xFC] + 0x7C`** (found with `coop ggefind`, confirmed by clicking test1, Leian, test1: the mod logs
+  `select:` lines). So the co-op window can open when the CO-OP star is selected, before Play.
+
 - **Two bugs found in the friend's and the host's logs of the nest/animal test.** (1) **Endless nests**: `GuestNests` looked for Nest
   objects at the host's positions in the game's object list, did not find the ones it had just made (the game puts a nest on the ground
   away from the asked position, or lists it later) and made 5 more every half second: 295 nests after a few minutes. It now only trusts

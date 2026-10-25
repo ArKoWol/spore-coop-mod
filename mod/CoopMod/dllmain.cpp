@@ -4,6 +4,9 @@
 #include "Log.h"
 #include "game/PuppetMotion.h"
 #include "RecentHosts.h"
+#include "game/MenuWorlds.h"
+
+static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
 #include "Models.h"
 #include <Spore/App/cCreatureModeStrategy.h>
@@ -1453,6 +1456,7 @@ static void NetUpdate()
 	RunRestartIfDue();
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
+	MenuWorlds::Update();
 	if (sEcho) {
 		if (inGame) {
 			EchoFeed(GetTickCount());
@@ -1771,6 +1775,27 @@ public:
 		else if (strcmp(sub, "friends") == 0) {
 			RecentHosts::Print();
 		}
+		else if (strcmp(sub, "slots") == 0) {
+			MenuWorlds::Dump();
+		}
+		else if (strcmp(sub, "addworld") == 0 || strcmp(sub, "addcenter") == 0) {
+			MenuWorlds::AddTestWorld(strcmp(sub, "addcenter") == 0);
+		}
+		else if (strcmp(sub, "delworld") == 0) {
+			MenuWorlds::RemoveTestWorlds();
+		}
+		else if (strcmp(sub, "holdplay") == 0) {
+			MenuWorlds::SetHoldPlay(sModule);
+		}
+		else if (strcmp(sub, "ggefind") == 0) {
+			MenuWorlds::FindSelected();
+		}
+		else if (strcmp(sub, "playnow") == 0) {
+			MenuWorlds::PlayNow();
+		}
+		else if (strcmp(sub, "menureload") == 0) {
+			MenuWorlds::ReloadMenu();
+		}
 		else if (strcmp(sub, "motionlog") == 0) {
 			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());
 			App::ConsolePrintF("coop: motion log in CoopMod.log %s", PuppetMotion::GetLogging() ? "on" : "off");
@@ -1868,7 +1893,6 @@ public:
 	}
 };
 
-static HMODULE sModule = nullptr;
 static eastl::intrusive_ptr<App::UpdateMessageListener> sNetListener;
 static eastl::intrusive_ptr<App::UpdateMessageListener> sConsoleListener;
 
@@ -1955,6 +1979,7 @@ void Dispose()
 	NetStop();
 	World::SetTransport(nullptr, nullptr);
 	World::Shutdown();
+	MenuWorlds::Shutdown();
 	SteamStop();
 	ConsoleStop();
 	App::RemoveUpdateFunction(sNetListener);
@@ -1971,6 +1996,7 @@ void Dispose()
 	ModeAction_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
+	MenuWorlds::DetachHook();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (sMultiInstance) {
 		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
@@ -2003,6 +2029,7 @@ void AttachDetours()
 	ModeAction_detour::attach(GetAddress(App::cCreatureModeStrategy, ExecuteAction));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
+	MenuWorlds::AttachStartupHooks();
 	sOrigPrintF = ArgScript::PrintF;
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (getenv("COOP_MULTI")) {

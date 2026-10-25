@@ -35,6 +35,7 @@ SporeApp.exe
   `coop udphost`, `coopudpjoin <ip>`,
   `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport` (how the puppet follows, `anim` = `walk`),
   `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m to the side), `coop noworld`, `coop sendworld`, `coop off`, plus `stage <name>` and `coophello`.
+  Main-menu spike (`game/MenuWorlds.cpp`): `coop slots`, `coop addworld`, `coop addcenter`, `coop delworld`, `coop menureload`.
   The game rejects a command without arguments, so every command has at least one word.
 - **Each frame** (`App::AddUpdateFunction(NetUpdate)`): pump Steam callbacks, receive packets, send our avatar's
   position + orientation (30 Hz, `StatePacket`), drive the puppet from the newest received state.
@@ -180,6 +181,18 @@ player presses Continue.
   `CoopMod.dll+0x...` of the log plus the preferred base 0x10000000 gives the function in the map.
 - **Mirror animals**: make an empty herd (`CreateHerd(..., 0, ...)`, `mTargetHerdSize = 0`, `SetEnabled(false)`) and put the
   animal in with `cCreatureAnimal::Create(pos, profile, 1, herd)`; a herd of size 1 fills itself only when the game wants.
+
+- **The main menu (GGE mode `0x2CCD1D2`, the galaxy) lists saved games live from `StarManager.mSavedGameStarRecords`**
+  (stars with `kStarFlagSaveGame`; the slot's `.spo` is named after the star's played planet). A star pushed into that list while
+  the menu is open appears at once with its card (name, stage, date, creature): no restart, no UI rebuild (verified
+  2026-10-25, `coop addcenter`). The galaxy view is large: a star far from the centre is off screen. **Do not call
+  `GlobalGGEUI::InitializeUI` / `Initialize` a second time**: it returns, changes nothing visible, and the game crashes at exit
+  (eip 0 / 0x28 / 0x2a0 after `CoopMod disposed`). Closing the game from the menu does not save `stars.db`.
+- **Main menu internals** (2026-10-25, one PC): the **selected star** is the StarID at `[GlobalGGEUI::Get() + 0xFC] + 0x7C`
+  (it keeps the last selection when you click empty space; `+0x138` is something else). **Play** calls
+  `cGameModeManager::SetActiveModeByName("LoadGame")` (then mode `0x1654C08`, then `Game_Creature`) and sends
+  `kMessageLoadGame`; it never calls `cGamePersistenceManager::LoadGame`. Modes change through `SetActiveModeAt` /
+  `SetActiveModeByName`, not `SetActiveMode`. A save star whose `.spo` was copied from another save loads normally by Play.
 
 ## Open work / ideas
 - Load the received world automatically (`cGamePersistenceManager::LoadGame`, undocumented) instead of pressing Continue.
