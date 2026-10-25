@@ -3,6 +3,7 @@
 #include "World.h"
 #include "Log.h"
 #include "Models.h"
+#include "Objects.h"
 #include "game/PuppetMotion.h"
 #include "../../core/coop_core.h"
 
@@ -586,6 +587,9 @@ namespace World
 		}
 		s.isHost = host;
 		s.puppet = puppet;
+		if (host || s.haveWorld) {
+			Objects::Update(host, inGame);  // eaten / hatched / picked-up fruit, plants and eggs
+		}
 
 		// Each side tells the other the health and size of its own avatar, and shows them on its puppet of that player
 		// (the puppet is a stand-in animal with the default values: 13 HP instead of the 10 the player really has).
@@ -624,6 +628,9 @@ namespace World
 		}
 		State& s = S();
 		if (size < 1) {
+			return;
+		}
+		if (Objects::OnMessage(data, size, host)) {
 			return;
 		}
 		if (data[0] == kMsgAvatar && size == 13) {
@@ -912,10 +919,18 @@ namespace World
 		if (!sState) {
 			return;
 		}
+		Objects::Reset();
 		DestroyAllMirrors(*sState);
 		delete sState->guest;
 		delete sState;
 		sState = nullptr;
+	}
+
+	void SendReliable(const uint8_t* data, size_t size)
+	{
+		if (size) {
+			S().reliableQueue.push_back(Message(data, data + size));
+		}
 	}
 
 	void EnsureTuning(void* creature)
@@ -937,6 +952,7 @@ namespace World
 			return;
 		}
 		State& s = *sState;
+		Objects::PrintStatus();
 		App::ConsolePrintF("coop world: damage requests sent %d, hits applied %d", s.damageSent, s.damageApplied);
 		App::ConsolePrintF("coop world: host animals %d | guest table %d, mirrors %d, strays %d (removed %d), stand-in models %d | reported by guest: table %d, mirrors %d, strays %d",
 			s.hostAnimals, (int)s.guest->entities().size(), (int)s.mirrors.size(), s.strays, s.removedStrays, s.standIns,

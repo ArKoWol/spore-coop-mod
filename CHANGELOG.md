@@ -5,6 +5,17 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **G1, first version: eaten fruit, plants and hatched eggs disappear on the other machine too** (new `Objects.cpp/.h`;
+  third test: "the friend kills an animal and it stays at 0 HP on his side until I eat it" showed that whatever one player
+  consumes stayed on the other's screen). Fruit, fruit groups, plants and eggs exist on both machines from the same save, so they
+  are not streamed: each side scans them every 0.5 s and when one is gone (eaten, hatched, picked up) tells the other (reliable
+  `kMsgRemove`: kind + position), which destroys the nearest object of that kind within 0.75 m (the ones destroyed for the other side are
+  not reported back). When the guest enters the world it sends a manifest of its objects; the host answers with a remove for each
+  object the guest has and the host does not (eaten since the save), unless a whole kind disagrees (more than 20 and a quarter of
+  the matched ones: logged as "NOT removing"). New objects (regrown fruit, laid eggs, nests) are only counted for now. Log lines `eco:`,
+  `coop status` shows the counters. **`kProtocolVersion` is 8.** Untested in the game: it is not known yet which of the four kinds
+  the game really destroys when something is eaten, the `eco:` lines will show it.
+
 - **Fix: two guest crashes ("reading 0000032c") and newborn animals that hatched with the guest's own species.**
   (1) Found in the friend's log (`SporeApp.exe+0x948634` and `+0x76ca11`, both reading `0x32c`) and in SporeCoop's notes: the game
   reads `*(creature + 0xE84) + 0x32C` for every creature without a null check. That pointer (`cCreatureBase::field_E84`) is filled when

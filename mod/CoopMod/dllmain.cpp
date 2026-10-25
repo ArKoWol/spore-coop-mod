@@ -404,7 +404,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 7;
+static const uint32_t kProtocolVersion = 8;
 
 #pragma pack(push, 1)
 struct StatePacket

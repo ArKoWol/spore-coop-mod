@@ -43,6 +43,9 @@ namespace World
 	// without a null check: give it a blank one, otherwise the game crashes ("reading 0000032c").
 	void EnsureTuning(void* creature);
 
+	// Queues a reliable, ordered message for the other side (used by Objects.cpp).
+	void SendReliable(const uint8_t* data, size_t size);
+
 	// Connection gone: forget the table and remove the mirrors.
 	void Reset();
 	// Dispose: also free the memory (no static destructors may run later).
