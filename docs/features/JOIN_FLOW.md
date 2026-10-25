@@ -26,7 +26,13 @@ This opens **path C** below: the friend's world as one more star in your own gal
 
 **Built (2026-10-25, tested on 2 PCs):** the CO-OP star near the centre at every start and our window next to its card
 (`game/CoopMenu.cpp`): remembered hosts, Join by Steam ID (clipboard), the real join (path A: download, restart, install),
-then the star is a copy of the host's newest creature save and the card's own Play (hidden until ready) enters it. J6 passed; **J8 failed** and the star vanishes after leaving a game without saving (both explained in
+then the star is a copy of the host's newest creature save and the card's own Play (hidden until ready) enters it.
+
+**Joining without the restart, research paused 2026-10-25:** a friend's save must be moved to our star (its planet ids). The
+tools exist: `game/SaveIds.cpp` rewrites a save and planet records, `COOP_MOVE_SAVE=1` puts the moved copy and the planet
+records into the game's databases, `COOP_LOAD_TRACE=1` logs the load. The moved save still stops before reading its planets
+(`../FACTS.md` section 6). Next: bisect the rewritten entries (`0x03275728`, `0x02C21781`, `0x0355C93A`) and look for a
+checksum or an id the reader validates. J6 passed; **J8 failed** and the star vanishes after leaving a game without saving (both explained in
 `../FACTS.md` section 6, tracked in a GitHub issue). Ideas for the star: find why a save on our planet crashes the load
 (fixes J8 too); write our planets into `planetRecords.pkp` before the start and remove them after exit; leave the co-op world
 through a quick restart; a CO-OP button in the left menu instead of a star (needs what the card's Play prepares).

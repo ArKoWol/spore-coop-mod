@@ -39,7 +39,7 @@ Animals that waited for their species were never announced (25 of 99 reached the
 | main-menu world | a new save star shows up in the open menu | passed 2026-10-25 |
 | J6 | Play on such a star loads its copied save | passed 2026-10-25 |
 | J7 | does the galaxy save keep the star | open |
-| J8 | a save from another universe works on our star | failed 2026-10-25 (load crashes, `FACTS.md` section 6) |
+| J8 | a save from another universe works on our star | paused 2026-10-25: a save moved to our star stops before reading its planets (`FACTS.md` section 6) |
 | J5 | our own window over the menu | works on 2 PCs 2026-10-25 (CO-OP star + window, real join through the restart) |
 | - | CO-OP star after leaving a game without saving | known bug: it vanishes until the next start (GitHub issue) |
 | J1-J4 | save-area redirect, `LoadGame` from the mod, Rich Presence, fetch before start | open |

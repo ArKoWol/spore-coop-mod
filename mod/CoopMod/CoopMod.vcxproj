@@ -54,6 +54,8 @@
     <ClInclude Include="game\MenuWorlds.h" />
     <ClInclude Include="game\CoopMenu.h" />
     <ClInclude Include="game\CoopNet.h" />
+    <ClInclude Include="game\SaveIds.h" />
+    <ClInclude Include="game\LoadTrace.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -67,6 +69,8 @@
     <ClCompile Include="game\PuppetMotion.cpp" />
     <ClCompile Include="game\MenuWorlds.cpp" />
     <ClCompile Include="game\CoopMenu.cpp" />
+    <ClCompile Include="game\SaveIds.cpp" />
+    <ClCompile Include="game\LoadTrace.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

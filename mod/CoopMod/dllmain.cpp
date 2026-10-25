@@ -7,6 +7,7 @@
 #include "game/MenuWorlds.h"
 #include "game/CoopMenu.h"
 #include "game/CoopNet.h"
+#include "game/LoadTrace.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -1525,6 +1526,7 @@ static void NetUpdate()
 	UpdateIndicator(IndicatorText(), inGame);
 	MenuWorlds::Update();
 	MenuWorlds::HookMenuEnter(sModule);
+	LoadTrace::HookDatabases(sModule);
 	CoopMenu::Update();
 	if (sEcho) {
 		if (inGame) {
@@ -2073,6 +2075,7 @@ void Dispose()
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
 	MenuWorlds::DetachHook();
+	LoadTrace::Detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (sMultiInstance) {
 		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
@@ -2106,6 +2109,7 @@ void AttachDetours()
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
 	MenuWorlds::AttachStartupHooks();
+	LoadTrace::Attach();
 	sOrigPrintF = ArgScript::PrintF;
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
 	if (getenv("COOP_MULTI")) {

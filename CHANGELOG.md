@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Research: loading a friend's save on our star without a restart, paused** (exxecute). New research tools, off by default:
+  `COOP_LOAD_TRACE=1` (`game/LoadTrace.cpp`, `load:` lines) and `COOP_MOVE_SAVE=1` (`game/SaveIds.cpp`: save and planet records
+  moved to the CO-OP star, records written into the game's planet database). A moved save still stops before reading its planets;
+  findings in `FACTS.md` section 6, next steps in `features/JOIN_FLOW.md`. Default behaviour unchanged. Not tested on 2 PCs.
+
 - **The puppet has the OTHER player's creature** (ArKoWol, PLAN section 3). Each side sends the species of its avatar (`kMsgAvatarSpecies`,
   on change and every 10 s); the model transfer now works both ways (the guest's creature can travel to the host); the puppet is
   built from that species and rebuilt when it changes (a player back from the editor). Until the model is here (up to 15 s) the puppet

@@ -31,6 +31,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
 | `mod/CoopMod/game/MenuWorlds.cpp/.h` | save stars in the open galaxy (`AddWorld`, `RemoveWorld`, `SelectedStar`; dev commands `coop slots/addworld/addcenter/delworld/menureload/ggefind`); detours on `cGameModeManager::SetActiveMode/At/ByName` (logging; `ByName("LoadGame")` asks `CoopMenu::HoldPlay`) and the main menu mode's `OnEnter` |
 | `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready (`coop menu/carddump`) |
+| `mod/CoopMod/game/SaveIds.cpp/.h` | research: RefPack and DBPF read/write; moves a save or a planet record to another star (used only with `COOP_MOVE_SAVE=1`) |
+| `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
 | `mod/CoopMod/game/CoopNet.h` | what the window needs from the session code (implemented in `dllmain.cpp`): `Join`, `Cancel`, `State` (answer, version, download share, staged, installed at start), `Name` |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 

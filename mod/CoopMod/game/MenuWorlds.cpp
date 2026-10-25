@@ -3,6 +3,9 @@
 #include "MenuWorlds.h"
 #include "CoopMenu.h"
 #include "../Log.h"
+#include "../Models.h"
+#include "SaveIds.h"
+#include "LoadTrace.h"
 
 #include <Spore\Simulator\SubSystem\StarManager.h>
 #include <Spore\Simulator\cStarRecord.h>
@@ -25,6 +28,7 @@ namespace
 		int oldFlags = 0;
 		uint32_t oldStarter = 0;
 		std::string spo;  // the save file we copied for it
+		std::vector<uint32_t> planetRecords;  // planet records we wrote into the game's planet database
 		TechLevel oldTech = TechLevel::None;
 		eastl::string16 oldName;
 	};
@@ -118,6 +122,102 @@ namespace
 		}
 		fclose(f);
 		return done;
+	}
+
+	const uint32_t kPlanetRecordType = 0x05220CB8, kPlanetRecordGroup = 1;  // planetRecords.pkp entries
+
+	Resource::Database* PlanetDatabase()
+	{
+		cStarManager* stars = cStarManager::Get();
+		return stars ? stars->mpPlanetRecordsDatabase.get() : nullptr;
+	}
+
+	bool ReadRecord(Resource::Database* db, const ResourceKey& key, std::vector<uint8_t>& out)
+	{
+		Resource::IRecord* record = nullptr;
+		if (!db || !db->OpenRecord(key, &record) || !record) {
+			return false;
+		}
+		bool ok = false;
+		if (IO::IStream* stream = record->GetStream()) {
+			int size = (int)stream->GetSize();
+			if (size > 0 && size < 4 * 1024 * 1024) {
+				out.resize(size);
+				stream->SetPosition(0);
+				ok = stream->Read(out.data(), size) == size;
+			}
+		}
+		db->CloseRecord(record);
+		return ok;
+	}
+
+	bool WriteRecord(Resource::Database* db, const ResourceKey& key, const std::vector<uint8_t>& data)
+	{
+		Resource::IRecord* record = nullptr;
+		if (!db || !db->OpenRecord(key, &record, IO::AccessFlags::ReadWrite, IO::CD::CreateAlways) || !record) {
+			return false;
+		}
+		bool ok = false;
+		if (IO::IStream* stream = record->GetStream()) {
+			ok = stream->Write(data.data(), data.size()) != 0;  // a record stream returns true, not the byte count
+		}
+		db->CloseRecord(record);
+		return ok;
+	}
+
+	// The game reads planet records only from its own database (planetRecords.pkp), also while loading a save, not from
+	// our in-memory planets or other packages: copy the template's records there under our star's planet ids. Written
+	// through the game's own open database object (the file itself is locked while the game runs).
+	Resource::Database* PlanetTempDatabase()
+	{
+		cStarManager* stars = cStarManager::Get();
+		return stars ? stars->mpPlanetRecordsTempDatabase.get() : nullptr;
+	}
+
+	void CopyPlanetRecords(cStarRecord* tmpl, cStarRecord* target, std::vector<uint32_t>& written)
+	{
+		Resource::Database* db = PlanetDatabase();
+		Resource::Database* temp = PlanetTempDatabase();
+		char access[120];
+		snprintf(access, sizeof(access), "addworld: planet databases: main %p access %d, temp %p access %d", (void*)db,
+			db ? (int)db->GetAccessFlags() : -1, (void*)temp, temp ? (int)temp->GetAccessFlags() : -1);
+		Print(access);
+		int copied = 0;
+		for (size_t k = 0; k < tmpl->mPlanetCount && k < 32; ++k) {
+			uint32_t from = (uint32_t)(k << 24) | tmpl->mKey.internalValue;
+			uint32_t to = (uint32_t)(k << 24) | target->mKey.internalValue;
+			std::vector<uint8_t> data, moved;
+			bool read = ReadRecord(db, ResourceKey(from, kPlanetRecordType, kPlanetRecordGroup), data);
+			bool rewritten = read && SaveIds::RewritePlanetRecord(data, tmpl->mKey.internalValue, target->mKey.internalValue, moved);
+			// the main database is open read-only; the temporary one (planetRecords.pkt) takes the game's unsaved changes
+			bool wrote = rewritten && WriteRecord(temp, ResourceKey(to, kPlanetRecordType, kPlanetRecordGroup), moved);
+			if (!wrote) {
+				char line[200];
+				snprintf(line, sizeof(line), "addworld: planet record %08x: db %p, read %d (%d bytes, head %02x%02x%02x%02x %c%c%c%c), rewritten %d, written %d",
+					from, (void*)db, read ? 1 : 0, (int)data.size(), data.size() > 3 ? data[0] : 0, data.size() > 3 ? data[1] : 0,
+					data.size() > 3 ? data[2] : 0, data.size() > 3 ? data[3] : 0, data.size() > 7 ? data[4] : '-', data.size() > 7 ? data[5] : '-',
+					data.size() > 7 ? data[6] : '-', data.size() > 7 ? data[7] : '-', rewritten ? 1 : 0, wrote ? 1 : 0);
+				Print(line);
+				continue;
+			}
+			written.push_back(to);
+			++copied;
+		}
+		char line[120];
+		snprintf(line, sizeof(line), "addworld: %d planet record(s) copied into the game's planet database (template has %d)", copied,
+			(int)tmpl->mPlanetCount);
+		Print(line);
+	}
+
+	void DeletePlanetRecords(std::vector<uint32_t>& written)
+	{
+		Resource::Database* db = PlanetTempDatabase();
+		for (uint32_t id : written) {
+			if (db) {
+				db->DeleteRecord(ResourceKey(id, kPlanetRecordType, kPlanetRecordGroup));
+			}
+		}
+		written.clear();
 	}
 
 	bool IsAdded(cStarRecord* star)
@@ -318,6 +418,12 @@ member_detour(SetActiveModeByName_detour, App::cGameModeManager, bool(const char
 			Print("mode: LoadGame held for the CO-OP window");
 			return false;
 		}
+		if (name && strcmp(name, "LoadGame") == 0) {
+			char what[64];
+			snprintf(what, sizeof(what), "Play, selected star %08x", MenuWorlds::SelectedStar());
+			LoadTrace::Begin(what);
+		}
+		LoadTrace::OnMode(name);
 		return original_function(this, name);
 	}
 };
@@ -550,9 +656,16 @@ namespace MenuWorlds
 			p0->mSpiceGen = played->mSpiceGen;
 			std::string from = Game0Dir() + Narrow(played->mName) + ".spo";
 			std::string to = Game0Dir() + narrow + ".spo";
-			// an exact copy: it still points at the template's planet, whose records are on disk, so Play loads it. Pointing it
-			// at our planet (PatchSavePlanet) keeps the star after a galaxy reload but the load crashes (FACTS.md section 6)
-			bool copied = CopyFileA(from.c_str(), to.c_str(), FALSE) != 0;
+			// an exact copy: it still points at the template's planet, whose records are on disk, so Play loads it. Moving it to
+			// our star (COOP_MOVE_SAVE=1: SaveIds + the planet records copied into the game's planet database) keeps the star
+			// after a galaxy reload but the load still crashes: research, docs/FACTS.md section 6
+			bool moved = false;
+			if (getenv("COOP_MOVE_SAVE")) {
+				CopyPlanetRecords(tmpl, target, a.planetRecords);
+				moved = !a.planetRecords.empty() && SaveIds::RewriteSave(from, to, tmpl->mKey.internalValue, target->mKey.internalValue);
+				Print(moved ? "addworld: COOP_MOVE_SAVE: save moved to our star" : "addworld: COOP_MOVE_SAVE: moving FAILED, exact copy");
+			}
+			bool copied = moved || CopyFileA(from.c_str(), to.c_str(), FALSE) != 0;
 			if (copied) {
 				a.spo = to;
 			}
@@ -632,6 +745,7 @@ namespace MenuWorlds
 			if (!it->spo.empty()) {
 				DeleteFileA(it->spo.c_str());
 			}
+			DeletePlanetRecords(it->planetRecords);
 			sAdded.erase(it);
 			return;
 		}
@@ -737,6 +851,7 @@ namespace MenuWorlds
 
 	void AttachStartupHooks()
 	{
+
 
 		SetActiveMode_detour::attach(GetAddress(App::cGameModeManager, SetActiveMode));
 		SetActiveModeAt_detour::attach(GetAddress(App::cGameModeManager, SetActiveModeAt));

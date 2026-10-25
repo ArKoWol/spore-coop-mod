@@ -96,9 +96,21 @@ seen in our tests.
   (uncompressed, field `0x0355FA98`, the first value, at +72, big-endian PlanetID); the save goes on that planet's star and the
   star markers are built right then. A star added to the list later (even before the menu's `OnEnter`) is not drawn. A copied
   save therefore lands on the template's star, and an in-memory star vanishes *(verified 2026-10-25)*.
-- A copied save whose planet ids were all rewritten to an in-memory planet (fields of the template's planets copied) is put on
-  our star but **its load crashes** (`SporeApp.exe+0x78dc10`, reading 0x2c) *(verified 2026-10-25)*; a save of another universe
-  copied as it is crashes too (`+0x7babe2`). Probably the load reads planet records from `planetRecords.pkp` *(guess)*.
+- **How a creature save loads** (`COOP_LOAD_TRACE=1`, `game/LoadTrace.cpp`) *(verified 2026-10-25)*: after Play the game reads
+  every planet of the system from the save with `cPlanet::Read` (exe `0xC72D20`, March 2017): it reads the fields, then asks
+  `StarManager::GetPlanetRecord` for the PlanetID at `cPlanet+0x140` and keeps the record at `+0x13C`. Later it makes the planet
+  views (`0xE984E0`, a `cPlanetGfx` for `cVisiblePlanet::mpPlanet`). A planet without a record crashes there at `+0x78dc10`
+  (a `cPlanetRecord` function reads the flags at `+0x2C` of a null record).
+- **A save whose star ids are all rewritten to another star does not load** *(verified 2026-10-25)*: the reader stops before
+  any `cPlanet::Read`, a planet object stays empty (id `0x70`) and the view crashes as above. Not the cause: compression (an
+  uncompressed copy of a save loads), missing planet records (the template's records copied under our ids into the game's planet
+  database did not help), entry `0x01897C18` (kept unchanged, still crashed; it holds little-endian refs `group 0x40626200, n,
+  PlanetID`). Still to bisect: entries `0x03275728`, `0x02C21781`, `0x0355C93A`. A save of another universe copied as it is
+  crashes too (`+0x7babe2`).
+- **The game's planet databases are writable from the mod**: `StarManager.mpPlanetRecordsDatabase` (`planetRecords.pkp`) and
+  `mpPlanetRecordsTempDatabase` (`.pkt`) are open read/write; records are read and written with `OpenRecord` (key type
+  `0x05220CB8`, group 1, instance PlanetID; data `[0x00250003][nested DBPF]`). A record stream's `Write` returns 1, not the byte
+  count. A package of planet records registered with the resource manager is not used by the load *(verified 2026-10-25)*.
 - **`stars.db`** is a DBPF; entry type `0x03E4353C` holds all 42010 star records in one RefPack blob: each record is big-endian
   `[size][8-byte id][0x01A80D26][payload size][field count][(field id, size) table][values]`, name as UTF-16LE. The game reads
   the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list

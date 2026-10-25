@@ -882,7 +882,11 @@ namespace CoopMenu
 				sStar = new cStarRecordPtr(star);
 				Logf("menu: CO-OP star %08x added", star->mKey.internalValue);
 				CoopNet::JoinState s = CoopNet::State();
-				if (s.installedAtStart && s.host && sState != State::Ready) {
+				if (getenv("COOP_MOVE_SAVE")) {
+					U().worldOf = "Moved save";  // research (COOP_MOVE_SAVE): play the moved copy of the own save at once
+					sState = State::Ready;
+				}
+				else if (s.installedAtStart && s.host && sState != State::Ready) {
 					// the host's world was installed at this start (and the mod joins the host again): the CO-OP star is a
 					// copy of the host's newest creature save, so Play enters the host's world
 					U().worldOf = HostName(s.host);
