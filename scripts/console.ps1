@@ -2,6 +2,7 @@
 # Usage:
 #   .\console.ps1                         interactive: type console commands, see the game's console output; exit or Ctrl+C to quit
 #   .\console.ps1 "coop status"           run one or more commands, print what the game answers, exit
+#   .\console.ps1 "coop dump; coop status" several commands in one line are separated by ; (also at the prompt)
 #   .\console.ps1 "coop host" -Wait 5     same, but listen 5 seconds for the answer (default 2)
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -18,10 +19,17 @@ catch { Write-Host "No game console on port $Port. Is Spore running with CoopMod
 $stream = $client.GetStream()
 $writer = New-Object IO.StreamWriter($stream); $writer.AutoFlush = $true; $writer.NewLine = "`n"
 
+# The game runs one command per line; "coop dump; coop status" is split here into two.
+function Send-Commands([string]$text) {
+    foreach ($c in ($text -split ';')) {
+        if ($c.Trim()) { $writer.WriteLine($c.Trim()) }
+    }
+}
+
 if ($Command) {
     $reader = New-Object IO.StreamReader($stream)
     $null = $reader.ReadLine()  # greeting
-    foreach ($c in $Command) { $writer.WriteLine($c) }
+    foreach ($c in $Command) { Send-Commands $c }
     $until = (Get-Date).AddSeconds($Wait)
     $pending = $reader.ReadLineAsync()
     $got = 0
@@ -53,15 +61,14 @@ $null = $ps.AddScript({
     [Environment]::Exit(0)  # the prompt is blocked in Read-Host: end the whole window together with the game
 }).AddArgument($stream)
 $null = $ps.BeginInvoke()
-Write-Host 'Spore console. Commands: coop host | coopjoin <steamid> | coop status | coop off | stage creature | exit' -ForegroundColor Cyan
-foreach ($c in ($Run -split ';')) {
-    if ($c.Trim()) { $writer.WriteLine($c.Trim()) }
-}
+Write-Host 'Spore console. Commands: coop host | coopjoin <steamid> | coopjoin last | coop friends | coop status | coop off | exit' -ForegroundColor Cyan
+Write-Host 'Several commands in one line: separate them with ;' -ForegroundColor DarkCyan
+Send-Commands $Run
 try {
     while ($client.Connected) {
         $line = Read-Host 'spore'
         if ($line -eq 'exit') { break }
-        $writer.WriteLine($line)
+        Send-Commands $line
     }
 }
 finally {

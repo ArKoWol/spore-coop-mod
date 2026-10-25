@@ -3,6 +3,7 @@
 #include "Entities.h"
 #include "Log.h"
 #include "game/PuppetMotion.h"
+#include "RecentHosts.h"
 #include "World.h"
 #include "Models.h"
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
@@ -249,6 +250,8 @@ typedef int(__cdecl* SteamMsgSend_t)(void* self, const void* identity, const voi
 typedef int(__cdecl* SteamMsgReceive_t)(void* self, int channel, void** outMessages, int maxMessages);
 typedef bool(__cdecl* SteamMsgAccept_t)(void* self, const void* identity);
 typedef void(__cdecl* SteamMsgCloseSession_t)(void* self, const void* identity);
+typedef const char*(__cdecl* SteamGetPersonaName_t)(void* self, uint64_t steamId);
+typedef bool(__cdecl* SteamRequestUserInfo_t)(void* self, uint64_t steamId, bool nameOnly);
 typedef void(__cdecl* SteamMessageRelease_t)(void* message);
 typedef void(__cdecl* SteamSessionRequestCallback_t)(void* request);
 typedef void(__cdecl* SteamSetSessionRequestCallback_t)(void* utils, SteamSessionRequestCallback_t callback);
@@ -271,6 +274,10 @@ static struct SteamApi
 	SteamMsgAccept_t Accept = nullptr;
 	SteamMsgCloseSession_t CloseSession = nullptr;
 	SteamMessageRelease_t Release = nullptr;
+	// optional (only for the names in the list of remembered hosts): an older steam_api without them still works
+	void* friends = nullptr;
+	SteamGetPersonaName_t GetPersonaName = nullptr;
+	SteamRequestUserInfo_t RequestUserInfo = nullptr;
 } sSteam;
 
 static SteamVoid_t sSteamShutdown = nullptr;
@@ -351,6 +358,10 @@ static bool SteamStart()
 	sSteamSetRequestCallback = setRequestCallback;
 	setRequestCallback(sSteam.utils, OnSessionRequest);
 	initRelay(sSteam.utils);
+	SteamGetInterface_t getFriends = (SteamGetInterface_t)GetProcAddress(sSteam.dll, "SteamAPI_SteamFriends_v017");
+	sSteam.GetPersonaName = (SteamGetPersonaName_t)GetProcAddress(sSteam.dll, "SteamAPI_ISteamFriends_GetFriendPersonaName");
+	sSteam.RequestUserInfo = (SteamRequestUserInfo_t)GetProcAddress(sSteam.dll, "SteamAPI_ISteamFriends_RequestUserInformation");
+	sSteam.friends = getFriends ? getFriends() : nullptr;
 	sSteam.ready = true;
 	Logf("steam: ready, my Steam ID %llu", (unsigned long long)sSteam.myId);
 	return true;
@@ -886,6 +897,8 @@ static void UdpReceive()
 	}
 }
 
+static void RememberHost(uint64_t steamId, bool first);  // below, next to NetUpdate
+
 static void SteamReceive()
 {
 	void* messages[16];
@@ -929,6 +942,7 @@ static void SteamReceive()
 						sHostSeen = true;
 						Logf("steam: host answered");
 						App::ConsolePrintF("coop: connected to the host.");
+						RememberHost(sPeerSteamId, true);
 						if (sWorldInstalledAtStart) {
 							App::ConsolePrintF("coop: the host's world is installed. Choose Continue and enter the creature stage.");
 						}
@@ -1348,6 +1362,51 @@ static void EchoFeed(DWORD now)
 	sHaveLatest = true;
 }
 
+// The host's Steam name, or "" while Steam does not know it yet (it is fetched in the background).
+static std::string SteamName(uint64_t steamId)
+{
+	if (!sSteam.ready || !sSteam.friends || !sSteam.GetPersonaName) {
+		return "";
+	}
+	const char* name = sSteam.GetPersonaName(sSteam.friends, steamId);
+	if (!name || !*name || strcmp(name, "[unknown]") == 0) {
+		return "";
+	}
+	return name;
+}
+
+// Puts the host into the list of remembered hosts (RecentHosts) with its Steam name; if the name is not known yet,
+// asks Steam for it and stores it again 3 s and 10 s later.
+static uint64_t sNameHost = 0;
+static DWORD sNameRetryAt[2] = {};
+static void RememberHost(uint64_t steamId, bool first)
+{
+	std::string name = SteamName(steamId);
+	if (first || !name.empty()) {
+		RecentHosts::Remember(steamId, name.c_str());
+	}
+	if (first && name.empty() && sSteam.friends && sSteam.RequestUserInfo) {
+		sSteam.RequestUserInfo(sSteam.friends, steamId, true);
+		sNameHost = steamId;
+		sNameRetryAt[0] = GetTickCount() + 3000;
+		sNameRetryAt[1] = GetTickCount() + 10000;
+	}
+	else if (!name.empty()) {
+		sNameHost = 0;
+	}
+}
+
+static void RememberHostRetry()
+{
+	DWORD now = GetTickCount();
+	for (DWORD& at : sNameRetryAt) {
+		if (sNameHost && at && (int)(now - at) >= 0) {
+			at = 0;
+			RememberHost(sNameHost, false);
+		}
+	}
+}
+
 static void NetUpdate()
 {
 	if (sDisposed) {
@@ -1370,6 +1429,7 @@ static void NetUpdate()
 	if (sTransport == Transport::Steam) {
 		sSteam.RunCallbacks();
 		sSteam.SocketsRunCallbacks(sSteam.sockets);
+		RememberHostRetry();
 		SteamReceive();
 		SteamReceiveFiles();
 		SteamReceiveWorld();
@@ -1585,7 +1645,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1668,6 +1728,9 @@ public:
 			PuppetMotion::SetMode(mode);
 			App::ConsolePrintF("coop: puppet motion: %s", PuppetMotion::ModeName(mode));
 		}
+		else if (strcmp(sub, "friends") == 0) {
+			RecentHosts::Print();
+		}
 		else if (strcmp(sub, "motionlog") == 0) {
 			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());
 			App::ConsolePrintF("coop: motion log in CoopMod.log %s", PuppetMotion::GetLogging() ? "on" : "off");
@@ -1723,9 +1786,11 @@ public:
 			return;
 		}
 		Logf("coopjoin %s", args[0]);
-		uint64_t id = _strtoui64(args[0], nullptr, 10);
+		// a Steam ID, or a remembered host: "last", its number in `coop friends`, or part of its name
+		char error[200];
+		uint64_t id = RecentHosts::Resolve(args[0], error, sizeof(error));
 		if (id == 0) {
-			App::ConsolePrintF("coop: '%s' is not a Steam ID (a long number). For an IP use coopudpjoin.", args[0]);
+			App::ConsolePrintF("coop: %s", error);
 			return;
 		}
 		if (SteamJoinStart(id)) {
@@ -1738,7 +1803,7 @@ public:
 
 	const char* GetDescription(ArgScript::DescriptionMode mode) const override
 	{
-		return "coopjoin <steamid>: join a co-op host over Steam.";
+		return "coopjoin <steamid> | last | <number> | <name>: join a co-op host over Steam (coop friends lists the hosts you joined).";
 	}
 };
 

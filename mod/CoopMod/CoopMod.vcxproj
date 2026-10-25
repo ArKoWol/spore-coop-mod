@@ -49,6 +49,7 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Log.h" />
+    <ClInclude Include="RecentHosts.h" />
     <ClInclude Include="game\PuppetMotion.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
@@ -58,6 +59,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="Entities.cpp" />
     <ClCompile Include="Log.cpp" />
+    <ClCompile Include="RecentHosts.cpp" />
     <ClCompile Include="game\PuppetMotion.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />

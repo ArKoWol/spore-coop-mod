@@ -42,13 +42,17 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
 What you see: the other player's creature walks next to you (for now it has YOUR creature's look).
 What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
 
-If the guest leaves and comes back, just type  coopjoin 7656...  again.
+If the guest leaves and comes back, just type  coopjoin last  (the mod remembers the hosts you joined).
 
 
 COMMANDS
 --------
 coop host              host over Steam (prints your Steam ID)
 coopjoin <steamid>     join a host, from the main menu
+coopjoin last          join the host you joined last time (no need to look up the Steam ID again)
+coopjoin <name>        join a host you joined before by part of their Steam name
+coopjoin <number>      ... or by their number in coop friends
+coop friends           the list of hosts you joined, with numbers
 coop status            what is connected
 coop off               leave the session
 coop sendworld         host: send the world to the guest again

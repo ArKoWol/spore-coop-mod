@@ -5,6 +5,20 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Remembered hosts: `coopjoin last`** (no more looking up the friend's Steam ID). Every host that answered is stored with
+  its Steam name in `%APPDATA%\Spore\Games\CoopHosts.txt` (newest first, at most 10; outside `Game0`, so a received world
+  does not replace it). `coopjoin` now takes `last`, a number from the list, part of the name (case-insensitive), or a Steam
+  ID as before; `coop friends` shows the list. New `RecentHosts.cpp/.h`; the names come from `ISteamFriends`
+  (`SteamFriends_v017`, `GetFriendPersonaName`, `RequestUserInformation`), loaded as optional exports, so an older
+  `steam_api_coop.dll` without them still connects (just without names). No protocol change. Tested on one PC: empty list,
+  list, wrong number, unknown name, join by part of the name; storing a host after a real join is still to be seen in a
+  two-PC test.
+- **The launcher shows progress**: every long step has a turning `| / - \` with seconds and ends with "done (N s)":
+  closing the game, checking GitHub (`git fetch`, which took 13 s and looked like a hung window), building, waiting for the
+  mod. The build output still goes to `%TEMP%\coopmod_build.log` (shown when the build fails).
+- **Remote console: several commands in one line, separated by `;`** (`coop dump; coop status`), at the prompt and in
+  one-shot mode. Before, the whole line went to the game as one command and was rejected.
+
 - **The console window opens by itself at every start of the game** (also after the automatic restart, where the friend's
   console stayed closed). The mod now opens `scripts\console.ps1` (`COOP_CONSOLE_PS1`, else searched up to 5 folders above the
   game folder) when its console port is up, unless `COOP_NO_CONSOLE` is set; on a player's install without the script nothing

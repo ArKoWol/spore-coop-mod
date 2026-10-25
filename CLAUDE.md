@@ -31,7 +31,8 @@ SporeApp.exe
     SporeModLoader\ModLibs\CoopMod.dll          -> OUR MOD (source: mod\CoopMod\dllmain.cpp)
       steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar)
 ```
-- **Console commands** (Ctrl+Shift+C in game): `coop host`, `coopjoin <steamid>`, `coop udphost`, `coopudpjoin <ip>`,
+- **Console commands** (Ctrl+Shift+C in game): `coop host`, `coopjoin <steamid | last | number | name>`, `coop friends`,
+  `coop udphost`, `coopudpjoin <ip>`,
   `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport` (how the puppet follows, `anim` = `walk`),
   `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m to the side), `coop noworld`, `coop sendworld`, `coop off`, plus `stage <name>` and `coophello`.
   The game rejects a command without arguments, so every command has at least one word.
@@ -77,7 +78,7 @@ package/                what players get, laid out as in coop_package.zip
   The launcher (dev), `scripts\make_package.ps1` and `update.ps1` install the package as `<game>\Data\CoopMod.package`.
 - `scripts/setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `scripts/launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; before building it asks whether to pull when GitHub has new commits, `-NoUpdateCheck` skips that), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
-- `scripts/console.ps1` (wrapped by `console.bat`, which also works where script execution is disabled) - remote game console: `console.bat` (interactive) or `console.bat "coop status" "coop host"` (one-shot).
+- `scripts/console.ps1` (wrapped by `console.bat`, which also works where script execution is disabled) - remote game console: `console.bat` (interactive) or `console.bat "coop status" "coop host"` (one-shot); several commands in one line are separated by `;`.
 - `scripts/make_package.ps1`, `scripts/publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
 - `package/` - the player files, in the same layout as inside `coop_package.zip`: `README.txt` (player instructions),
   `fix_spore_registry.ps1`, and `coop_update/` (`update.bat` / `update.ps1` / `repo.txt`): players run it to install or
@@ -151,6 +152,9 @@ player presses Continue.
   the harmless Steam one above). To map `CoopMod.dll+0x...` to a function, relink with `set LINK=/MAP:<file>`.
 - **A crashed or killed Spore can leave an unkillable process** after the AMD driver resets (`LiveKernelEvent 117`);
   a new game then hangs at startup or says "Another instance of the game is already running". Only a reboot clears it.
+- **Remembered hosts**: `RecentHosts.cpp` keeps the hosts that answered in `%APPDATA%\Spore\Games\CoopHosts.txt`
+  (`steamid<TAB>unixtime<TAB>name`, newest first, 10 at most). The name is `ISteamFriends::GetFriendPersonaName`; it can be
+  empty/"[unknown]" right after joining, so the mod calls `RequestUserInformation` and stores it again after 3 s and 10 s.
 - Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
 - **Intro splash**: the whole intro (EA logo, Maxis, Spore logo) is **one movie**, `0x7af7df4f` (type `0x376840d7`, EA VP6:
   `MVhd` + `MV0K`/`MV0F` chunks, video only, 1280x720 @ 29.97, in `Spore_EP1_Data.package`), started through

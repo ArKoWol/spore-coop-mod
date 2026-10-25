@@ -48,6 +48,8 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 |---|---|
 | `coop host` | host a session over Steam, prints your Steam ID |
 | `coopjoin <steamid>` | join a host (from the main menu) |
+| `coopjoin last` | join the host you joined last time; also `coopjoin 2` (number from the list) or `coopjoin <part of the name>` |
+| `coop friends` | the hosts you joined before, with their Steam names |
 | `coop status` | connection state, received packets, puppet, shared-world counts |
 | `coop off` | leave the session |
 | `coop sendworld` / `coop noworld` | host: send the world again / stop sending it automatically |
@@ -56,7 +58,8 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 | `coop echo` | test on one PC: a copy of your creature repeats you 0.4 s later, 4 m to the side |
 | `coop dump`, `coop fps`, `coop motionlog`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
 
-The game accepts exactly one word after `coop`, so joining is the separate command `coopjoin`.
+The game accepts exactly one word after `coop`, so joining is the separate command `coopjoin`. In the remote console
+(`console.bat`) several commands go in one line separated by `;`: `coop dump; coop status`.
 
 ### When something goes wrong
 
@@ -88,7 +91,7 @@ Daily work, from the repo root:
 | | |
 |---|---|
 | `git pull` | first, always |
-| `launch_spore_mod.bat` | build, install into the test copy, start the game windowed, open a console connected to it |
+| `launch_spore_mod.bat` | check GitHub, build, install into the test copy, start the game windowed, open a console connected to it (each step shows a spinner) |
 | `console.bat "coop status"` | type game commands from PowerShell (or `console.bat` for an interactive prompt) |
 | `update.bat` | check GitHub for new commits and a new release |
 | `tests\run_core_tests.bat` | tests of the replication core, no game needed |
