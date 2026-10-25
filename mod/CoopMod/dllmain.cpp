@@ -49,6 +49,17 @@ member_detour(TakeDamage_detour, Simulator::cCombatant, int(float, uint32_t, int
 	}
 };
 
+// Every animation a creature starts (bite, eat, sing, ...) is announced to the other side (World::OnAnimation).
+member_detour(PlayAnimation_detour, Simulator::cCreatureBase, int(uint32_t, int, bool))
+{
+	int detoured(uint32_t animationId, int block, bool disableBlendIn)
+	{
+		int result = original_function(this, animationId, block, disableBlendIn);
+		World::OnAnimation(reinterpret_cast<Simulator::cCreatureBase*>(this), animationId);
+		return result;
+	}
+};
+
 // ---------------------------------------------------------------- intro splash
 // Our own picture for a few seconds after the EA logo. The intro is a single movie (EA logo, Maxis, Spore
 // logo; the first 4 s, the EA logo, cannot be skipped), so the movie is paused when the EA part is over, a
@@ -404,7 +415,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 8;
+static const uint32_t kProtocolVersion = 10;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1945,6 +1956,7 @@ void Dispose()
 	PrepareDetours(sModule);
 	NPCTickAI_detour::detach();
 	TakeDamage_detour::detach();
+	PlayAnimation_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
@@ -1975,6 +1987,7 @@ void AttachDetours()
 {
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
 	TakeDamage_detour::attach(GetAddress(Simulator::cCreatureAnimal, TakeDamage));
+	PlayAnimation_detour::attach(GetAddress(Simulator::cCreatureBase, PlayAnimation));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
 	sOrigPrintF = ArgScript::PrintF;

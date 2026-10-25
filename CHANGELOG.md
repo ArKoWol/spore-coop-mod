@@ -5,6 +5,20 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **G3 and G2, first versions: animations and nests.** **`kProtocolVersion` is 10.** Both are untested in the game, both log what they do.
+  - **Animations (G3).** A `PlayAnimation` detour (`PlayAnimation_detour`, `cCreatureBase`) tells `World::OnAnimation` which creature
+    starts which animation. The host announces the animations of its avatar and of every replicated animal, the guest those of its
+    own avatar (`kMsgAnim`: who + animation id; reliable); the other side plays the same id on its mirror or puppet (`who`: 0 = the
+    host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId). The same animation of the same creature is sent at most every 400 ms
+    (walking loops). The first times each animation id is seen are logged as `anim:` lines (spike S15: this is how we learn the ids of
+    bite, eat, sing, ...); `coop status` shows animations sent / played. Replaying locomotion animations might fight the puppet's
+    walking: if legs look wrong, the ids in the `anim:` lines tell what to filter.
+  - **Nests (G2).** The nests of a planet are made when the stage starts, so the machines differ (host 101, friend 96 and 108, none at
+    the same places). The host sends the list of its nests (position + species of the nest's herd, `kMsgNests`, every 20 s and on
+    connect); the guest removes its own nests with their herds once (except its avatar's) and makes the host's ones: an empty quiet
+    herd created with a nest at the same place (`CreateHerd(..., createNest = true)`), a few per half second; a herd animal that
+    appears in such a herd is removed as a stray but the herd stays. `nests:` lines in the log, nest counters in `coop status`.
+
 - **G1, first version: eaten fruit, plants and hatched eggs disappear on the other machine too** (new `Objects.cpp/.h`;
   third test: "the friend kills an animal and it stays at 0 HP on his side until I eat it" showed that whatever one player
   consumes stayed on the other's screen). Fruit, fruit groups, plants and eggs exist on both machines from the same save, so they

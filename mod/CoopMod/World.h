@@ -36,6 +36,10 @@ namespace World
 	// applies it to its own avatar. `victim` is a cCreatureAnimal*, `attacker` a cCombatant* (may be null).
 	bool FilterDamage(void* victim, float damage, int type, void* attacker);
 
+	// The game's PlayAnimation detour tells us which creature starts which animation (bite, eat, sing, ...); it is sent to the
+	// other side, which plays the same animation on its copy. `creature` is a cCreatureBase*.
+	void OnAnimation(void* creature, uint32_t animationId);
+
 	// Console tests of the damage code on one PC: `coop hit` bites, `coop kill` kills the nearest animal.
 	void TestHit(bool kill);
 

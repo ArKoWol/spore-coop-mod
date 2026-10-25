@@ -29,6 +29,10 @@ namespace
 	const uint8_t kMsgAvatar = 106;     // both ways, unreliable: [106][health][maxHealth][scale] of the sender's own avatar
 	const uint8_t kMsgDamageReq = 107;  // guest -> host: [107][netId][damage f32][type u8]; netId 0 = the host's avatar
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
+	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x (x y z f32, species instance, type, group)
+	const DWORD kNestsEveryMs = 20000;
+	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
+	const DWORD kAnimRepeatMs = 400;     // the same animation of the same creature is sent at most this often
 	const DWORD kAvatarEveryMs = 200;
 	const float kFollowRadius = 150.0f;  // mirrors farther than this from our avatar are only teleported, not walked
 	const uint32_t kModelChunk = 40 * 1024;
@@ -90,6 +94,21 @@ namespace
 		DWORD lastAvatarSend = 0;
 		struct RemoteAvatar { float health = 0, maxHealth = 0, scale = 0; bool valid = false; } remoteAvatar;
 		int damageLogged = 0, damageSent = 0, damageApplied = 0;
+		std::map<uint64_t, DWORD> lastAnim;   // (who, animation) -> last time sent
+		std::map<uint32_t, int> animSeen;     // animation id -> how often the game played it (log for spike S15)
+		int animSent = 0, animPlayed = 0;
+
+		// nests (G2): the host's list, and the nests the guest made from it
+		struct NestInfo { Vector3 pos; ResourceKey key; };
+		struct NestMirror { cHerdPtr herd; cNestPtr nest; Vector3 pos; };
+		DWORD lastNests = 0;
+		bool nestsNow = false;
+		std::vector<NestInfo> nestIncoming;      // guest: list being received
+		uint32_t nestChunksGot = 0, nestChunks = 0;
+		std::vector<NestInfo> nestList;          // guest: the last complete list
+		bool nestWiped = false;                  // guest: its own nests were removed
+		std::vector<NestMirror> nestMirrors;
+		int nestsCreated = 0, nestsRemoved = 0, nestsFailed = 0;
 
 		void OnCreate(const EntityState&) override {}
 		void OnUpdate(const EntityState&) override {}
@@ -121,6 +140,7 @@ namespace
 
 	// true while we apply damage or a death that came over the network: the TakeDamage detour must let it through
 	bool sApplyingRemote = false;
+	bool sApplyingAnim = false;  // true while we play an animation that came over the network
 
 	void DealDamage(Simulator::cCreatureAnimal* victim, float damage, int type, Simulator::cCombatant* attacker, uint32_t attackerId)
 	{
@@ -169,6 +189,8 @@ namespace
 	// The species of an NPC animal. Found by the first real test (friend's log: "species 00000000"): `mSpeciesKey` is
 	// zero for most NPC animals, only the species profile pointer (cCreatureBase +0xB20, or the herd's) is set. The key
 	// the game accepts in GetSpeciesProfile is the key of that profile in SpeciesManager.mSpeciesProfiles.
+	ResourceKey KeyOfProfile(State& s, Simulator::cSpeciesProfile* profile);
+
 	ResourceKey SpeciesKeyOf(State& s, Simulator::cCreatureAnimal* animal)
 	{
 		if (animal->mSpeciesKey.instanceID) {
@@ -178,6 +200,11 @@ namespace
 		if (!profile && animal->mHerd) {
 			profile = animal->mHerd->mpSpeciesProfile;
 		}
+		return KeyOfProfile(s, profile);
+	}
+
+	ResourceKey KeyOfProfile(State& s, Simulator::cSpeciesProfile* profile)
+	{
 		if (!profile) {
 			return ResourceKey();
 		}
@@ -518,6 +545,11 @@ namespace
 						shared = true;
 					}
 				}
+				for (auto& n : s.nestMirrors) {
+					if (n.herd == herd) {
+						shared = true;  // the herd of a nest we made: only the animal goes, not the nest
+					}
+				}
 			}
 			if (herd && !shared) {
 				GameNounManager.DestroyInstance(herd.get());
@@ -551,12 +583,197 @@ namespace
 		}
 	}
 
+	// ------------------------------------------------------------ nests (G2)
+	// The nests of a planet are made by the game when the stage starts, so two machines that loaded the same save have different
+	// ones (the friend had 96 and 108, the host 101; none at the same places). The host's list is sent every 20 s; the guest
+	// removes its own nests once (except its avatar's) and makes the host's: an empty quiet herd with a nest at the same place.
+
+	void HostNests(State& s, DWORD now)
+	{
+		if (!s.nestsNow && now - s.lastNests < kNestsEveryMs) {
+			return;
+		}
+		s.nestsNow = false;
+		s.lastNests = now;
+		std::vector<State::NestInfo> list;
+		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+			Simulator::cGameData* object = &*it;
+			if (object->GetNounID() != Simulator::kNest) {
+				continue;
+			}
+			auto nest = object_cast<Simulator::cNest>(object);
+			if (!nest || !nest->mpHerd) {
+				continue;
+			}
+			ResourceKey key = KeyOfProfile(s, nest->mpHerd->mpSpeciesProfile);
+			if (!key.instanceID) {
+				continue;  // a nest of no known species cannot be made on the other side
+			}
+			State::NestInfo info;
+			info.pos = nest->GetPosition();
+			info.key = key;
+			list.push_back(info);
+		}
+		const size_t perMessage = 100;
+		uint32_t chunks = (uint32_t)((list.size() + perMessage - 1) / perMessage);
+		if (chunks == 0) {
+			return;
+		}
+		for (uint32_t c = 0; c < chunks; ++c) {
+			size_t from = c * perMessage, to = std::min(list.size(), from + perMessage);
+			Writer w;
+			w.U8(kMsgNests); w.U32(c); w.U32(chunks); w.U32((uint32_t)(to - from));
+			for (size_t i = from; i < to; ++i) {
+				w.F32(list[i].pos.x); w.F32(list[i].pos.y); w.F32(list[i].pos.z);
+				w.U32(list[i].key.instanceID); w.U32(list[i].key.typeID); w.U32(list[i].key.groupID);
+			}
+			QueueReliable(s, w.buf);
+		}
+	}
+
+	void DestroyNestMirror(State::NestMirror& m)
+	{
+		if (m.herd) {
+			GameNounManager.DestroyInstance(m.herd.get());
+		}
+		if (m.nest) {
+			GameNounManager.DestroyInstance(m.nest.get());
+		}
+		m.herd = nullptr;
+		m.nest = nullptr;
+	}
+
+	void GuestNests(State& s, DWORD now)
+	{
+		static DWORD lastRun = 0;
+		if (s.nestList.empty() || now - lastRun < 500) {
+			return;
+		}
+		lastRun = now;
+		Simulator::cCreatureAnimal* avatar = GameNounManager.GetAvatar();
+		if (!avatar) {
+			return;
+		}
+		Simulator::cHerd* avatarHerd = avatar->mHerd.get();
+
+		if (!s.nestWiped) {
+			s.nestWiped = true;
+			// the guest's own nests (made by its game at stage start) differ from the host's: remove them, with their herds,
+			// except the avatar's own nest
+			std::vector<Simulator::cHerd*> herds;
+			for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+				Simulator::cGameData* object = &*it;
+				if (object->GetNounID() != Simulator::kNest) {
+					continue;
+				}
+				auto nest = object_cast<Simulator::cNest>(object);
+				if (nest && nest->mpHerd && nest->mpHerd.get() != avatarHerd) {
+					herds.push_back(nest->mpHerd.get());
+				}
+			}
+			for (auto herd : herds) {
+				GameNounManager.DestroyInstance(herd);
+				++s.nestsRemoved;
+			}
+			// nests that survived their herd (they had none)
+			std::vector<Simulator::cGameData*> rest;
+			for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+				Simulator::cGameData* object = &*it;
+				if (object->GetNounID() == Simulator::kNest) {
+					auto nest = object_cast<Simulator::cNest>(object);
+					if (nest && (!nest->mpHerd || nest->mpHerd.get() != avatarHerd)) {
+						rest.push_back(object);
+					}
+				}
+			}
+			for (auto object : rest) {
+				GameNounManager.DestroyInstance(object);
+				++s.nestsRemoved;
+			}
+			Logf("nests: removed the guest's own %d herds and %d leftover nests", (int)herds.size(), (int)rest.size());
+		}
+
+		// where are the nests now?
+		std::vector<Vector3> existing;
+		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+			Simulator::cGameData* object = &*it;
+			if (object->GetNounID() == Simulator::kNest) {
+				if (auto spatial = object_cast<Simulator::cSpatialObject>(object)) {
+					existing.push_back(spatial->GetPosition());
+				}
+			}
+		}
+		int made = 0;
+		for (auto& info : s.nestList) {
+			if (made >= 5) {
+				break;
+			}
+			bool there = false;
+			for (auto& p : existing) {
+				if ((p - info.pos).Length() < 2.0f) {
+					there = true;
+					break;
+				}
+			}
+			if (there) {
+				continue;
+			}
+			Simulator::cSpeciesProfile* profile = SpeciesManager.GetSpeciesProfile(info.key);
+			if (!profile) {
+				++s.nestsFailed;
+				continue;
+			}
+			State::NestMirror m;
+			m.pos = info.pos;
+			m.herd = GameNounManager.CreateHerd(info.pos, profile, 0, false, 0, true);
+			if (!m.herd) {
+				++s.nestsFailed;
+				continue;
+			}
+			m.herd->mTargetHerdSize = 0;
+			m.herd->SetEnabled(false);
+			m.nest = m.herd->mpNest;
+			if (!m.nest) {
+				m.nest = GameNounManager.CreateNest(info.pos, m.herd.get());
+			}
+			existing.push_back(info.pos);
+			s.nestMirrors.push_back(m);
+			++s.nestsCreated;
+			++made;
+		}
+		if (made) {
+			Logf("nests: made %d from the host's list (%d in the list, %d made so far, %d failed)", made, (int)s.nestList.size(), s.nestsCreated,
+				s.nestsFailed);
+		}
+		// nests we made that the host no longer has
+		for (auto it = s.nestMirrors.begin(); it != s.nestMirrors.end();) {
+			bool listed = false;
+			for (auto& info : s.nestList) {
+				if ((it->pos - info.pos).Length() < 2.0f) {
+					listed = true;
+					break;
+				}
+			}
+			if (listed) {
+				++it;
+			}
+			else {
+				DestroyNestMirror(*it);
+				it = s.nestMirrors.erase(it);
+			}
+		}
+	}
+
 	void DestroyAllMirrors(State& s)
 	{
 		for (auto& m : s.mirrors) {
 			DestroyMirror(m.second);
 		}
 		s.mirrors.clear();
+		for (auto& n : s.nestMirrors) {
+			DestroyNestMirror(n);
+		}
+		s.nestMirrors.clear();
 	}
 }
 
@@ -572,6 +789,7 @@ namespace World
 	{
 		State& s = S();
 		s.fullNow = true;
+		s.nestsNow = true;
 		s.reliableQueue.clear();
 		// species definitions have to reach the new guest again
 		s.speciesSent.clear();
@@ -613,9 +831,11 @@ namespace World
 		}
 		if (host) {
 			HostTick(s, now, puppet);
+			HostNests(s, now);
 		}
 		else if (s.haveWorld) {
 			GuestMirrors(s, now);
+			GuestNests(s, now);
 			GuestNeuter(s, now, puppet);
 			GuestTelemetry(s, now);
 		}
@@ -628,6 +848,58 @@ namespace World
 		}
 		State& s = S();
 		if (size < 1) {
+			return;
+		}
+		if (!host && data[0] == kMsgNests && size >= 13) {
+			Reader r(data, size);
+			r.U8();
+			uint32_t chunk = r.U32(), chunks = r.U32(), n = r.U32();
+			if (!r.ok || chunks == 0 || chunks > 100 || n > 200 || size != 13 + n * 24) {
+				return;
+			}
+			if (chunk == 0) {
+				s.nestIncoming.clear();
+				s.nestChunks = chunks;
+				s.nestChunksGot = 0;
+			}
+			for (uint32_t i = 0; i < n; ++i) {
+				State::NestInfo info;
+				info.pos = Vector3(r.F32(), r.F32(), r.F32());
+				info.key.instanceID = r.U32(); info.key.typeID = r.U32(); info.key.groupID = r.U32();
+				s.nestIncoming.push_back(info);
+			}
+			if (r.ok && ++s.nestChunksGot >= s.nestChunks) {
+				s.nestList.swap(s.nestIncoming);
+				s.nestIncoming.clear();
+				Logf("nests: the host's list arrived, %d nests", (int)s.nestList.size());
+			}
+			return;
+		}
+		if (data[0] == kMsgAnim && size == 9) {
+			Reader r(data, size);
+			r.U8();
+			uint32_t who = r.U32(), id = r.U32();
+			Simulator::cCreatureAnimal* target = nullptr;
+			if (host) {
+				if (who == 0xFFFFFFFFu) {
+					target = static_cast<Simulator::cCreatureAnimal*>(s.puppet);
+				}
+			}
+			else if (who == 0) {
+				target = static_cast<Simulator::cCreatureAnimal*>(s.puppet);
+			}
+			else {
+				auto m = s.mirrors.find(who);
+				if (m != s.mirrors.end() && !m->second.dead) {
+					target = m->second.animal.get();
+				}
+			}
+			if (r.ok && target) {
+				sApplyingAnim = true;
+				target->PlayAnimation(id);
+				sApplyingAnim = false;
+				++s.animPlayed;
+			}
 			return;
 		}
 		if (Objects::OnMessage(data, size, host)) {
@@ -815,6 +1087,50 @@ namespace World
 		}
 	}
 
+	void OnAnimation(void* creaturePtr, uint32_t animationId)
+	{
+		if (!sState || sApplyingAnim) {
+			return;
+		}
+		State& s = *sState;
+		auto creature = static_cast<Simulator::cCreatureBase*>(creaturePtr);
+		auto avatar = GameNounManager.GetAvatar();
+		uint32_t who = 0;
+		if (avatar && creature == static_cast<Simulator::cCreatureBase*>(avatar)) {
+			who = s.isHost ? 0u : 0xFFFFFFFFu;
+		}
+		else if (s.isHost) {
+			bool found = false;
+			for (auto& id : s.ids) {
+				auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(id.first));
+				if (static_cast<Simulator::cCreatureBase*>(animal) == creature) {
+					who = id.second;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				return;  // the guest's puppet and strangers
+			}
+		}
+		else {
+			return;  // the guest does not announce the animations of mirrors
+		}
+		if (++s.animSeen[animationId] <= 3 || s.animSeen[animationId] % 200 == 0) {
+			Logf("anim: %08x played by %s %u (seen %d times)", animationId, who == 0 ? "the host avatar" : (who == 0xFFFFFFFFu ? "the guest avatar" : "animal"), who, s.animSeen[animationId]);
+		}
+		DWORD now = GetTickCount();
+		DWORD& last = s.lastAnim[((uint64_t)who << 32) | animationId];
+		if (now - last < kAnimRepeatMs) {
+			return;  // looping animations (walking) would flood the link
+		}
+		last = now;
+		Writer w;
+		w.U8(kMsgAnim); w.U32(who); w.U32(animationId);
+		QueueReliable(s, w.buf);
+		++s.animSent;
+	}
+
 	bool FilterDamage(void* victimPtr, float damage, int type, void* attackerPtr)
 	{
 		if (!sState || sApplyingRemote) {
@@ -953,6 +1269,8 @@ namespace World
 		}
 		State& s = *sState;
 		Objects::PrintStatus();
+		App::ConsolePrintF("coop world: animations sent %d, played %d", s.animSent, s.animPlayed);
+		App::ConsolePrintF("coop world: nests in the host's list %d, made here %d, own removed %d, failed %d", (int)s.nestList.size(), s.nestsCreated, s.nestsRemoved, s.nestsFailed);
 		App::ConsolePrintF("coop world: damage requests sent %d, hits applied %d", s.damageSent, s.damageApplied);
 		App::ConsolePrintF("coop world: host animals %d | guest table %d, mirrors %d, strays %d (removed %d), stand-in models %d | reported by guest: table %d, mirrors %d, strays %d",
 			s.hostAnimals, (int)s.guest->entities().size(), (int)s.mirrors.size(), s.strays, s.removedStrays, s.standIns,
