@@ -16,14 +16,14 @@ change), **partly**, **not done**.
 | 2c | Plants not flickering | to check (fixed 2026-10-25) |
 | 2d | Fruit at the same places and gone when eaten | not done (fruit is generated per machine, 6 of 74 match) |
 | 2e | Eggs and hatching | partly |
-| 2f | Corpses both players can eat | to check (2026-10-25: guest bites now native, eating reported by `kMsgEaten`) |
+| 2f | Corpses both players can eat | to check (eating reported by `kMsgEaten`); a newborn from an egg has the right species (works, 2026-10-25) |
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | not done |
 | 3c | Each player's own creature model on the puppet | not done (the puppet uses the local avatar's species) |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | partly (`kMsgAnim`, untested on two PCs) |
-| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | to check (2026-10-25, protocol 11) |
+| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal native death crashed the guest (2026-10-25), so the kill goes through the host, no DNA yet |
 | 4b | Host damage and deaths | works |
 | 4c | PvP, death and respawn at the own nest, no reward | not done |
 | 4d | Hit and get-hit animations of mirrors | not done |

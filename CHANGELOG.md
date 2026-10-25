@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: the guest's game crashed on the lethal bite of a mirror** (ArKoWol). Friend's log: three bites on a mirror, `action: 045ab96e`, then
+  `SporeApp.exe+0x797779, reading 0x14` in game code only: the game's native death of a mirror (no nest herd, no tuning) is not safe.
+  Non-lethal bites stay native; the lethal one is only reported, the host kills the real animal and the mirror dies by the replay. The DNA
+  for a kill is open again (`STATUS.md` 4a). Hosts and guests: `git pull`; not tested; no protocol change.
+
 - **CO-OP star and window in the main menu, with stubs** (exxecute; `game/CoopMenu.cpp`, plan `docs/features/JOIN_FLOW.md`): a
   "CO-OP" save star near the galaxy's centre at every start; selecting it opens our window next to its card (remembered hosts,
   Test friend, Join by Steam ID from the clipboard, a fake 3 s download, then the card's own Play loads the world). The card's

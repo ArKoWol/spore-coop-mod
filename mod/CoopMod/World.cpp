@@ -1350,7 +1350,12 @@ namespace World
 				// the game (health, death and the DNA reward are native); the host gets the same hit as a report and applies it
 				// to the real animal. Hits from anybody else are the host's business.
 				if (netId && byAvatar) {
-					return false;
+					// The LETHAL bite is not applied here: the game's native death of a mirror crashed the friend's game
+					// (SporeApp.exe+0x797779, reading 0x14, right after the third bite on a mirror; the mirror has no
+					// nest herd, no archetype tuning, nothing the death code may want). The host kills the real animal
+					// and the mirror dies by the replay (KillLocally) a moment later.
+					bool lethal = victim->mHealthPoints - damage <= 0.01f;
+					return lethal;
 				}
 				return true;
 			}
