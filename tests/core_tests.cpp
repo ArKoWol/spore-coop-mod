@@ -230,7 +230,8 @@ int main(int argc, char** argv)
 		for (auto& e : std::map<uint32_t, EntityState>(host.entities())) { EntityState s = e.second; s.pos.x += 3; host.Update(e.first, s); }
 		auto parts = host.MakeDeltas(20);
 		bool small = parts.size() == 3;
-		for (auto& m : parts) { small = small && m.size() <= 5 + 2 + 20 * 54 && m.size() < 1200;  // a state is 54 bytes, an unreliable message must stay under the MTU guest.Receive(m); }
+		// a state is 54 bytes, an unreliable message must stay under the MTU
+		for (auto& m : parts) { small = small && m.size() <= 5 + 2 + 20 * 54 && m.size() < 1200; guest.Receive(m); }
 		bool equal = guest.entities().size() == host.entities().size();
 		for (auto& e : host.entities()) equal = equal && guest.entities().at(e.first) == e.second;
 		Check(small && equal && host.MakeDeltas(20).empty(), "chunks: 45 changed entities travel in 3 messages of at most 20");
