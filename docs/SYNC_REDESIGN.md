@@ -126,6 +126,26 @@ Layers, each with its own test:
 - NPC interest radius 110 m (+20 m hysteresis), 10 Hz state: use when animal counts grow.
 - They do **not** cover eating, plants/fruit, nests as objects, or a list of animation ids: those stay our spikes (S14, S15).
 
+## 6c. Minimum for playable creature-stage co-op (owner's list, 2026-10-25; status in brackets)
+
+1. Session: connect, world transfer, auto restart and join, console. [works]
+2. Same world: animals with model, size, age, HP, alpha [works, to re-check]; nests [being fixed]; plants not flickering [fixed, to check];
+   fruit at the same places and gone when eaten [not done: fruit differs per machine, 6 of 74 match]; eggs and hatching [partly];
+   corpses that both can eat [not done]; **species relations: when enough animals of a species are killed the species is extinct for
+   both players (also befriended/allied state)** [not done].
+3. Players see each other: walking puppet [works]; walking backwards/sideways/running [not done]; each player's own creature model
+   [not done, the puppet is built from the local avatar's species]; real HP and size of the puppet [to check]; action animations [partly].
+4. Combat: guest damage as request to the host [request works]; host damage and deaths [works]; PvP, death and respawn at own nest,
+   no rewards [not done]; hit/get-hit animations of mirrors [not done].
+5. Progress: separate DNA / brain / parts per player, saved in the host's save [not done]; stage change when both are ready [not done].
+6. Stability: no crashes on connect, in combat, on restart; leaving and returning guest. [main crashes fixed]
+
+Species extinction (item 2): the game keeps it in `cSpeciesRelationshipManager` (SporeCoop notes for their exe: `Get` 0xB3D590, `GetRelationship`
+0xBA40C0, `ApplyEvent` 0xBA49E0, event 0/5 = killed, 3 = impressed; relation values 6 allied, 5 extinct; tuning: 3 kills make a species
+extinct, 3 impressed make it an ally). Kills by the guest are applied by the host with its own avatar as the attacker, so the host's table
+counts both players' kills; the plan is to send that table to the guest (SporeCoop: every 10 s, guest writes it every 0.5 s) and to
+remove the herds of an extinct species. The addresses must be checked against our exe (they were found on another build).
+
 ## 7. Risks that remain
 
 - Spore may not let us call creation/destroy primitives from outside its own flow at arbitrary times (crash on
