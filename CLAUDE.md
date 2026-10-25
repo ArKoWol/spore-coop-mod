@@ -15,6 +15,8 @@ Claude, share this repo. Keep this file and `CHANGELOG.md` accurate: they are ho
    Commit author email must be the GitHub noreply address, not a personal one.
 6. Only one person publishes a release at a time (`latest` is simply the newest release). Tell the other before you do.
 7. Do not run destructive or outward-facing actions (publishing, deleting, force-push) without the owner's OK.
+8. **Every in-game window of the mod follows `docs/UI_STYLE.md`** (the look of the CO-OP window: glossy light plate,
+   orange outlined title, glossy pill buttons with hover). Reuse the drawing helpers of `game/CoopMenu.cpp`.
 
 > **Direction:** the current "everyone plays their own world" build is a demo. The real plan is in `docs/DESIGN.md` (host-authoritative replicated world); read it before starting work on gameplay sync.
 
