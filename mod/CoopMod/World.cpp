@@ -29,6 +29,7 @@ namespace
 	const uint8_t kMsgAvatar = 106;     // both ways, unreliable: [106][health][maxHealth][scale] of the sender's own avatar
 	const uint8_t kMsgDamageReq = 107;  // guest -> host: [107][netId][damage f32][type u8]; netId 0 = the host's avatar
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
+	const uint8_t kMsgEaten = 114;      // guest -> host: [114][netId]: the guest ate this animal's corpse
 	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x (x y z f32, species instance, type, group)
 	const DWORD kNestsEveryMs = 20000;
 	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
@@ -48,6 +49,7 @@ namespace
 		float rot[4] = { 0, 0, 0, 1 };
 		DWORD last = 0;
 		uint8_t age = 0;  // the age step the body was made for: a different one needs a new body
+		float lastHostHealth = -1.0f;  // the host's health we applied last
 		uint32_t species = 0;  // the species the body was made for (a hatchling's species becomes known a moment after it appears)
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
 		bool dead = false;
@@ -81,6 +83,7 @@ namespace
 		std::map<uint32_t, ModelWait> models;  // species instance -> transfer state
 		int standIns = 0;                      // mirrors that had to use the stand-in species
 		std::map<uint32_t, Mirror> mirrors;
+		std::set<uint32_t> consumed;   // netIds of animals eaten on this machine (the host removes the real ones)
 		bool haveWorld = false;  // a snapshot arrived: the guest's own animals are strays now
 		DWORD lastNeuter = 0, lastTelemetry = 0, lastLog = 0;
 		int strays = 0, removedStrays = 0;
@@ -434,6 +437,7 @@ namespace
 		for (auto it = s.mirrors.begin(); it != s.mirrors.end();) {
 			if (!table.count(it->first)) {
 				DestroyMirror(it->second);
+				s.consumed.erase(it->first);
 				it = s.mirrors.erase(it);
 			}
 			else {
@@ -443,7 +447,20 @@ namespace
 		int created = 0;
 		for (auto& e : table) {
 			const EntityState& st = e.second;
+			if (s.consumed.count(e.first)) {
+				continue;  // eaten here: the host removes the real animal, until then no new mirror
+			}
 			Mirror& m = s.mirrors[e.first];
+			// The actor decides his own action (PLAN rule 3): the guest ate this animal's corpse here, natively. Tell the host.
+			if (m.animal && (m.animal->mbHasBeenEaten || m.animal->mbMarkedForDeletion)) {
+				Writer w;
+				w.U8(kMsgEaten); w.U32(e.first);
+				QueueReliable(s, w.buf);
+				s.consumed.insert(e.first);
+				DestroyMirror(m);
+				s.mirrors.erase(e.first);
+				continue;
+			}
 			if (!m.herd) {
 				if (created >= 3) {
 					continue;  // a few new herds per frame, the game stutters otherwise
@@ -473,13 +490,21 @@ namespace
 				m.animal->SetScale(st.scale);
 			}
 			bool dead = (st.flags & kFlagDead) || (st.maxHealth > 0.0f && st.health <= 0.0f);
+			if (m.animal->mbDead) {
+				m.dead = true;  // killed here by our own bite (native death, native DNA), or by the replay below
+			}
 			if (dead && !m.dead) {
 				m.dead = true;
-				KillLocally(m.animal.get());  // the game plays the death; a corpse is then pinned to the host's corpse below
+				KillLocally(m.animal.get());  // the host's animal died: the game plays the death, a corpse is pinned below
 			}
-			else if (!dead && st.maxHealth > 0.0f) {
+			else if (!dead && !m.dead && st.maxHealth > 0.0f) {
 				m.animal->mMaxHealthPoints = st.maxHealth;
-				m.animal->mHealthPoints = st.health;
+				// Our own bites already lowered the health here (they are reported to the host, which echoes the new value
+				// a moment later): take the host's number only when it changed, so our hit is not undone in between.
+				if (st.health != m.lastHostHealth) {
+					m.animal->mHealthPoints = st.health;
+					m.lastHostHealth = st.health;
+				}
 			}
 			if (st.flags & kFlagAlpha) {
 				m.animal->mGeneralFlags |= Simulator::kCreatureFlagIsAlpha;
@@ -1003,7 +1028,9 @@ namespace World
 				return;
 			}
 			Simulator::cCreatureAnimal* victim = nullptr;
-			Simulator::cCombatant* attacker = hostAvatar;
+			// the guest's hit is applied with the guest's puppet as the attacker: the game pays no reward to a puppet (the guest got
+			// his DNA natively when he made the hit on his machine)
+			Simulator::cCombatant* attacker = s.puppet ? static_cast<Simulator::cCreatureAnimal*>(s.puppet) : nullptr;
 			if (netId == 0) {
 				victim = hostAvatar;  // the guest bit the host's player
 				attacker = static_cast<Simulator::cCreatureAnimal*>(s.puppet);
@@ -1022,6 +1049,21 @@ namespace World
 				if (s.damageLogged < 40) {
 					++s.damageLogged;
 					Logf("damage: applied the guest's hit on %s %u: %.1f (type %d)", netId ? "animal" : "the host's avatar", netId, damage, type);
+				}
+			}
+			return;
+		}
+		if (host && data[0] == kMsgEaten && size == 5) {
+			// the guest ate the corpse of an animal: remove the real one here (its state then disappears for everybody)
+			Reader r(data, size);
+			r.U8();
+			uint32_t netId = r.U32();
+			for (auto& id : s.ids) {
+				if (id.second == netId) {
+					Simulator::cGameData* object = static_cast<Simulator::cGameData*>(id.first);
+					GameNounManager.DestroyInstance(object);
+					Logf("eaten: the guest ate animal %u, removed here", netId);
+					break;
 				}
 			}
 			return;
@@ -1304,7 +1346,13 @@ namespace World
 					QueueReliable(s, w.buf);
 					++s.damageSent;
 				}
-				return true;  // the host decides; the new health comes back with the next state
+				// PLAN rule 3: the actor decides the result of his own action. Our own bite on a mirror is applied here at once, by
+				// the game (health, death and the DNA reward are native); the host gets the same hit as a report and applies it
+				// to the real animal. Hits from anybody else are the host's business.
+				if (netId && byAvatar) {
+					return false;
+				}
+				return true;
 			}
 			return false;
 		}

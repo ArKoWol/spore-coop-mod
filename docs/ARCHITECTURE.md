@@ -41,7 +41,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **10**. Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **11**. Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -56,11 +56,12 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 101 `kMsgTelemetry` | guest -> host | table, mirror and stray counts |
 | 102 / 103 / 104 `kMsgModelReq` / `kMsgModel` / `kMsgModelNone` | both | a species the guest cannot build, its model records, "none here either" |
 | 106 `kMsgAvatar` | both, unreliable | health, max health, scale of the sender's avatar |
-| 107 `kMsgDamageReq` | guest -> host | the guest hit a mirror (netId, damage, type); netId 0 = the host's avatar |
+| 107 `kMsgDamageReq` | guest -> host | report of the guest's own hit on a mirror (netId, damage, type); netId 0 = the host's avatar |
 | 108 `kMsgDamage` | host -> guest | apply this damage to your own avatar |
 | 109 / 110 `kMsgManifest` / `kMsgRemove` | both | object manifest and removals (`Objects.h`; applying them is switched off) |
 | 112 `kMsgAnim` | both | creature (0 = host avatar, 0xFFFFFFFF = guest avatar, else netId) started animation id |
 | 113 `kMsgNests` | host -> guest | the host's nests (position, species), every 20 s and on connect |
+| 114 `kMsgEaten` | guest -> host | the guest ate this animal's corpse (netId); the host removes the real one |
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, 60 KB chunks, a
@@ -115,8 +116,13 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
 - **Avatars**: both sides send their own avatar's health, max health and size 5 times a second (`kMsgAvatar`) and show them
   on their puppet of the other player.
-- **Damage**: the guest's hit on a mirror is blocked locally and sent as `kMsgDamageReq`; the host applies it and the new
-  health returns with the next state. A host-side hit on the guest's puppet is sent to the guest as `kMsgDamage`.
+- **Damage** (PLAN rule 3, the actor decides): the guest's own bite on a mirror is applied by the game on his machine at once
+  (health, death, DNA are native) and reported as `kMsgDamageReq`; the host applies the same hit to the real animal with the
+  guest's puppet as attacker (no reward). The mirror takes the host's health only when it changed (`lastHostHealth`), so the guest's
+  hit is not undone before the echo arrives. Hits from anybody else on a mirror are swallowed. A host-side hit on the guest's
+  puppet is sent to the guest as `kMsgDamage`.
+- **Eating**: a mirror that the game marks eaten or deleted on the guest (`mbHasBeenEaten`, `mbMarkedForDeletion`) is reported as
+  `kMsgEaten`; the host destroys the real animal and the guest makes no new mirror for that netId.
 
 ## 8. Rules the sync code keeps (do not break them without a plan change)
 1. **One authority per kind of thing**: world objects and animals = host; each avatar's movement = its owner; damage and

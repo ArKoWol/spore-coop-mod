@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Combat by PLAN rule 3, "the actor decides"** (ArKoWol). The guest's own bite on a mirror is applied natively on his machine (health,
+  death, DNA reward from the game) and reported to the host (`kMsgDamageReq`), which applies it with the guest's puppet as attacker;
+  an eaten mirror is reported with `kMsgEaten` and the host removes the real animal. Why: the old way (block, ask the host) gave the
+  guest no native death or reward and a corpse that could not be eaten. Not tested; **protocol 11**: both must update; see `ARCHITECTURE.md` section 7.
+
 - **Documents reorganised** (docs only; owner's request). One live plan (`docs/PLAN.md`) instead of four; new `docs/README.md`
   (index), `STATUS.md`, `DECISIONS.md`, `ARCHITECTURE.md`, `FACTS.md`, `TESTING.md`; `CLAUDE.md` now has the reading order and the
   rules for documents (where to write what, header, what to mark, what to delete, size limits). Deleted: `DESIGN.md`,
