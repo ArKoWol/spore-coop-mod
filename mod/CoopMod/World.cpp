@@ -36,6 +36,7 @@ namespace
 		Vector3 pos;
 		float rot[4] = { 0, 0, 0, 1 };
 		DWORD last = 0;
+		uint8_t age = 0;  // the age step the body was made for: a different one needs a new body
 	};
 
 	// Everything lives in one heap object that Shutdown() frees: no static destructor may run at process exit.
@@ -172,6 +173,9 @@ namespace
 			st.rot = { q.x, q.y, q.z, q.w };
 			st.health = animal->mHealthPoints;
 			st.maxHealth = animal->mMaxHealthPoints;
+			st.scale = animal->GetScale();
+			st.age = (uint8_t)animal->mAge;
+			st.flags = (animal->mbDead ? kFlagDead : 0) | ((animal->mGeneralFlags & Simulator::kCreatureFlagIsAlpha) ? kFlagAlpha : 0);
 			current[object] = st;
 			if (st.species && !s.speciesSent.count(st.species)) {
 				s.speciesSent[st.species] = speciesKey;
@@ -269,7 +273,9 @@ namespace
 		}
 		herd->mTargetHerdSize = 0;  // no breeding or respawn in a mirror's herd
 		herd->SetEnabled(false);
-		Simulator::cCreatureAnimal* animal = Simulator::cCreatureAnimal::Create(pos, profile, 1, herd.get(), false, false);
+		// the host's age step decides baby or adult body; 0 (old packet or unknown) = the default
+		Simulator::cCreatureAnimal* animal = Simulator::cCreatureAnimal::Create(pos, profile, st.age ? st.age : 1, herd.get(), false, false);
+		m.age = st.age;
 		m.herd = herd;
 		if (animal) {
 			m.animal = animal;
@@ -329,6 +335,26 @@ namespace
 					m.animal = m.herd->mHerd[0];
 				}
 				continue;
+			}
+			// grew up (or was made with another age): build the body again, the model of a baby and an adult differ
+			if (st.age && m.age != st.age) {
+				DestroyMirror(m);
+				m = Mirror();
+				continue;
+			}
+			// size, health and the alpha flag come from the host (the guest's own game would roll its own values)
+			if (fabsf(m.animal->GetScale() - st.scale) > 0.001f && st.scale > 0.0f) {
+				m.animal->SetScale(st.scale);
+			}
+			if (st.maxHealth > 0.0f) {
+				m.animal->mMaxHealthPoints = st.maxHealth;
+				m.animal->mHealthPoints = st.health;
+			}
+			if (st.flags & kFlagAlpha) {
+				m.animal->mGeneralFlags |= Simulator::kCreatureFlagIsAlpha;
+			}
+			else {
+				m.animal->mGeneralFlags &= ~Simulator::kCreatureFlagIsAlpha;
 			}
 			// move it towards the table state (exponential smoothing, snap at first and on jumps)
 			Vector3 target(st.pos.x, st.pos.y, st.pos.z);

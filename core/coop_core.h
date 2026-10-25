@@ -25,7 +25,7 @@ namespace coop
 	enum class Kind : uint8_t { Creature = 1, Nest = 2, Egg = 3, Plant = 4, Fruit = 5, Rock = 6, Other = 7 };
 
 	// Flags
-	enum : uint8_t { kFlagDead = 1 };
+	enum : uint8_t { kFlagDead = 1, kFlagAlpha = 2 };
 	// owner: the player index for avatars (0 = host, 1 = guest), 255 for everything the host's world owns
 	constexpr uint8_t kWorldOwner = 255;
 
@@ -40,12 +40,15 @@ namespace coop
 		uint16_t anim = 0;
 		uint8_t flags = 0;
 		uint8_t owner = kWorldOwner;
+			float scale = 1;  // size of the body
+			uint8_t age = 0;   // the game's age step of a creature (baby, adult, ...)
 
 		bool operator==(const EntityState& o) const
 		{
 			return netId == o.netId && kind == o.kind && species == o.species && pos.x == o.pos.x && pos.y == o.pos.y &&
 				pos.z == o.pos.z && rot.x == o.rot.x && rot.y == o.rot.y && rot.z == o.rot.z && rot.w == o.rot.w &&
-				health == o.health && maxHealth == o.maxHealth && anim == o.anim && flags == o.flags && owner == o.owner;
+				health == o.health && maxHealth == o.maxHealth && anim == o.anim && flags == o.flags && owner == o.owner &&
+				scale == o.scale && age == o.age;
 		}
 		bool operator!=(const EntityState& o) const { return !(*this == o); }
 	};
@@ -68,7 +71,7 @@ namespace coop
 			U32(s.netId); U8((uint8_t)s.kind); U32(s.species);
 			F32(s.pos.x); F32(s.pos.y); F32(s.pos.z);
 			F32(s.rot.x); F32(s.rot.y); F32(s.rot.z); F32(s.rot.w);
-			F32(s.health); F32(s.maxHealth); U16(s.anim); U8(s.flags); U8(s.owner);
+			F32(s.health); F32(s.maxHealth); U16(s.anim); U8(s.flags); U8(s.owner); F32(s.scale); U8(s.age);
 		}
 		Message buf;
 	private:
@@ -90,7 +93,7 @@ namespace coop
 			s.netId = U32(); s.kind = (Kind)U8(); s.species = U32();
 			s.pos.x = F32(); s.pos.y = F32(); s.pos.z = F32();
 			s.rot.x = F32(); s.rot.y = F32(); s.rot.z = F32(); s.rot.w = F32();
-			s.health = F32(); s.maxHealth = F32(); s.anim = U16(); s.flags = U8(); s.owner = U8();
+			s.health = F32(); s.maxHealth = F32(); s.anim = U16(); s.flags = U8(); s.owner = U8(); s.scale = F32(); s.age = U8();
 			return s;
 		}
 		bool Done() const { return p == end; }
@@ -155,7 +158,7 @@ namespace coop
 		}
 
 		// Same as MakeDelta, but cut into messages of at most perMessage entities (an unreliable message must stay
-		// under the network MTU, about 20 states of 49 bytes). Nothing changed: no messages.
+		// under the network MTU, about 20 states of 54 bytes). Nothing changed: no messages.
 		std::vector<Message> MakeDeltas(size_t perMessage)
 		{
 			std::vector<Message> out;

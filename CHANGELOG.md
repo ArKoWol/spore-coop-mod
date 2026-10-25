@@ -5,6 +5,14 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Mirrors copy size, age, health and the alpha flag of the host's animals** (second guest test: "my 3 babies with 6 HP are
+  adults with 10 HP at the friend's, and my alpha with 13 HP is a normal one"). `EntityState` now carries `scale` (the body size),
+  `age` (the game's age step, which decides baby or adult body) and the flags `kFlagDead` / `kFlagAlpha`; the host fills them
+  from `GetScale()`, `mAge`, `mbDead` and `mGeneralFlags` bit 1; the guest makes the body with that age (`Create(..., age, herd)`),
+  rebuilds it if the age changes, and applies `SetScale`, `mMaxHealthPoints`, `mHealthPoints` and the alpha flag on every
+  update. Wire format +5 bytes per state (54), **`kProtocolVersion` is 6**; core tests updated. Not tested with two PCs yet.
+  Eating, damage and death are still not replicated (health only follows the host's number).
+
 - **Remembered hosts: `coopjoin last`** (no more looking up the friend's Steam ID). Every host that answered is stored with
   its Steam name in `%APPDATA%\Spore\Games\CoopHosts.txt` (newest first, at most 10; outside `Game0`, so a received world
   does not replace it). `coopjoin` now takes `last`, a number from the list, part of the name (case-insensitive), or a Steam
