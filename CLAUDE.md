@@ -175,6 +175,9 @@ player presses Continue.
   **`cCreatureBase::mSpeciesKey` is zero for most NPC animals**; the species is in `mpSpeciesProfile` (+0xB20, or the herd's
   `mpSpeciesProfile`); its key is the one it has in `SpeciesManager.mSpeciesProfiles`. Dynamic objects (animals, nests, eggs,
   obstacles, ornaments) differ between two machines that loaded the same save; fruit, plants, rocks and markers are identical.
+- **Never iterate `SpeciesManager.mSpeciesProfiles`** (ModAPI's hash map layout does not match the game: crash "reading 3ea99f65").
+  The key of a `cSpeciesProfile` is `profile->mCreatureKey`. To find a crash in our DLL: build with `set LINK=/MAP:file`, the
+  `CoopMod.dll+0x...` of the log plus the preferred base 0x10000000 gives the function in the map.
 - **Mirror animals**: make an empty herd (`CreateHerd(..., 0, ...)`, `mTargetHerdSize = 0`, `SetEnabled(false)`) and put the
   animal in with `cCreatureAnimal::Create(pos, profile, 1, herd)`; a herd of size 1 fills itself only when the game wants.
 

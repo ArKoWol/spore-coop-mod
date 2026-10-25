@@ -191,6 +191,20 @@ namespace
 	// the game accepts in GetSpeciesProfile is the key of that profile in SpeciesManager.mSpeciesProfiles.
 	ResourceKey KeyOfProfile(State& s, Simulator::cSpeciesProfile* profile);
 
+	// guarded read of the key stored in a species profile (no C++ objects with destructors in a function with __try)
+	bool ReadProfileKey(Simulator::cSpeciesProfile* profile, uint32_t* out)
+	{
+		__try {
+			out[0] = profile->mCreatureKey.instanceID;
+			out[1] = profile->mCreatureKey.typeID;
+			out[2] = profile->mCreatureKey.groupID;
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
 	ResourceKey SpeciesKeyOf(State& s, Simulator::cCreatureAnimal* animal)
 	{
 		if (animal->mSpeciesKey.instanceID) {
@@ -212,15 +226,20 @@ namespace
 		if (cached != s.profileKeys.end()) {
 			return cached->second;
 		}
+		// Iterating SpeciesManager.mSpeciesProfiles crashed the host (CoopMod.dll+0x159d0 in HostNests, "reading 3ea99f65": the
+		// ModAPI layout of that hash map does not match this game build). The key of a profile is stored in the profile itself
+		// (mCreatureKey, +0x504); a key is accepted only if the game maps it back to the same profile.
 		ResourceKey found;
-		for (auto it = SpeciesManager.mSpeciesProfiles.begin(); it != SpeciesManager.mSpeciesProfiles.end(); ++it) {
-			if (&it->second == profile) {
-				found = it->first;
-				break;
+		uint32_t raw[3] = { 0, 0, 0 };
+		if (ReadProfileKey(profile, raw)) {
+			ResourceKey candidate(raw[0], raw[1], raw[2]);
+			if (candidate.instanceID && SpeciesManager.GetSpeciesProfile(candidate) == profile) {
+				found = candidate;
 			}
 		}
 		s.profileKeys[profile] = found;
-		Logf("world: species profile %p -> key %08x/%08x/%08x", (void*)profile, found.instanceID, found.typeID, found.groupID);
+		Logf("world: species profile %p -> key %08x/%08x/%08x%s", (void*)profile, found.instanceID, found.typeID, found.groupID,
+			found.instanceID ? "" : " (unknown)");
 		return found;
 	}
 

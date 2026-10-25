@@ -5,6 +5,12 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fix: the host crashed when the guest connected (found with a link map).** The crash was inside `HostNests`, in `KeyOfProfile`: it
+  iterated `SpeciesManager.mSpeciesProfiles` to find the key of a species profile, and the ModAPI layout of that hash map does not
+  match this game build (`reading 3ea99f65`, a float used as a pointer). It was never reached before because animals mostly have a key
+  of their own; the first nest list made it run at connect time. The key is now read from the profile itself (`mCreatureKey`, +0x504,
+  guarded) and accepted only if `GetSpeciesProfile(key)` returns the same profile. Never iterate `SpeciesManager.mSpeciesProfiles`.
+
 - **Fix attempt: the host crashed when the guest connected and the world was sent** (`CoopMod.dll+0x16ad8, reading 00000a27`, right after
   `world: sending 10 files`, in the build with the nest sync). The first nest list is built at that moment from raw reads of the
   game's nest and herd objects; those reads are now guarded (`ReadNest`, SEH): an object the game has half-destroyed is skipped and
