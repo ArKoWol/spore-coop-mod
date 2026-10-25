@@ -12,8 +12,21 @@ namespace PuppetMotion
 		Walk,      // like Move, but with cCreatureBase::WalkTo (crashed once without a herd, kept for comparison)
 	};
 
+	// What one followed creature remembers between frames. The remote player's puppet uses a built-in one; every mirrored
+	// animal of the shared world (World.cpp) owns its own.
+	struct Follower
+	{
+		bool started = false;
+		bool moving = false;
+		Vector3 lastTarget;
+		DWORD lastTargetTick = 0;
+		float remoteSpeed = 0.0f;  // m/s, smoothed, from the change of the target position
+		DWORD lastOrder = 0;
+	};
+
 	// Called every frame with the newest remote state (target position and orientation, already smoothed).
 	void Drive(Simulator::cCreatureAnimal* puppet, const Vector3& target, const Math::Quaternion& rotation);
+	void Drive(Follower& follower, Simulator::cCreatureAnimal* creature, const Vector3& target, const Math::Quaternion& rotation);
 
 	// A new puppet or a jump in the remote position: the next Drive starts with a Teleport.
 	void Reset();

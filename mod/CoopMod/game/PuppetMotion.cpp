@@ -9,12 +9,7 @@ namespace
 {
 	PuppetMotion::Mode sMode = PuppetMotion::Mode::Move;
 	bool sLogging = false;
-	bool sStarted = false;
-	bool sMoving = false;
-	Vector3 sLastTarget;
-	DWORD sLastTargetTick = 0;
-	float sRemoteSpeed = 0.0f;   // m/s, smoothed, from the change of the received position
-	DWORD sLastOrder = 0;
+	PuppetMotion::Follower sPuppet;  // the remote player's puppet
 	DWORD sLastLog = 0;
 
 	const float kSnapDistance = 6.0f;     // farther than this behind: Teleport
@@ -28,10 +23,7 @@ namespace PuppetMotion
 {
 	void Reset()
 	{
-		sStarted = false;
-		sMoving = false;
-		sRemoteSpeed = 0.0f;
-		sLastTargetTick = 0;
+		sPuppet = Follower();
 	}
 
 	Mode GetMode() { return sMode; }
@@ -57,21 +49,26 @@ namespace PuppetMotion
 
 	void Drive(Simulator::cCreatureAnimal* puppet, const Vector3& target, const Math::Quaternion& rotation)
 	{
+		Drive(sPuppet, puppet, target, rotation);
+	}
+
+	void Drive(Follower& f, Simulator::cCreatureAnimal* puppet, const Vector3& target, const Math::Quaternion& rotation)
+	{
 		DWORD now = GetTickCount();
 
 		// remote speed and direction from the change of the target position
 		Vector3 velocity;
-		if (sLastTargetTick && now != sLastTargetTick) {
-			float dt = (now - sLastTargetTick) / 1000.0f;
-			velocity = (target - sLastTarget) / dt;
+		if (f.lastTargetTick && now != f.lastTargetTick) {
+			float dt = (now - f.lastTargetTick) / 1000.0f;
+			velocity = (target - f.lastTarget) / dt;
 			float speed = velocity.Length();
 			if (dt < 0.5f) {
 				float a = 1.0f - expf(-dt * 8.0f);
-				sRemoteSpeed += (speed - sRemoteSpeed) * a;
+				f.remoteSpeed += (speed - f.remoteSpeed) * a;
 			}
 		}
-		sLastTarget = target;
-		sLastTargetTick = now;
+		f.lastTarget = target;
+		f.lastTargetTick = now;
 
 		Vector3 position = puppet->GetPosition();
 		float distance = (target - position).Length();
@@ -79,33 +76,33 @@ namespace PuppetMotion
 		if (sMode == Mode::Teleport) {
 			puppet->Teleport(target, rotation);
 		}
-		else if (!sStarted || distance > kSnapDistance) {
-			sStarted = true;
-			sMoving = false;
+		else if (!f.started || distance > kSnapDistance) {
+			f.started = true;
+			f.moving = false;
 			puppet->StopMovement();
 			puppet->Teleport(target, rotation);
 		}
-		else if (sRemoteSpeed > kStopSpeed || distance > kArriveDistance) {
+		else if (f.remoteSpeed > kStopSpeed || distance > kArriveDistance) {
 			// walking: give the game a new goal a little ahead of the remote player
-			if (now - sLastOrder >= kOrderIntervalMs) {
-				sLastOrder = now;
+			if (now - f.lastOrder >= kOrderIntervalMs) {
+				f.lastOrder = now;
 				Vector3 goal = target;
-				if (sRemoteSpeed > kStopSpeed) {
+				if (f.remoteSpeed > kStopSpeed) {
 					goal = target + velocity * kLeadSeconds;
 				}
 				if (sMode == Mode::Walk) {
 					// speed state 1 is a run when the remote player is fast
-					puppet->WalkTo(sRemoteSpeed > 6.0f ? 1 : 0, goal, goal, 0.3f, 0.6f);
+					puppet->WalkTo(f.remoteSpeed > 6.0f ? 1 : 0, goal, goal, 0.3f, 0.6f);
 				}
 				else {
 					puppet->MoveTo(goal, 0.3f, 0.6f);
 				}
-				sMoving = true;
+				f.moving = true;
 			}
 		}
-		else if (sMoving) {
+		else if (f.moving) {
 			// the remote player stopped and we are there: stand and face the same way
-			sMoving = false;
+			f.moving = false;
 			puppet->StopMovement();
 			puppet->SetOrientation(rotation);
 		}
@@ -113,11 +110,11 @@ namespace PuppetMotion
 			puppet->SetOrientation(rotation);
 		}
 
-		if (sLogging && now - sLastLog >= 500) {
+		if (sLogging && &f == &sPuppet && now - sLastLog >= 500) {
 			sLastLog = now;
 			Vector3 own = puppet->GetVelocity();
-			Logf("motion: mode %s remote %.2f m/s puppet %.2f m/s behind %.2f m %s", ModeName(sMode), sRemoteSpeed,
-				own.Length(), distance, sMoving ? "moving" : "standing");
+			Logf("motion: mode %s remote %.2f m/s puppet %.2f m/s behind %.2f m %s", ModeName(sMode), f.remoteSpeed,
+				own.Length(), distance, f.moving ? "moving" : "standing");
 		}
 	}
 }

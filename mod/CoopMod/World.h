@@ -31,6 +31,14 @@ namespace World
 	// True on the guest for every animal except its own avatar: the game's AI must not move it.
 	bool ShouldSkipAI(void* animal);
 
+	// The game's TakeDamage detour asks here first. True = swallow the call: on the guest a hit on a mirror (or on the
+	// host's puppet) becomes a request to the host, and on the host a hit on the guest's puppet is sent to the guest, which
+	// applies it to its own avatar. `victim` is a cCreatureAnimal*, `attacker` a cCombatant* (may be null).
+	bool FilterDamage(void* victim, float damage, int type, void* attacker);
+
+	// Console tests of the damage code on one PC: `coop hit` bites, `coop kill` kills the nearest animal.
+	void TestHit(bool kill);
+
 	// Connection gone: forget the table and remove the mirrors.
 	void Reset();
 	// Dispose: also free the memory (no static destructors may run later).

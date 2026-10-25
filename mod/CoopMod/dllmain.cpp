@@ -35,6 +35,20 @@ member_detour(NPCTickAI_detour, Simulator::cCreatureAnimal, void(float))
 	}
 };
 
+// Every hit on a creature goes through here first (World::FilterDamage): the host decides about the shared world, so a
+// hit of the guest on an animal becomes a request, and a hit on the guest's puppet is sent to the guest.
+// The animal's TakeDamage is entered with `this` = the cCombatant part of the creature (creature + 0x5A8).
+member_detour(TakeDamage_detour, Simulator::cCombatant, int(float, uint32_t, int, const Vector3&, Simulator::cCombatant*))
+{
+	int detoured(float damage, uint32_t attackerId, int type, const Vector3& push, Simulator::cCombatant* attacker)
+	{
+		if (World::FilterDamage(static_cast<Simulator::cCreatureAnimal*>(reinterpret_cast<Simulator::cCombatant*>(this)), damage, type, attacker)) {
+			return 0;
+		}
+		return original_function(this, damage, attackerId, type, push, attacker);
+	}
+};
+
 // ---------------------------------------------------------------- intro splash
 // Our own picture for a few seconds after the EA logo. The intro is a single movie (EA logo, Maxis, Spore
 // logo; the first 4 s, the EA logo, cannot be skipped), so the movie is paused when the EA part is over, a
@@ -389,7 +403,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 6;
+static const uint32_t kProtocolVersion = 7;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1645,7 +1659,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1705,7 +1719,10 @@ public:
 		else if (strcmp(sub, "dump") == 0) {
 			DumpEntities();
 		}
-		else if (strcmp(sub, "modeltest") == 0) {
+		else if (strcmp(sub, "hit") == 0 || strcmp(sub, "kill") == 0) {
+		World::TestHit(strcmp(sub, "kill") == 0);
+	}
+	else if (strcmp(sub, "modeltest") == 0) {
 			// one-PC check of the model transfer: read the avatar's species from the resource manager, write it as a
 			// CoopModels package, register it (the game already knows the key, so nothing visible changes)
 			auto avatar = GameNounManager.GetAvatar();
@@ -1926,6 +1943,7 @@ void Dispose()
 	}
 	PrepareDetours(sModule);
 	NPCTickAI_detour::detach();
+	TakeDamage_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
@@ -1955,6 +1973,7 @@ void Dispose()
 void AttachDetours()
 {
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
+	TakeDamage_detour::attach(GetAddress(Simulator::cCreatureAnimal, TakeDamage));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
 	sOrigPrintF = ArgScript::PrintF;

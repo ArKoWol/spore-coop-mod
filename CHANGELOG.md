@@ -5,6 +5,25 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Damage, deaths, the puppet's real health, and walking mirrors** (third guest test: the host's bites only lowered the max HP of
+  the friend's copy to 0 without a death, the guest could not hurt anything, the puppet showed 13 HP instead of the player's 10,
+  and the other animals slid). **`kProtocolVersion` is 7.**
+  - `TakeDamage` detour (`TakeDamage_detour`, `this` = the creature's `cCombatant` part) asks `World::FilterDamage`: on the guest a
+    hit of our avatar on a mirror (or on the host's puppet) becomes a reliable request (`kMsgDamageReq`: netId, damage, type; netId 0 =
+    the host's avatar) and the local hit is swallowed; the host applies it to the real animal with its own avatar as the attacker
+    (the game pays kill rewards only to the avatar). On the host a hit on the guest's puppet is sent to the guest (`kMsgDamage`), which
+    applies it to its own avatar. New health reaches everybody through the normal state.
+  - A mirror whose host animal is dead (`kFlagDead` or health <= 0) is killed locally once (`KillLocally`: a lethal hit without attacker,
+    so the game plays the death) and then pinned to the host's corpse position every frame; it no longer just loses max HP.
+  - Both sides send the health, max health and size of their own avatar 5 times a second (`kMsgAvatar`, unreliable) and show them on
+    their puppet of the other player.
+  - Mirrors within 150 m are walked by the game's locomotion like the puppet (`PuppetMotion::Follower`, one per mirror; the old
+    `Drive(puppet, ...)` keeps a built-in follower), farther ones and corpses are teleported.
+  - New console commands for one-PC checks in the creature stage: `coop hit` (1 damage to the nearest animal through the normal path)
+    and `coop kill` (the death path of a mirror); `coop status` shows damage requests sent / hits applied; `damage:` lines in the log.
+  - **Untested in the game** (crash risk: the detour address/`this` adjustment and a lethal `TakeDamage` with no attacker). First run
+    `coop hit` and `coop kill` on one PC, then two PCs.
+
 - **Console window: Tab completion and history** (`scripts/console.ps1`, interactive mode): Tab completes the command after
   the last `;` (all mod commands, `stage <name>`, and for `coopjoin` the remembered hosts: `last`, numbers, names); with
   several matches it completes their common start and a second Tab lists them with a short help text. Up/Down: history,
