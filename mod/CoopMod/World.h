@@ -50,6 +50,10 @@ namespace World
 	// without a null check: give it a blank one, otherwise the game crashes ("reading 0000032c").
 	void EnsureTuning(void* creature);
 
+	// The species of the OTHER player's avatar, for building his puppet: 2 = known and buildable here (key = instance, type, group),
+	// 1 = known, its model is on the way (wait), 0 = unknown or not coming (use the local species).
+	int RemoteSpecies(uint32_t* key);
+
 	// Queues a reliable, ordered message for the other side (used by Objects.cpp).
 	void SendReliable(const uint8_t* data, size_t size);
 

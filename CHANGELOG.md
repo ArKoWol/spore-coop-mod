@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The puppet has the OTHER player's creature** (ArKoWol, PLAN section 3). Each side sends the species of its avatar (`kMsgAvatarSpecies`,
+  on change and every 10 s); the model transfer now works both ways (the guest's creature can travel to the host); the puppet is
+  built from that species and rebuilt when it changes (a player back from the editor). Until the model is here (up to 15 s) the puppet
+  waits, then the local species stands in. Not tested on 2 PCs, **protocol 12**: both must update. Test: one player changes the
+  creature in the editor, the other must see the new body. The guest's SetSpecies at start is still open.
+
 - **The CO-OP window joins for real** (exxecute): Join / Join by Steam ID start the Steam join (`game/CoopNet.h`, as `coopjoin`),
   show the real world download, the game restarts and installs the host's world; then the CO-OP star is a copy of the host's
   newest creature save, ready, and the card's Play enters it while the mod rejoins. Errors: no answer (20 s), other mod version,

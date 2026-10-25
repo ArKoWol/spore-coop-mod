@@ -43,7 +43,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **11**. Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **12**. Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -64,6 +64,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 112 `kMsgAnim` | both | creature (0 = host avatar, 0xFFFFFFFF = guest avatar, else netId) started animation id |
 | 113 `kMsgNests` | host -> guest | the host's nests (position, species), every 20 s and on connect |
 | 114 `kMsgEaten` | guest -> host | the guest ate this animal's corpse (netId); the host removes the real one |
+| 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar; the receiver builds the puppet from it (model requests go both ways) |
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, 60 KB chunks, a

@@ -20,7 +20,7 @@ change), **partly**, **not done**.
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | not done |
-| 3c | Each player's own creature model on the puppet | not done (the puppet uses the local avatar's species) |
+| 3c | Each player's own creature model on the puppet | to check (2026-10-25, protocol 12): built from the other avatar's species, rebuilt on change; the guest's own creature at start (`SetSpecies`) is not done |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | partly (`kMsgAnim`, untested on two PCs) |
 | 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal native death crashed the guest (2026-10-25), so the kill goes through the host, no DNA yet |

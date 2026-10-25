@@ -242,6 +242,8 @@ static void ReleasePuppet()
 	sPuppetHerd = nullptr;
 }
 
+static ResourceKey sPuppetKey;  // the species the puppet was built from
+
 // Returns true when the herd was created; the animal itself shows up in later frames (see PickUpPuppet).
 static bool SpawnPuppet()
 {
@@ -249,10 +251,22 @@ static bool SpawnPuppet()
 	if (!avatar) {
 		return false;
 	}
-	auto species = SpeciesManager.GetSpeciesProfile(avatar->mSpeciesKey);
+	// The puppet has the species of the OTHER player's avatar (each player has his own creature); until it is known and its model
+	// is here, or when it does not come, the local avatar's species stands in.
+	ResourceKey key = avatar->mSpeciesKey;
+	uint32_t remote[3] = { 0, 0, 0 };
+	int state = World::RemoteSpecies(remote);
+	if (state == 1) {
+		return false;  // wait for the model
+	}
+	if (state == 2) {
+		key = ResourceKey(remote[0], remote[1], remote[2]);
+	}
+	auto species = SpeciesManager.GetSpeciesProfile(key);
 	if (!species) {
 		return false;
 	}
+	sPuppetKey = key;
 	ReleasePuppet();
 	sPuppetAnchor = avatar->GetPosition() + Vector3(8.0f, 0.0f, 0.0f);
 	// cCreatureAnimal::Create without a herd crashed the game, so let the game build the herd.
@@ -431,7 +445,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 11;
+static const uint32_t kProtocolVersion = 12;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1317,6 +1331,14 @@ static void DrivePuppet(DWORD now, bool inGame)
 {
 	if (!inGame) {
 		return;
+	}
+	// the other player came back from the editor with another creature: build his puppet again
+	if (sPuppetHerd) {
+		uint32_t remote[3] = { 0, 0, 0 };
+		if (World::RemoteSpecies(remote) == 2 && (remote[0] != sPuppetKey.instanceID || remote[2] != sPuppetKey.groupID)) {
+			Logf("puppet: the other player's species changed, building the puppet again");
+			ReleasePuppet();
+		}
 	}
 	if (sHaveLatest && !sPuppetHerd) {
 		if (SpawnPuppet()) {

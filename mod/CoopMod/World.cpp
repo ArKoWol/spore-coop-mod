@@ -29,6 +29,7 @@ namespace
 	const uint8_t kMsgAvatar = 106;     // both ways, unreliable: [106][health][maxHealth][scale] of the sender's own avatar
 	const uint8_t kMsgDamageReq = 107;  // guest -> host: [107][netId][damage f32][type u8]; netId 0 = the host's avatar
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
+	const uint8_t kMsgAvatarSpecies = 115;  // both ways: [115][instance][type][group] of the sender's avatar species (changes in the editor)
 	const uint8_t kMsgEaten = 114;      // guest -> host: [114][netId]: the guest ate this animal's corpse
 	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x (x y z f32, species instance, type, group)
 	const DWORD kNestsEveryMs = 20000;
@@ -93,6 +94,11 @@ namespace
 
 		// both roles
 		bool isHost = false;
+		ResourceKey remoteKey;               // species of the other player's avatar
+		bool remoteKnown = false;
+		DWORD remoteSince = 0;
+		ResourceKey sentKey;                 // species of our own avatar as last sent
+		DWORD lastSpeciesSend = 0;
 		void* puppet = nullptr;              // the other player's puppet (a cCreatureAnimal*)
 		DWORD lastAvatarSend = 0;
 		struct RemoteAvatar { float health = 0, maxHealth = 0, scale = 0; bool valid = false; } remoteAvatar;
@@ -910,6 +916,21 @@ namespace World
 				sSendUnreliable(w.buf.data(), (uint32_t)w.buf.size());
 			}
 		}
+		// The species of our own avatar goes to the other side now and when it changes (the player came back from the editor with
+		// another body) and every 10 s; the other side builds our puppet from it.
+		if (now - s.lastSpeciesSend >= 1000) {
+			if (auto avatar = GameNounManager.GetAvatar()) {
+				const ResourceKey& key = avatar->mSpeciesKey;
+				bool changed = key.instanceID != s.sentKey.instanceID || key.groupID != s.sentKey.groupID;
+				if (key.instanceID && (changed || now - s.lastSpeciesSend >= 10000)) {
+					s.lastSpeciesSend = now;
+					s.sentKey = key;
+					Writer w;
+					w.U8(kMsgAvatarSpecies); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+					QueueReliable(s, w.buf);
+				}
+			}
+		}
 		if (puppet && s.remoteAvatar.valid) {
 			auto p = static_cast<Simulator::cCreatureAnimal*>(puppet);
 			if (s.remoteAvatar.maxHealth > 0.0f) {
@@ -1084,74 +1105,34 @@ namespace World
 			}
 			return;
 		}
-		if (host) {
-			if (data[0] == kMsgModelReq && size == 13) {
-				Reader r(data, size);
-				r.U8();
-				uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
-				std::vector<Models::Record> records;
-				if (!Models::Read(instance, type, group, records)) {
-					Logf("world: the guest asked for species %08x, the host has no record for it", instance);
-					Writer w; w.U8(kMsgModelNone); w.U32(instance);
-					QueueReliable(s, w.buf);
-					return;
-				}
-				size_t total = 0;
-				for (size_t i = 0; i < records.size(); ++i) {
-					const Models::Record& rec = records[i];
-					total += rec.data.size();
-					for (uint32_t offset = 0; offset < rec.data.size(); offset += kModelChunk) {
-						uint32_t len = (uint32_t)std::min<size_t>(kModelChunk, rec.data.size() - offset);
-						Writer w;
-						w.U8(kMsgModel); w.U32(instance); w.U32(type); w.U32(group);
-						w.U8((uint8_t)i); w.U8((uint8_t)records.size()); w.U32(rec.type);
-						w.U32((uint32_t)rec.data.size()); w.U32(offset); w.U32(len);
-						w.buf.insert(w.buf.end(), rec.data.begin() + offset, rec.data.begin() + offset + len);
-						QueueReliable(s, w.buf);
-					}
-				}
-				Logf("world: sending the model of species %08x to the guest (%d records, %d bytes)", instance,
-					(int)records.size(), (int)total);
-				return;
-			}
-			if (data[0] == kMsgTelemetry && size == 13) {
-				Reader r(data, size);
-				r.U8();
-				s.guestTable = (int)r.U32();
-				s.guestMirrors = (int)r.U32();
-				s.guestStrays = (int)r.U32();
-				static DWORD lastLog = 0;
-				DWORD now = GetTickCount();
-				if (now - lastLog >= 10000) {
-					lastLog = now;
-					Logf("world: host animals %d | guest table %d, mirrors %d, strays %d", s.hostAnimals, s.guestTable,
-						s.guestMirrors, s.guestStrays);
-				}
-			}
-			return;
-		}
-		if (data[0] == kMsgSpecies && size == 13) {
+		// ---- creature models, in both directions (the guest's own creature travels to the host as well) and the species of the
+		// other player's avatar
+		if (data[0] == kMsgModelReq && size == 13) {
 			Reader r(data, size);
 			r.U8();
-			ResourceKey key;
-			key.instanceID = r.U32();
-			key.typeID = r.U32();
-			key.groupID = r.U32();
-			s.species[key.instanceID] = key;
-			Models::RegisterCached();
-			if (!Models::Has(key.instanceID, key.typeID, key.groupID)) {
-				State::ModelWait& wait = s.models[key.instanceID];
-				if (!wait.since) {
-					wait.since = GetTickCount();
-				}
-				if (!wait.done && !wait.failed && !wait.requested) {
-					wait.requested = true;
-					Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+			uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
+			std::vector<Models::Record> records;
+			if (!Models::Read(instance, type, group, records)) {
+				Logf("world: the other side asked for species %08x, we have no record for it", instance);
+				Writer w; w.U8(kMsgModelNone); w.U32(instance);
+				QueueReliable(s, w.buf);
+				return;
+			}
+			size_t total = 0;
+			for (size_t i = 0; i < records.size(); ++i) {
+				const Models::Record& rec = records[i];
+				total += rec.data.size();
+				for (uint32_t offset = 0; offset < rec.data.size(); offset += kModelChunk) {
+					uint32_t len = (uint32_t)std::min<size_t>(kModelChunk, rec.data.size() - offset);
+					Writer w;
+					w.U8(kMsgModel); w.U32(instance); w.U32(type); w.U32(group);
+					w.U8((uint8_t)i); w.U8((uint8_t)records.size()); w.U32(rec.type);
+					w.U32((uint32_t)rec.data.size()); w.U32(offset); w.U32(len);
+					w.buf.insert(w.buf.end(), rec.data.begin() + offset, rec.data.begin() + offset + len);
 					QueueReliable(s, w.buf);
-					Logf("world: species %08x/%08x/%08x is not buildable here, asking the host for its model", key.instanceID,
-						key.typeID, key.groupID);
 				}
 			}
+			Logf("world: sending the model of species %08x (%d records, %d bytes)", instance, (int)records.size(), (int)total);
 			return;
 		}
 		if (data[0] == kMsgModelNone && size == 5) {
@@ -1194,6 +1175,75 @@ namespace World
 					wait.failed = true;
 				}
 				std::vector<Models::Record>().swap(wait.records);
+			}
+			return;
+		}
+		if (data[0] == kMsgAvatarSpecies && size == 13) {
+			Reader r(data, size);
+			r.U8();
+			ResourceKey key;
+			key.instanceID = r.U32();
+			key.typeID = r.U32();
+			key.groupID = r.U32();
+			if (r.ok && key.instanceID) {
+				if (!s.remoteKnown || s.remoteKey.instanceID != key.instanceID || s.remoteKey.groupID != key.groupID) {
+					Logf("world: the other player's avatar is species %08x/%08x/%08x", key.instanceID, key.typeID, key.groupID);
+					s.remoteSince = GetTickCount();
+				}
+				s.remoteKey = key;
+				s.remoteKnown = true;
+				Models::RegisterCached();
+				if (!Models::Has(key.instanceID, key.typeID, key.groupID)) {
+					State::ModelWait& wait = s.models[key.instanceID];
+					if (!wait.requested && !wait.done && !wait.failed) {
+						wait.requested = true;
+						wait.since = GetTickCount();
+						Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+						QueueReliable(s, w.buf);
+						Logf("world: the other player's creature %08x is not buildable here, asking for its model", key.instanceID);
+					}
+				}
+			}
+			return;
+		}
+		if (host) {
+			if (data[0] == kMsgTelemetry && size == 13) {
+				Reader r(data, size);
+				r.U8();
+				s.guestTable = (int)r.U32();
+				s.guestMirrors = (int)r.U32();
+				s.guestStrays = (int)r.U32();
+				static DWORD lastLog = 0;
+				DWORD now = GetTickCount();
+				if (now - lastLog >= 10000) {
+					lastLog = now;
+					Logf("world: host animals %d | guest table %d, mirrors %d, strays %d", s.hostAnimals, s.guestTable,
+						s.guestMirrors, s.guestStrays);
+				}
+			}
+			return;
+		}
+		if (data[0] == kMsgSpecies && size == 13) {
+			Reader r(data, size);
+			r.U8();
+			ResourceKey key;
+			key.instanceID = r.U32();
+			key.typeID = r.U32();
+			key.groupID = r.U32();
+			s.species[key.instanceID] = key;
+			Models::RegisterCached();
+			if (!Models::Has(key.instanceID, key.typeID, key.groupID)) {
+				State::ModelWait& wait = s.models[key.instanceID];
+				if (!wait.since) {
+					wait.since = GetTickCount();
+				}
+				if (!wait.done && !wait.failed && !wait.requested) {
+					wait.requested = true;
+					Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+					QueueReliable(s, w.buf);
+					Logf("world: species %08x/%08x/%08x is not buildable here, asking the host for its model", key.instanceID,
+						key.typeID, key.groupID);
+				}
 			}
 			return;
 		}
@@ -1432,6 +1482,25 @@ namespace World
 		delete sState->guest;
 		delete sState;
 		sState = nullptr;
+	}
+
+	int RemoteSpecies(uint32_t* key)
+	{
+		if (!sState || !sState->remoteKnown) {
+			return 0;
+		}
+		State& s = *sState;
+		const ResourceKey& k = s.remoteKey;
+		if (Models::Has(k.instanceID, k.typeID, k.groupID)) {
+			key[0] = k.instanceID; key[1] = k.typeID; key[2] = k.groupID;
+			return 2;
+		}
+		auto wait = s.models.find(k.instanceID);
+		bool failed = wait != s.models.end() && wait->second.failed;
+		if (failed || GetTickCount() - s.remoteSince > 15000) {
+			return 0;  // the model does not come: the caller shows the local species instead
+		}
+		return 1;
 	}
 
 	void SendReliable(const uint8_t* data, size_t size)
