@@ -6,6 +6,10 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The log is rotated by size** (ArKoWol): `CoopMod.log` was only ever appended to (7000 lines, days of tests). When the game starts and the
+  log is over 300 KB it is moved to `CoopMod.old.log` (the older one is deleted). Within a test, including the automatic restart, nothing
+  is lost. No protocol change; tested on 1 PC: not yet.
+
 - **Research: loading a friend's save on our star without a restart, paused** (exxecute). New research tools, off by default:
   `COOP_LOAD_TRACE=1` (`game/LoadTrace.cpp`, `load:` lines) and `COOP_MOVE_SAVE=1` (`game/SaveIds.cpp`: save and planet records
   moved to the CO-OP star, records written into the game's planet database). A moved save still stops before reading its planets;
