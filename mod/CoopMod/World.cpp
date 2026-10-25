@@ -46,6 +46,7 @@ namespace
 		HostWorld host;
 		std::map<void*, uint32_t> ids;             // game object -> netId
 		std::map<uint32_t, ResourceKey> speciesSent;
+		std::map<void*, ResourceKey> profileKeys;  // species profile -> its key (see SpeciesKeyOf)
 		DWORD lastTick = 0, lastFull = 0;
 		bool fullNow = false;
 		int hostAnimals = 0;
@@ -111,6 +112,37 @@ namespace
 
 	// ------------------------------------------------------------ host
 
+	// The species of an NPC animal. Found by the first real test (friend's log: "species 00000000"): `mSpeciesKey` is
+	// zero for most NPC animals, only the species profile pointer (cCreatureBase +0xB20, or the herd's) is set. The key
+	// the game accepts in GetSpeciesProfile is the key of that profile in SpeciesManager.mSpeciesProfiles.
+	ResourceKey SpeciesKeyOf(State& s, Simulator::cCreatureAnimal* animal)
+	{
+		if (animal->mSpeciesKey.instanceID) {
+			return animal->mSpeciesKey;
+		}
+		Simulator::cSpeciesProfile* profile = animal->mpSpeciesProfile;
+		if (!profile && animal->mHerd) {
+			profile = animal->mHerd->mpSpeciesProfile;
+		}
+		if (!profile) {
+			return ResourceKey();
+		}
+		auto cached = s.profileKeys.find(profile);
+		if (cached != s.profileKeys.end()) {
+			return cached->second;
+		}
+		ResourceKey found;
+		for (auto it = SpeciesManager.mSpeciesProfiles.begin(); it != SpeciesManager.mSpeciesProfiles.end(); ++it) {
+			if (&it->second == profile) {
+				found = it->first;
+				break;
+			}
+		}
+		s.profileKeys[profile] = found;
+		Logf("world: species profile %p -> key %08x/%08x/%08x", (void*)profile, found.instanceID, found.typeID, found.groupID);
+		return found;
+	}
+
 	void HostTick(State& s, DWORD now, void* puppet)
 	{
 		if (now - s.lastTick < kHostTickMs) {
@@ -131,7 +163,8 @@ namespace
 			}
 			EntityState st;
 			st.kind = Kind::Creature;
-			st.species = animal->mSpeciesKey.instanceID;
+			const ResourceKey speciesKey = SpeciesKeyOf(s, animal);
+			st.species = speciesKey.instanceID;
 			const Vector3& p = animal->GetPosition();
 			const Math::Quaternion& q = animal->GetOrientation();
 			st.pos = { p.x, p.y, p.z };
@@ -139,11 +172,10 @@ namespace
 			st.health = animal->mHealthPoints;
 			st.maxHealth = animal->mMaxHealthPoints;
 			current[object] = st;
-			if (!s.speciesSent.count(st.species)) {
-				s.speciesSent[st.species] = animal->mSpeciesKey;
+			if (st.species && !s.speciesSent.count(st.species)) {
+				s.speciesSent[st.species] = speciesKey;
 				Writer w;
-				w.U8(kMsgSpecies); w.U32(animal->mSpeciesKey.instanceID); w.U32(animal->mSpeciesKey.typeID);
-				w.U32(animal->mSpeciesKey.groupID);
+				w.U8(kMsgSpecies); w.U32(speciesKey.instanceID); w.U32(speciesKey.typeID); w.U32(speciesKey.groupID);
 				QueueReliable(s, w.buf);
 			}
 		}
@@ -188,7 +220,10 @@ namespace
 
 	// ------------------------------------------------------------ guest
 
-	cHerdPtr MakeHerd(State& s, const EntityState& st)
+	// Builds the mirror: an EMPTY quiet herd plus an animal created into it (the way SporeCoop does it). A herd of size 1
+	// made by CreateHerd only got its animal when the game's own herd logic decided to, which happened for 23 of 99
+	// animals in the first guest test. Returns false when it has to wait (model on its way) or failed.
+	bool MakeMirror(State& s, const EntityState& st, Mirror& m)
 	{
 		Simulator::cSpeciesProfile* profile = nullptr;
 		auto key = s.species.find(st.species);
@@ -203,8 +238,8 @@ namespace
 			if (!wait.since) {
 				wait.since = now;
 			}
-			if (!wait.failed && !wait.done && now - wait.since < kModelWaitMs) {
-				return nullptr;
+			if (st.species && !wait.failed && !wait.done && now - wait.since < kModelWaitMs) {
+				return false;
 			}
 			if (auto avatar = GameNounManager.GetAvatar()) {
 				profile = SpeciesManager.GetSpeciesProfile(avatar->mSpeciesKey);
@@ -217,10 +252,21 @@ namespace
 			}
 		}
 		if (!profile) {
-			return nullptr;
+			return false;
 		}
 		Vector3 pos(st.pos.x, st.pos.y, st.pos.z);
-		return GameNounManager.CreateHerd(pos, profile, 1, false, 0, false);
+		cHerdPtr herd = GameNounManager.CreateHerd(pos, profile, 0, false, 0, false);
+		if (!herd) {
+			return false;
+		}
+		herd->mTargetHerdSize = 0;  // no breeding or respawn in a mirror's herd
+		herd->SetEnabled(false);
+		Simulator::cCreatureAnimal* animal = Simulator::cCreatureAnimal::Create(pos, profile, 1, herd.get(), false, false);
+		m.herd = herd;
+		if (animal) {
+			m.animal = animal;
+		}
+		return true;
 	}
 
 	void DestroyMirror(Mirror& m)
@@ -263,9 +309,10 @@ namespace
 				if (created >= 3) {
 					continue;  // a few new herds per frame, the game stutters otherwise
 				}
-				++created;
 				m = Mirror();
-				m.herd = MakeHerd(s, st);
+				if (MakeMirror(s, st, m)) {
+					++created;
+				}
 				continue;
 			}
 			if (!m.animal) {

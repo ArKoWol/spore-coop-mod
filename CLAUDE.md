@@ -166,6 +166,11 @@ player presses Continue.
   (`Spore_Content.package`), not in the save. A save holds creature keys only; the avatar's own creature lives in
   `EditorSaves.package`. `CoopModels\m_*.package` (see `Models.cpp`) is the safety net for species a guest cannot build.
   A planet has about 100 animals, 100 herds and 100 nests. Plan and gates: `docs/SYNC_REDESIGN.md`.
+  **`cCreatureBase::mSpeciesKey` is zero for most NPC animals**; the species is in `mpSpeciesProfile` (+0xB20, or the herd's
+  `mpSpeciesProfile`); its key is the one it has in `SpeciesManager.mSpeciesProfiles`. Dynamic objects (animals, nests, eggs,
+  obstacles, ornaments) differ between two machines that loaded the same save; fruit, plants, rocks and markers are identical.
+- **Mirror animals**: make an empty herd (`CreateHerd(..., 0, ...)`, `mTargetHerdSize = 0`, `SetEnabled(false)`) and put the
+  animal in with `cCreatureAnimal::Create(pos, profile, 1, herd)`; a herd of size 1 fills itself only when the game wants.
 
 ## Open work / ideas
 - Load the received world automatically (`cGamePersistenceManager::LoadGame`, undocumented) instead of pressing Continue.

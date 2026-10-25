@@ -5,6 +5,16 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fix: the guest's animals all had our species' model, and only a quarter of them appeared** (found in the friend's
+  `CoopMod.log` of the first test). (1) `cCreatureBase::mSpeciesKey` is **zero for most NPC animals**; the host therefore sent
+  species `00000000` for all of them and the guest, finding no such species, used the stand-in (the avatar's species) for every
+  mirror. The host now takes the key of the animal's species profile (`mpSpeciesProfile`, or its herd's) from
+  `SpeciesManager.mSpeciesProfiles` (`SpeciesKeyOf`, log line `world: species profile ... -> key ...`). (2) A herd of size 1
+  from `CreateHerd` only got its animal when the game's own herd logic decided so: 23 of 99 mirrors in the test. Mirrors are now
+  an **empty quiet herd** (`CreateHerd(..., 0, ...)`, `mTargetHerdSize = 0`, `SetEnabled(false)`) plus an animal made with
+  `cCreatureAnimal::Create(pos, profile, 1, herd)` (the way SporeCoop does it), which also removes the wait for the animal.
+  Species 0 (unknown) no longer waits 20 s for a model. Not tested with two PCs yet. No protocol change.
+
 - **README rewritten** (docs only): `README.md` now says what works and what does not yet, what you need, how to install
   and play, the console commands, a troubleshooting table, the developer quick start and the repository layout.
   `package/README.txt` (the player instructions in the zip) is brought up to date: the updater finds the game by itself,
