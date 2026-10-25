@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+namespace Simulator { class cCreatureAnimal; }
+
 namespace CoopNet
 {
 	struct JoinState
@@ -37,6 +39,11 @@ namespace CoopNet
 	// stops the session (Cancel in the window, Stop hosting)
 	void Cancel();
 	JoinState State();
+	// the other player of the session (host: the guest, guest: the host), 0 if none
+	uint64_t PeerId();
+	// the other player's creature in this game (the puppet), null if there is none yet
+	Simulator::cCreatureAnimal* Puppet();
+
 	// Steam name of a friend ("" if unknown)
 	std::string Name(uint64_t steamId);
 }

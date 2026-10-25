@@ -201,11 +201,24 @@ namespace UiDraw
 			mImage = new ImagePtr();
 		}
 		*mImage = image;  // keep the picture alive while it is shown
+		mWidth = width;
+		mHeight = height;
 		mWindow->SetArea(Math::Rectangle(x, y, x + width, y + height));
 		mWindow->SetVisible(true);
 		mWindow->Invalidate();  // without it the window keeps the old picture until the mouse touches it
 		main->BringToFront(mWindow);
 		return true;
+	}
+
+	void PictureWindow::MoveTo(float x, float y)
+	{
+		if (!mWindow) {
+			return;
+		}
+		mWindow->SetArea(Math::Rectangle(x, y, x + mWidth, y + mHeight));
+		if (!mWindow->IsVisible()) {
+			mWindow->SetVisible(true);
+		}
 	}
 
 	void PictureWindow::Hide()

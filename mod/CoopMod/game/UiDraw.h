@@ -56,6 +56,8 @@ namespace UiDraw
 
 		// shows `png` (width x height) at x, y of the main window, above the other windows
 		bool Show(std::vector<uint8_t>& png, float x, float y, int width, int height);
+		// moves the shown picture (same size), without drawing it again
+		void MoveTo(float x, float y);
 		void Hide();
 		bool Visible() const;
 		// Dispose: takes the window out of the main window
@@ -68,5 +70,6 @@ namespace UiDraw
 		UTFWin::Window* mWindow = nullptr;
 		UTFWin::ImageDrawable* mDrawable = nullptr;
 		ImagePtr* mImage = nullptr;
+		int mWidth = 0, mHeight = 0;
 	};
 }

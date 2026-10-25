@@ -58,6 +58,7 @@
     <ClInclude Include="game\LoadTrace.h" />
     <ClInclude Include="game\UiDraw.h" />
     <ClInclude Include="game\HostPanel.h" />
+    <ClInclude Include="game\NamePlates.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -75,6 +76,7 @@
     <ClCompile Include="game\LoadTrace.cpp" />
     <ClCompile Include="game\UiDraw.cpp" />
     <ClCompile Include="game\HostPanel.cpp" />
+    <ClCompile Include="game\NamePlates.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

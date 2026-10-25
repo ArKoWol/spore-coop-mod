@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Players' Steam names above their creatures** (exxecute; `game/NamePlates.cpp`): while a session runs, a small plate over
+  the other player's puppet and a smaller one over the own avatar, moved every frame to the creature's screen position (from
+  the camera's rays); hidden off screen, behind the camera, beyond 120 m and outside the creature stage. `coop echo` shows it on
+  one PC. Tested on 1 PC (with `coop echo`). No protocol change.
+
 - **Fix: an enemy mirror stood still while the real enemy stepped aside in a fight** (ArKoWol). Cause is my own change: every replayed animation
   (a fight is full of attack and hit animations) froze the mirror for 2.5 s (`PuppetMotion::Hold`), while the real enemy moved up to 6 m. The
   freeze now only holds while the creature is within 1 m of its target (`kHoldDistance`), so a mirror follows as soon as the enemy moves. Tested: not

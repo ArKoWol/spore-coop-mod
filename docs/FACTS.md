@@ -225,3 +225,8 @@ seen in our tests.
   header version 3, index flags 4, entries `type, group, instance, offset, size|0x80000000, size, 0, 1`). Names are `id("...")`
   = FNV-1 of the lower-case name. A PNG of any size works for UTFWin images.
 - UTFWin has no text window we can create from code; how the mod draws its windows is in `features/UI_STYLE.md`.
+- **World point to screen**: ModAPI has no such function. `cViewer::GetCameraToPoint(x, y, eye, dir)` (viewer from
+  `App::GetViewer()`) gives the ray through a window pixel; rays scaled to unit depth along the view direction are linear in the
+  pixel coordinates, so three rays give the projection. Its **vertical is in the same units as the horizontal**: a vertical
+  offset must be scaled by height / width *(verified 2026-10-25, `game/NamePlates.cpp`)*. The creature planet is centred at the
+  origin (|pos| about 513 on the test planet), so "up" at a creature is its position normalised.

@@ -9,6 +9,7 @@
 #include "game/CoopNet.h"
 #include "game/LoadTrace.h"
 #include "game/HostPanel.h"
+#include "game/NamePlates.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -1532,6 +1533,16 @@ namespace CoopNet
 	{
 		return SteamName(steamId);
 	}
+
+	uint64_t PeerId()
+	{
+		return sTransport == Transport::Steam && sHavePeer ? sPeerSteamId : 0;
+	}
+
+	Simulator::cCreatureAnimal* Puppet()
+	{
+		return sPuppet.get();
+	}
 }
 
 static void NetUpdate()
@@ -1548,6 +1559,7 @@ static void NetUpdate()
 	LoadTrace::HookDatabases(sModule);
 	CoopMenu::Update();
 	HostPanel::Update();
+	NamePlates::Update();
 	if (sEcho) {
 		if (inGame) {
 			EchoFeed(GetTickCount());
@@ -2078,6 +2090,7 @@ void Dispose()
 	World::Shutdown();
 	CoopMenu::Shutdown();
 	HostPanel::Shutdown();
+	NamePlates::Shutdown();
 	MenuWorlds::Shutdown();
 	SteamStop();
 	ConsoleStop();
