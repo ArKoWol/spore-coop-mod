@@ -572,9 +572,18 @@ namespace
 		}
 		s.lastNeuter = now;
 		std::vector<Simulator::cCreatureAnimal*> strays;
+		int animalsTotal = 0, herdsTotal = 0;
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
-			if (object->GetNounID() != Simulator::kCreatureAnimal || IsAvatar(object) || (void*)object == puppet) {
+			uint32_t noun = object->GetNounID();
+			if (noun == Simulator::kHerd) {
+				++herdsTotal;
+			}
+			if (noun != Simulator::kCreatureAnimal) {
+				continue;
+			}
+			++animalsTotal;
+			if (IsAvatar(object) || (void*)object == puppet) {
 				continue;
 			}
 			if (IsMirrorAnimal(s, object)) {
@@ -596,6 +605,14 @@ namespace
 			}
 		}
 		s.strays = (int)strays.size();
+		// Research for "hundreds of puppets inside each other after a mating call" (the guest's test of 2026-10-25): a census of what the
+		// game holds when something runs away, at most every 5 s.
+		static DWORD lastCensus = 0;
+		if (now - lastCensus > 5000 && (animalsTotal > (int)s.mirrors.size() + 15 || strays.size() > 5)) {
+			lastCensus = now;
+			Logf("world: census: %d animals (%d mirrors, %d strays about to go), %d herds, %d nest herds of ours", animalsTotal,
+				(int)s.mirrors.size(), (int)strays.size(), herdsTotal, (int)s.nestMirrors.size());
+		}
 		for (auto animal : strays) {
 			auto herd = animal->mHerd;
 			bool shared = false;  // a herd that also holds the avatar or the puppet is not destroyed whole

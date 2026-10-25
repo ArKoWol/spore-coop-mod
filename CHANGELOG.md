@@ -6,6 +6,10 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Research logging for the "hundreds of puppets after a mating call" report** (ArKoWol): the guest logs `world: census: N animals (M mirrors,
+  K strays), H herds` whenever more animals exist than mirrors (at most every 5 s). The cause is not known yet (the host's log shows
+  99 animals and no runaway; the guest's own game or our nest herds are suspected). Needs a two-PC test; tested: not yet; no protocol change.
+
 - **The log is rotated by size** (ArKoWol): `CoopMod.log` was only ever appended to (7000 lines, days of tests). When the game starts and the
   log is over 300 KB it is moved to `CoopMod.old.log` (the older one is deleted). Within a test, including the automatic restart, nothing
   is lost. No protocol change; tested on 1 PC: not yet.
