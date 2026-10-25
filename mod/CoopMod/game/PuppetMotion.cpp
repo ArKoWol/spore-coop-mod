@@ -12,6 +12,7 @@ namespace
 	PuppetMotion::Follower sPuppet;  // the remote player's puppet
 	DWORD sLastLog = 0;
 
+	const float kHoldDistance = 1.0f;     // an animation is only protected from stop/turn orders while the creature is this close to its target
 	const float kSnapDistance = 6.0f;     // farther than this behind: Teleport
 	const float kStopSpeed = 0.4f;        // the remote player counts as standing below this speed
 	const float kArriveDistance = 0.6f;   // close enough to stand still
@@ -77,7 +78,7 @@ namespace PuppetMotion
 		float distance = (target - position).Length();
 
 		// an animation (not a walk) is playing and the remote player stands: do not interrupt it with stop/turn orders
-		if (now < f.holdUntil && f.remoteSpeed < 0.6f && distance <= f.snap) {
+		if (now < f.holdUntil && f.remoteSpeed < 0.6f && distance <= kHoldDistance) {
 			return;
 		}
 

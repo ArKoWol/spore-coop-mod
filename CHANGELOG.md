@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: an enemy mirror stood still while the real enemy stepped aside in a fight** (ArKoWol). Cause is my own change: every replayed animation
+  (a fight is full of attack and hit animations) froze the mirror for 2.5 s (`PuppetMotion::Hold`), while the real enemy moved up to 6 m. The
+  freeze now only holds while the creature is within 1 m of its target (`kHoldDistance`), so a mirror follows as soon as the enemy moves. Tested: not
+  yet; no protocol change.
+
 - **Research logs for species change, corpses and mirror offset** (ArKoWol). The faster snapping of mirrors near the player was a
   wrong guess and is removed (the animal did not run away: it stood in front of the guest but at the host's side). New log lines:
   `mirror: N is X m from the host's position ...` (how far a mirror next to the player stands from the real animal), `world: our avatar is species ... profile sequence` (does the host's editor change the key or only the profile?
