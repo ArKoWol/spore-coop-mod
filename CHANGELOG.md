@@ -5,6 +5,15 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fix: two guest crashes ("reading 0000032c") and newborn animals that hatched with the guest's own species.**
+  (1) Found in the friend's log (`SporeApp.exe+0x948634` and `+0x76ca11`, both reading `0x32c`) and in SporeCoop's notes: the game
+  reads `*(creature + 0xE84) + 0x32C` for every creature without a null check. That pointer (`cCreatureBase::field_E84`) is filled when
+  a creature is made as a member of a nest herd; our mirrors (empty herd + `Create`) and the puppet had it empty. `World::EnsureTuning`
+  now gives them a blank object whose `+0x32C` is -1 (never freed: the game's creatures may point at it after the DLL is gone).
+  (2) A newborn's species is set a moment after it appears; the host announced it at once with species 0 and the guest built the
+  stand-in body (the avatar's species) and kept it. The host now holds an animal back for up to 3 s while its species is unknown, and a
+  mirror is rebuilt when the species or age of its entity changes. No protocol change. Untested in the game.
+
 - **Damage, deaths, the puppet's real health, and walking mirrors** (third guest test: the host's bites only lowered the max HP of
   the friend's copy to 0 without a death, the guest could not hurt anything, the puppet showed 13 HP instead of the player's 10,
   and the other animals slid). **`kProtocolVersion` is 7.**

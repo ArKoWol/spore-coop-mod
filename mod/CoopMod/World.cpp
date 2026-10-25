@@ -43,6 +43,7 @@ namespace
 		float rot[4] = { 0, 0, 0, 1 };
 		DWORD last = 0;
 		uint8_t age = 0;  // the age step the body was made for: a different one needs a new body
+		uint32_t species = 0;  // the species the body was made for (a hatchling's species becomes known a moment after it appears)
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
 		bool dead = false;
 	};
@@ -57,6 +58,7 @@ namespace
 		std::map<void*, uint32_t> ids;             // game object -> netId
 		std::map<uint32_t, ResourceKey> speciesSent;
 		std::map<void*, ResourceKey> profileKeys;  // species profile -> its key (see SpeciesKeyOf)
+		std::map<void*, DWORD> unresolvedSince;    // animal -> when we first saw it without a species
 		DWORD lastTick = 0, lastFull = 0;
 		bool fullNow = false;
 		int hostAnimals = 0;
@@ -124,6 +126,24 @@ namespace
 		sApplyingRemote = true;
 		victim->TakeDamage(damage, attackerId, type, Vector3(0.0f, 0.0f, 0.0f), attacker);
 		sApplyingRemote = false;
+	}
+
+	// Found in the friend's log (crashes "reading 0000032c", SporeApp+0x948634 and +0x76ca11) and in SporeCoop's notes: the game
+	// reads `*(creature + 0xE84) + 0x32C` for every creature (field_E84, filled when a creature is made as a member of a nest
+	// herd) without a null check. A mirror or a puppet made by us has it empty and crashes the game the first time something
+	// touches it. We give such creatures a blank object whose +0x32C is -1.
+	char* sBlankTuning = nullptr;
+
+	void EnsureTuning(Simulator::cCreatureBase* creature)
+	{
+		if (!creature || creature->field_E84) {
+			return;
+		}
+		if (!sBlankTuning) {
+			sBlankTuning = new char[0x800]();
+			*(int*)(sBlankTuning + 0x32C) = -1;
+		}
+		creature->field_E84 = sBlankTuning;
 	}
 
 	// The host says this animal is dead: let the game play the death (a lethal hit with no attacker, no rewards).
@@ -198,6 +218,18 @@ namespace
 			st.kind = Kind::Creature;
 			const ResourceKey speciesKey = SpeciesKeyOf(s, animal);
 			st.species = speciesKey.instanceID;
+			if (!st.species) {
+				// a newborn's species is set a moment after it appears; announcing it before would make the guest build the
+				// stand-in body (an egg of another species hatched as the guest's own species). One animal of the planet never
+				// gets a species: after 3 s it is announced as it is.
+				DWORD& since = s.unresolvedSince[object];
+				if (!since) {
+					since = now;
+				}
+				if (now - since < 3000) {
+					continue;
+				}
+			}
 			const Vector3& p = animal->GetPosition();
 			const Math::Quaternion& q = animal->GetOrientation();
 			st.pos = { p.x, p.y, p.z };
@@ -216,6 +248,9 @@ namespace
 			}
 		}
 		s.hostAnimals = (int)current.size();
+		for (auto it = s.unresolvedSince.begin(); it != s.unresolvedSince.end();) {
+			it = current.count(it->first) ? std::next(it) : s.unresolvedSince.erase(it);
+		}
 
 		s.host.AdvanceTick();
 		// gone
@@ -310,7 +345,9 @@ namespace
 		m.herd = herd;
 		if (animal) {
 			m.animal = animal;
+			EnsureTuning(animal);
 		}
+		m.species = st.species;
 		return true;
 	}
 
@@ -364,11 +401,12 @@ namespace
 				++m.waitFrames;
 				if (!m.herd->mHerd.empty()) {
 					m.animal = m.herd->mHerd[0];
+					EnsureTuning(m.animal.get());
 				}
 				continue;
 			}
 			// grew up (or was made with another age): build the body again, the model of a baby and an adult differ
-			if (st.age && m.age != st.age) {
+			if ((st.age && m.age != st.age) || (st.species && m.species != st.species)) {
 				DestroyMirror(m);
 				m = Mirror();
 				continue;
@@ -880,8 +918,14 @@ namespace World
 		sState = nullptr;
 	}
 
+	void EnsureTuning(void* creature)
+	{
+		::EnsureTuning(static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creature)));
+	}
+
 	void Shutdown()
 	{
+		// sBlankTuning is NOT freed: creatures of the game (the puppet) may still point at it after the DLL is gone.
 		Reset();
 		Models::Shutdown();
 	}

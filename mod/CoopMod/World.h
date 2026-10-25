@@ -39,6 +39,10 @@ namespace World
 	// Console tests of the damage code on one PC: `coop hit` bites, `coop kill` kills the nearest animal.
 	void TestHit(bool kill);
 
+	// A creature we made ourselves (a mirror, the player puppet) lacks the object the game reads at creature + 0xE84 (+ 0x32C)
+	// without a null check: give it a blank one, otherwise the game crashes ("reading 0000032c").
+	void EnsureTuning(void* creature);
+
 	// Connection gone: forget the table and remove the mirrors.
 	void Reset();
 	// Dispose: also free the memory (no static destructors may run later).

@@ -245,6 +245,7 @@ static void PickUpPuppet()
 	if (!sPuppetHerd->mHerd.empty()) {
 		sPuppet = sPuppetHerd->mHerd[0];
 		sPuppetRaw = sPuppet.get();
+		World::EnsureTuning(sPuppetRaw);
 		Logf("puppet animal found after %d frames", sPuppetWaitFrames);
 	}
 }
