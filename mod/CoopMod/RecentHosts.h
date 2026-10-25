@@ -16,4 +16,7 @@ namespace RecentHosts
 
 	// `coop friends`: the list, newest first, with numbers for coopjoin.
 	void Print();
+
+	// The list for the co-op window: entry `index` (0 = newest); false past the end. `name` may be empty.
+	bool Get(size_t index, uint64_t& steamId, char* name, size_t nameSize, long long& when);
 }

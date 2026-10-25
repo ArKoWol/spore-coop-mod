@@ -23,6 +23,13 @@ pushed into `StarManager.mSavedGameStarRecords`. **The galaxy showed it at once*
 date, creature). No restart, no UI rebuild (calling `GlobalGGEUI::InitializeUI` again is not needed and crashes the game at exit).
 
 This opens **path C** below: the friend's world as one more star in your own galaxy, marked as co-op, removed when you leave.
+
+**Built (2026-10-25, stubs, 1 PC):** the CO-OP star near the centre at every start and our window next to its card
+(`game/CoopMenu.cpp`): remembered hosts, Test friend, Join by Steam ID (clipboard), fake download, then the card's own Play
+(hidden until ready). J6 passed; **J8 failed** and the star vanishes after leaving a game without saving (both explained in
+`../FACTS.md` section 6, tracked in a GitHub issue). Ideas for the star: find why a save on our planet crashes the load
+(fixes J8 too); write our planets into `planetRecords.pkp` before the start and remove them after exit; leave the co-op world
+through a quick restart; a CO-OP button in the left menu instead of a star (needs what the card's Play prepares).
 Still unknown (next spikes): **J6** Play / `LoadGame` on such a star loads the copied save (creature, planet, terrain); **J7** the
 game keeps or drops the star when it saves the galaxy (we want it dropped, or removed by us before every save); **J8** the
 received `.spo` of another universe works on a star of ours (its planet and star ids belong to the host's galaxy).

@@ -29,7 +29,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/RecentHosts.cpp/.h` | remembered hosts in `%APPDATA%\Spore\Games\CoopHosts.txt` (`steamid<TAB>unixtime<TAB>name`, newest first, 10 at most) |
 | `mod/CoopMod/Log.cpp/.h` | `CoopMod.log` |
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
-| `mod/CoopMod/game/MenuWorlds.cpp/.h` | main-menu spike: add, list and remove save stars (`coop slots/addworld/addcenter/delworld/menureload`); logging detours on `cGameModeManager::SetActiveMode/SetActiveModeAt/SetActiveModeByName` and `cGamePersistenceManager::LoadGame` |
+| `mod/CoopMod/game/MenuWorlds.cpp/.h` | save stars in the open galaxy (`AddWorld`, `RemoveWorld`, `SelectedStar`; dev commands `coop slots/addworld/addcenter/delworld/menureload/ggefind`); detours on `cGameModeManager::SetActiveMode/At/ByName` (logging; `ByName("LoadGame")` asks `CoopMenu::HoldPlay`) and the main menu mode's `OnEnter` |
+| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, stub download, hides the card's Play until a world is ready (`coop menu/menuready/carddump`) |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 
 ## 3. Each frame

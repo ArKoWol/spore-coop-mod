@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace Models
@@ -25,6 +26,10 @@ namespace Models
 
 	// Guest: writes CoopModels\m_<group>_<instance>.package and registers it. False on failure.
 	bool Install(uint32_t instance, uint32_t type, uint32_t group, const std::vector<Record>& records);
+
+	// Writes `records` as a DBPF package at `path` and registers it with the resource manager (unregistered in Shutdown).
+	// Also used for the co-op window's pictures (game/CoopMenu.cpp).
+	bool WritePackage(const std::wstring& path, const std::vector<Record>& records);
 
 	// Guest, once per run: registers the packages saved in earlier sessions.
 	void RegisterCached();

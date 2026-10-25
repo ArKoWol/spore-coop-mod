@@ -52,6 +52,7 @@
     <ClInclude Include="RecentHosts.h" />
     <ClInclude Include="game\PuppetMotion.h" />
     <ClInclude Include="game\MenuWorlds.h" />
+    <ClInclude Include="game\CoopMenu.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -64,6 +65,7 @@
     <ClCompile Include="RecentHosts.cpp" />
     <ClCompile Include="game\PuppetMotion.cpp" />
     <ClCompile Include="game\MenuWorlds.cpp" />
+    <ClCompile Include="game\CoopMenu.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

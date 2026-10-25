@@ -162,6 +162,19 @@ namespace Models
 		return ok;
 	}
 
+	bool WritePackage(const std::wstring& path, const std::vector<Record>& records)
+	{
+		std::vector<uint8_t> bytes = BuildPackage(records);
+		FILE* f = _wfopen(path.c_str(), L"wb");
+		if (!f) {
+			Logf("models: cannot write %ls", path.c_str());
+			return false;
+		}
+		fwrite(bytes.data(), 1, bytes.size(), f);
+		fclose(f);
+		return Register(path);
+	}
+
 	void RegisterCached()
 	{
 		if (sCachedDone) {

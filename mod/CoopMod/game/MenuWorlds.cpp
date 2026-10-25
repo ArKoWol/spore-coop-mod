@@ -1,6 +1,7 @@
 // MenuWorlds.cpp : see MenuWorlds.h.
 #include "stdafx.h"
 #include "MenuWorlds.h"
+#include "CoopMenu.h"
 #include "../Log.h"
 
 #include <Spore\Simulator\SubSystem\StarManager.h>
@@ -10,6 +11,7 @@
 #include <Spore\App\cGameModeManager.h>
 #include <Spore\GalaxyGameEntry\GlobalGGEUI.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -69,6 +71,53 @@ namespace
 				planet->mFlags, t.groupID, t.instanceID, t.typeID);
 			Print(line);
 		}
+	}
+
+	// The game finds the star of a save from the save itself: entry 0x0355C93A of the .spo (uncompressed, a few dozen
+	// bytes) holds the played planet's PlanetID (field 0x0355FA98, the first value, at +72). A copied save still points at
+	// the template's planet, so after the galaxy is read again (leaving a game without saving) it shows on the template's
+	// star and ours is gone. Pointing it at our planet makes the game itself put the save on our star.
+	bool PatchSavePlanet(const std::string& path, uint32_t fromPlanet, uint32_t toPlanet)
+	{
+		FILE* f = fopen(path.c_str(), "r+b");
+		if (!f) {
+			return false;
+		}
+		bool done = false;
+		uint8_t head[96];
+		if (fread(head, 1, 96, f) == 96 && memcmp(head, "DBPF", 4) == 0) {
+			auto u32 = [](const uint8_t* p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; };
+			uint32_t count = u32(head + 0x24), indexOffset = u32(head + 0x40), indexSize = u32(head + 0x2C);
+			std::vector<uint8_t> index(indexSize);
+			fseek(f, (long)indexOffset, SEEK_SET);
+			if (indexSize > 8 && fread(index.data(), 1, indexSize, f) == indexSize) {
+				uint32_t flags = u32(index.data());
+				size_t p = 4 + ((flags & 1) ? 4 : 0) + ((flags & 2) ? 4 : 0) + ((flags & 4) ? 4 : 0);
+				for (uint32_t i = 0; i < count && !done; ++i) {
+					uint32_t type = (flags & 1) ? 0 : u32(&index[p]);
+					p += (flags & 1) ? 0 : 4;
+					p += (flags & 2) ? 0 : 4;  // group
+					p += 4;                    // instance
+					uint32_t offset = u32(&index[p]);
+					uint16_t compression = (uint16_t)(index[p + 12] | index[p + 13] << 8);
+					p += 16;
+					if (type == 0x0355C93A && compression == 0) {
+						uint8_t value[4];
+						fseek(f, (long)offset + 72, SEEK_SET);
+						if (fread(value, 1, 4, f) == 4) {
+							uint32_t current = (uint32_t)value[0] << 24 | value[1] << 16 | value[2] << 8 | value[3];
+							if (current == fromPlanet) {
+								uint8_t to[4] = { (uint8_t)(toPlanet >> 24), (uint8_t)(toPlanet >> 16), (uint8_t)(toPlanet >> 8), (uint8_t)toPlanet };
+								fseek(f, (long)offset + 72, SEEK_SET);
+								done = fwrite(to, 1, 4, f) == 4;
+							}
+						}
+					}
+				}
+			}
+		}
+		fclose(f);
+		return done;
 	}
 
 	bool IsAdded(cStarRecord* star)
@@ -261,7 +310,28 @@ member_detour(SetActiveModeByName_detour, App::cGameModeManager, bool(const char
 		snprintf(line, sizeof(line), "mode: SetActiveModeByName(%s) from 0x%x", name ? name : "null", this->GetActiveModeID());
 		Print(line);
 		LogStack("mode:");
+		if (name && strcmp(name, "GalaxyGameEntry") == 0) {
+			CoopMenu::EnsureStar();
+		}
+		// Play in the main menu: the CO-OP star without a friend's world opens our window instead of loading
+		if (name && strcmp(name, "LoadGame") == 0 && CoopMenu::HoldPlay()) {
+			Print("mode: LoadGame held for the CO-OP window");
+			return false;
+		}
 		return original_function(this, name);
+	}
+};
+
+// The main menu mode's OnEnter: when the player leaves a game without saving, the galaxy is read again from disk before
+// this (our CO-OP star, which lives only in memory, is gone) and the menu builds its star markers inside it. Putting the
+// star back right before it makes the menu draw it.
+member_detour(GGEOnEnter_detour, App::IGameMode, bool())
+{
+	bool detoured()
+	{
+		Print("mode: main menu OnEnter");
+		CoopMenu::EnsureStar();
+		return original_function(this);
 	}
 };
 
@@ -328,12 +398,12 @@ namespace MenuWorlds
 		Print(line);
 	}
 
-	void AddTestWorld(bool nearCenter)
+	cStarRecord* AddWorld(const char* narrow, bool nearCenter)
 	{
 		cStarManager* stars = cStarManager::Get();
 		if (!stars || stars->mSavedGameStarRecords.empty() || !stars->mSavedGameStarRecords[0]) {
 			Print("addworld: needs at least one saved game in this universe (the template)");
-			return;
+			return nullptr;
 		}
 		// template: a creature-stage save if there is one
 		cStarRecord* tmpl = stars->mSavedGameStarRecords[0].get();
@@ -374,7 +444,7 @@ namespace MenuWorlds
 					}
 				}
 			}
-			return;
+			return nullptr;
 		}
 		Added a;
 		a.star = target;
@@ -383,11 +453,9 @@ namespace MenuWorlds
 		a.oldName = target->mName;
 		a.oldStarter = target->mStarterWorldID;
 
-		char16_t name[16];
-		char narrow[16];
-		snprintf(narrow, sizeof(narrow), "test%d", sNextTest++);
+		char16_t name[64];
 		size_t i = 0;
-		for (; narrow[i]; ++i) {
+		for (; narrow[i] && i < 63; ++i) {
 			name[i] = (char16_t)narrow[i];
 		}
 		name[i] = 0;
@@ -412,6 +480,36 @@ namespace MenuWorlds
 		}
 		StarManager.RequirePlanetsForStar(target);
 		auto& planets = target->GetPlanetRecords();
+		// the copied save refers to every planet of the template's system (planet ids 0..n-1 of the star): give our star
+		// the same number of planets, each like the template's (the generated count is random, 1 to 8)
+		auto& tmplPlanets = tmpl->GetPlanetRecords();
+		while (planets.size() < tmplPlanets.size()) {
+			cPlanetRecordPtr extra;
+			cPlanetRecord::Create(PlanetID(target->mKey, (unsigned)planets.size()), extra);
+			if (!extra) {
+				break;
+			}
+			planets.push_back(extra);
+		}
+		for (size_t k = 1; k < planets.size() && k < tmplPlanets.size(); ++k) {
+			cPlanetRecord* p = planets[k].get();
+			cPlanetRecord* s = tmplPlanets[k].get();
+			if (!p || !s) {
+				continue;
+			}
+			p->mName = s->mName;
+			p->mType = s->mType;
+			p->mTechLevel = s->mTechLevel;
+			p->mFlags = s->mFlags;
+			p->mGeneratedTerrainKey = s->mGeneratedTerrainKey;
+			p->mAtmosphereScore = s->mAtmosphereScore;
+			p->mTemperatureScore = s->mTemperatureScore;
+			p->mWaterScore = s->mWaterScore;
+			p->mPlantSpecies = s->mPlantSpecies;
+			p->mAnimalSpecies = s->mAnimalSpecies;
+			p->mOrbit = s->mOrbit;
+		}
+		target->mPlanetCount = (char)planets.size();
 		if (played && !planets.empty() && planets[0]) {
 			cPlanetRecord* p0 = planets[0].get();
 			p0->mName = name;
@@ -419,9 +517,29 @@ namespace MenuWorlds
 			p0->mTechLevel = played->mTechLevel;
 			p0->mFlags = played->mFlags;
 			p0->mGeneratedTerrainKey = played->mGeneratedTerrainKey;
+			// what a creature-stage load reads from the planet record (a copied save that points at this planet crashed
+			// without them): climate, the planet's species, orbit and rotation, objects, spice
+			p0->mAtmosphereScore = played->mAtmosphereScore;
+			p0->mTemperatureScore = played->mTemperatureScore;
+			p0->mWaterScore = played->mWaterScore;
+			p0->mPlantSpecies = played->mPlantSpecies;
+			p0->mAnimalSpecies = played->mAnimalSpecies;
+			p0->mOrbit = played->mOrbit;
+			p0->mbRotationIsNull = played->mbRotationIsNull;
+			p0->mRotationAxis = played->mRotationAxis;
+			p0->mRotationPeriod = played->mRotationPeriod;
+			p0->mPlanetRing = played->mPlanetRing;
+			p0->field_AD = played->field_AD;
+			p0->mPlanetObjects = played->mPlanetObjects;
+			p0->mTerrainStampsToRemove = played->mTerrainStampsToRemove;
+			p0->mbHomeWorld = played->mbHomeWorld;
+			p0->field_188 = played->field_188;
+			p0->mSpiceGen = played->mSpiceGen;
 			std::string from = Game0Dir() + Narrow(played->mName) + ".spo";
 			std::string to = Game0Dir() + narrow + ".spo";
-			bool copied = CopyFileA(from.c_str(), to.c_str(), TRUE) != 0;
+			// an exact copy: it still points at the template's planet, whose records are on disk, so Play loads it. Pointing it
+			// at our planet (PatchSavePlanet) keeps the star after a galaxy reload but the load crashes (FACTS.md section 6)
+			bool copied = CopyFileA(from.c_str(), to.c_str(), FALSE) != 0;
 			if (copied) {
 				a.spo = to;
 			}
@@ -437,7 +555,73 @@ namespace MenuWorlds
 		stars->mSavedGameStarRecords.push_back(cStarRecordPtr(target));
 		DescribeStar(tmpl, "addworld: template");
 		DescribeStar(target, "addworld: added");
-		Print("addworld: done; look at the galaxy (coop menureload rebuilds the menu, coop delworld undoes it)");
+		return target;
+	}
+
+	void AddTestWorld(bool nearCenter)
+	{
+		char narrow[16];
+		snprintf(narrow, sizeof(narrow), "test%d", sNextTest++);
+		if (AddWorld(narrow, nearCenter)) {
+			Print("addworld: done; look at the galaxy (coop delworld undoes it)");
+		}
+	}
+
+	std::string SavePath(cStarRecord* star)
+	{
+		for (const Added& a : sAdded) {
+			if (a.star.get() == star) {
+				return a.spo;
+			}
+		}
+		return "";
+	}
+
+	void RenameWorld(cStarRecord* star, const char* narrow)
+	{
+		eastl::string16 name;
+		for (const char* c = narrow; *c; ++c) {
+			name += (char16_t)(unsigned char)*c;
+		}
+		star->mName = name;
+	}
+
+	void Forget(cStarRecord* star)
+	{
+		for (auto it = sAdded.begin(); it != sAdded.end(); ++it) {
+			if (it->star.get() == star) {
+				sAdded.erase(it);
+				return;
+			}
+		}
+	}
+
+	void RemoveWorld(cStarRecord* star)
+	{
+		cStarManager* stars = cStarManager::Get();
+		for (auto it = sAdded.begin(); it != sAdded.end(); ++it) {
+			if (it->star.get() != star) {
+				continue;
+			}
+			if (stars) {
+				auto& list = stars->mSavedGameStarRecords;
+				for (auto s = list.begin(); s != list.end(); ++s) {
+					if (s->get() == star) {
+						list.erase(s);
+						break;
+					}
+				}
+			}
+			star->mFlags = it->oldFlags;
+			star->mTechLevel = it->oldTech;
+			star->mName = it->oldName;
+			star->mStarterWorldID = it->oldStarter;
+			if (!it->spo.empty()) {
+				DeleteFileA(it->spo.c_str());
+			}
+			sAdded.erase(it);
+			return;
+		}
 	}
 
 	void RemoveTestWorlds()
@@ -540,15 +724,42 @@ namespace MenuWorlds
 
 	void AttachStartupHooks()
 	{
+
 		SetActiveMode_detour::attach(GetAddress(App::cGameModeManager, SetActiveMode));
 		SetActiveModeAt_detour::attach(GetAddress(App::cGameModeManager, SetActiveModeAt));
 		SetActiveModeByName_detour::attach(GetAddress(App::cGameModeManager, SetActiveModeByName));
 	}
 
+	bool sGGEHooked = false;
+
+	void HookMenuEnter(HMODULE module)
+	{
+		if (sGGEHooked) {
+			return;
+		}
+		App::IGameMode* gge = GameModeManager.GetGameMode(GameModeIDs::kGGEMode);
+		if (!gge) {
+			return;
+		}
+		void** vtable = *(void***)gge;
+		uintptr_t address = (uintptr_t)vtable[0x18 / 4];  // OnEnter
+		PrepareDetours(module);
+		GGEOnEnter_detour::attach(address);
+		sGGEHooked = CommitDetours() == NO_ERROR;
+		char line[100];
+		snprintf(line, sizeof(line), "mode: main menu OnEnter at %08x hooked: %s", (unsigned)address, sGGEHooked ? "yes" : "NO");
+		Print(line);
+	}
+
 	void DetachHook()
 	{
+		if (sGGEHooked) {
+			GGEOnEnter_detour::detach();
+			sGGEHooked = false;
+		}
 		SetActiveMode_detour::detach();
 		SetActiveModeAt_detour::detach();
+
 		SetActiveModeByName_detour::detach();
 		if (sLoadListener) {
 			for (uint32_t id : kWatchedMessages) {
@@ -590,6 +801,16 @@ namespace MenuWorlds
 		}
 	}
 
+	uint32_t SelectedStar()
+	{
+		const uint8_t* gge = (const uint8_t*)GalaxyGameEntry::GlobalGGEUI::Get();
+		uint32_t object = 0, id = 0;
+		if (!gge || !ReadWord(gge + 0xFC, object) || object < 0x10000 || !ReadWord((const uint8_t*)(uintptr_t)object + 0x7C, id)) {
+			return 0;
+		}
+		return id;
+	}
+
 	void FindSelected()
 	{
 		if (sAdded.empty()) {
@@ -606,6 +827,7 @@ namespace MenuWorlds
 
 	void Shutdown()
 	{
+
 		delete sHeld;
 		sHeld = nullptr;
 		std::vector<Added>().swap(sAdded);

@@ -5,6 +5,7 @@
 #include "game/PuppetMotion.h"
 #include "RecentHosts.h"
 #include "game/MenuWorlds.h"
+#include "game/CoopMenu.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -1457,6 +1458,8 @@ static void NetUpdate()
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
 	MenuWorlds::Update();
+	MenuWorlds::HookMenuEnter(sModule);
+	CoopMenu::Update();
 	if (sEcho) {
 		if (inGame) {
 			EchoFeed(GetTickCount());
@@ -1787,6 +1790,15 @@ public:
 		else if (strcmp(sub, "holdplay") == 0) {
 			MenuWorlds::SetHoldPlay(sModule);
 		}
+		else if (strcmp(sub, "menu") == 0) {
+			CoopMenu::Open();
+		}
+		else if (strcmp(sub, "carddump") == 0) {
+			CoopMenu::DumpCard();
+		}
+		else if (strcmp(sub, "menuready") == 0) {
+			CoopMenu::MarkReady();
+		}
 		else if (strcmp(sub, "ggefind") == 0) {
 			MenuWorlds::FindSelected();
 		}
@@ -1979,6 +1991,7 @@ void Dispose()
 	NetStop();
 	World::SetTransport(nullptr, nullptr);
 	World::Shutdown();
+	CoopMenu::Shutdown();
 	MenuWorlds::Shutdown();
 	SteamStop();
 	ConsoleStop();

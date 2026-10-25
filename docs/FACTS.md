@@ -91,6 +91,24 @@ seen in our tests.
   `SetActiveModeByName`, not `SetActiveMode`. A save star whose `.spo` was copied from another save loads normally by Play
   *(verified 2026-10-25)*.
 - A save written while an editor is opening cannot be loaded *(SporeCoop)*.
+- **Leaving a game without saving reloads the galaxy from disk** and **rebuilds the saved-game list by scanning the `.spo`
+  files** inside the switch to the menu (`SetActiveModeAt(0)`): each save names its played planet in entry `0x0355C93A`
+  (uncompressed, field `0x0355FA98`, the first value, at +72, big-endian PlanetID); the save goes on that planet's star and the
+  star markers are built right then. A star added to the list later (even before the menu's `OnEnter`) is not drawn. A copied
+  save therefore lands on the template's star, and an in-memory star vanishes *(verified 2026-10-25)*.
+- A copied save whose planet ids were all rewritten to an in-memory planet (fields of the template's planets copied) is put on
+  our star but **its load crashes** (`SporeApp.exe+0x78dc10`, reading 0x2c) *(verified 2026-10-25)*; a save of another universe
+  copied as it is crashes too (`+0x7babe2`). Probably the load reads planet records from `planetRecords.pkp` *(guess)*.
+- **`stars.db`** is a DBPF; entry type `0x03E4353C` holds all 42010 star records in one RefPack blob: each record is big-endian
+  `[size][8-byte id][0x01A80D26][payload size][field count][(field id, size) table][values]`, name as UTF-16LE. The game reads
+  the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list
+  *(verified 2026-10-25)*. **`planetRecords.pkp`**: one entry per planet (instance = PlanetID), each a nested DBPF.
+- The star card: its caption window holds the star name; its Play button is control id `0x0375408c` (an `IButton`), the bin
+  and close buttons are next to it. **The game ignores synthetic clicks** (mouse down/up sent with `SendMsg`, or a button-click
+  message) on it, and `SetActiveModeByName("LoadGame")` called by the mod crashes (`+0x293df0`): only the player's click works
+  *(verified 2026-10-25)*. The card's 3D planet is drawn over all UI.
+- Hooking `cMessageManager::MessageSend` (Detours) or the manager's vtable slots 0x14/0x18 crashes at the first message: the
+  ModAPI layout of `IMessageManager` does not match this build *(verified 2026-10-25)*.
 
 ## 7. Creatures, herds, puppets and mirrors
 - Creature stage is on a **sphere**: positions and orientations are full 3D values; copy them as they are, never assume a flat

@@ -159,6 +159,18 @@ namespace RecentHosts
 		return 0;
 	}
 
+	bool Get(size_t index, uint64_t& steamId, char* name, size_t nameSize, long long& when)
+	{
+		std::vector<Host> hosts = Load();
+		if (index >= hosts.size()) {
+			return false;
+		}
+		steamId = hosts[index].id;
+		when = hosts[index].when;
+		snprintf(name, nameSize, "%s", hosts[index].name.c_str());
+		return true;
+	}
+
 	void Print()
 	{
 		std::vector<Host> hosts = Load();
