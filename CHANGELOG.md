@@ -6,18 +6,15 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
-<<<<<<< Updated upstream
-- **Combat by PLAN rule 3, "the actor decides"** (ArKoWol). The guest's own bite on a mirror is applied natively on his machine (health,
-  death, DNA reward from the game) and reported to the host (`kMsgDamageReq`), which applies it with the guest's puppet as attacker;
-  an eaten mirror is reported with `kMsgEaten` and the host removes the real animal. Why: the old way (block, ask the host) gave the
-  guest no native death or reward and a corpse that could not be eaten. Not tested; **protocol 11**: both must update; see `ARCHITECTURE.md` section 7.
-=======
 - **CO-OP star and window in the main menu, with stubs** (exxecute; `game/CoopMenu.cpp`, plan `docs/features/JOIN_FLOW.md`): a
   "CO-OP" save star near the galaxy's centre at every start; selecting it opens our window next to its card (remembered hosts,
   Test friend, Join by Steam ID from the clipboard, a fake 3 s download, then the card's own Play loads the world). The card's
   Play is hidden until a world is "ready". Known bug: the star vanishes after leaving a game without saving (GitHub issue; facts:
   `FACTS.md` section 6). Tested on 1 PC. No protocol change. `coop menu`, `menuready`, `carddump`, `ggefind` are dev commands.
->>>>>>> Stashed changes
+- **Combat by PLAN rule 3, "the actor decides"** (ArKoWol). The guest's own bite on a mirror is applied natively on his machine (health,
+  death, DNA reward from the game) and reported to the host (`kMsgDamageReq`), which applies it with the guest's puppet as attacker;
+  an eaten mirror is reported with `kMsgEaten` and the host removes the real animal. Why: the old way (block, ask the host) gave the
+  guest no native death or reward and a corpse that could not be eaten. Not tested; **protocol 11**: both must update; see `ARCHITECTURE.md` section 7.
 
 - **Documents reorganised** (docs only; owner's request). One live plan (`docs/PLAN.md`) instead of four; new `docs/README.md`
   (index), `STATUS.md`, `DECISIONS.md`, `ARCHITECTURE.md`, `FACTS.md`, `TESTING.md`; `CLAUDE.md` now has the reading order and the
