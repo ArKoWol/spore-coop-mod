@@ -664,10 +664,13 @@ namespace
 			return;
 		}
 		s.lastTelemetry = now;
-		int placed = 0;
+		int placed = 0, bodiless = 0;
 		for (auto& m : s.mirrors) {
 			if (m.second.animal) {
 				++placed;
+				if (!m.second.animal->mpAnimatedCreature) {
+					++bodiless;  // the animal exists but has no body model (owner: "half of them are bodiless dummies")
+				}
 			}
 		}
 		Writer w;
@@ -675,8 +678,8 @@ namespace
 		QueueReliable(s, w.buf);
 		if (now - s.lastLog >= 10000) {
 			s.lastLog = now;
-			Logf("world: guest table %d, mirrors %d, strays now %d, strays removed so far %d", (int)s.guest->entities().size(),
-				placed, s.strays, s.removedStrays);
+			Logf("world: guest table %d, mirrors %d (%d without a body model), strays now %d, strays removed so far %d",
+				(int)s.guest->entities().size(), placed, bodiless, s.strays, s.removedStrays);
 		}
 	}
 
@@ -876,8 +879,19 @@ namespace
 			++made;
 		}
 		if (made) {
-			Logf("nests: made %d from the host's list (%d in the list, %d made so far, %d failed)", made, (int)s.nestList.size(), s.nestsCreated,
-				s.nestsFailed);
+			int nestObjects = 0, withHerd = 0;
+			for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+				Simulator::cGameData* object = &*it;
+				if (object->GetNounID() == Simulator::kNest) {
+					++nestObjects;
+					auto nest = object_cast<Simulator::cNest>(object);
+					if (nest && nest->mpHerd) {
+						++withHerd;
+					}
+				}
+			}
+			Logf("nests: made %d from the host's list (%d in the list, %d made so far, %d failed); the game now holds %d Nest objects, %d with a herd",
+				made, (int)s.nestList.size(), s.nestsCreated, s.nestsFailed, nestObjects, withHerd);
 		}
 		// nests we made that the host no longer has
 		for (auto it = s.nestMirrors.begin(); it != s.nestMirrors.end();) {

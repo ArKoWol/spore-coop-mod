@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Research logs: bodiless mirrors and invisible nests** (ArKoWol). Owner: after the mating call "bodiless dummies" appear around the guest's nest
+  (half of the animals without a body, the sound comes from under the nest) and the host's nests are still not seen on the guest. The guest now logs how
+  many mirrors have no body model (`mpAnimatedCreature` null) and, after each batch of nests, how many `Nest` objects the game holds and how
+  many of them have a herd. Tested: not yet; no protocol change. Next test: pass the guest's `CoopMod.log` and, while the dummies are there, `coop dump`.
+
 - **Players' Steam names above their creatures** (exxecute; `game/NamePlates.cpp`): while a session runs, a small plate over
   the other player's puppet and a smaller one over the own avatar, moved every frame to the creature's screen position (from
   the camera's rays); hidden off screen, behind the camera, beyond 120 m and outside the creature stage. `coop echo` shows it on
