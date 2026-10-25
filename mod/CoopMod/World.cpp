@@ -98,6 +98,7 @@ namespace
 		bool remoteKnown = false;
 		DWORD remoteSince = 0;
 		ResourceKey sentKey;                 // species of our own avatar as last sent
+		uint32_t sentSeq = 0;                // its profile sequence (changes when the editor changed the creature)
 		DWORD lastSpeciesSend = 0;
 		void* puppet = nullptr;              // the other player's puppet (a cCreatureAnimal*)
 		DWORD lastAvatarSend = 0;
@@ -179,7 +180,14 @@ namespace
 	// The host says this animal is dead: let the game play the death (a lethal hit with no attacker, no rewards).
 	void KillLocally(Simulator::cCreatureAnimal* animal)
 	{
+		static int logged = 0;
+		bool before = animal->mbDead;
 		DealDamage(animal, animal->mMaxHealthPoints + 100.0f, Simulator::kMelee, nullptr, 0);
+		if (logged++ < 20) {
+			// research: why can the guest not eat a mirror's corpse? what state does the replayed death leave?
+			Logf("kill: mirror %p dead %d -> %d, health %.1f, eaten %d, flags %x", (void*)animal, before ? 1 : 0, animal->mbDead ? 1 : 0,
+				animal->mHealthPoints, animal->mbHasBeenEaten ? 1 : 0, (unsigned)animal->mGeneralFlags);
+		}
 	}
 
 	void FlushReliable(State& s)
@@ -558,6 +566,9 @@ namespace
 			}
 			else {
 				// the game's locomotion walks the animal to the host's position (legs move), see game/PuppetMotion.cpp
+				// Near the player a mirror must stand where the real animal stands, or his bites hit air (friend's test: the real animal
+				// had moved away, the walking mirror lagged behind at 4 m/s): snap sooner.
+				m.follower.snap = (m.pos - avatar->GetPosition()).Length() < 40.0f ? 2.0f : 6.0f;
 				PuppetMotion::Drive(m.follower, m.animal.get(), m.pos, rotation);
 			}
 		}
@@ -939,7 +950,13 @@ namespace World
 			if (auto avatar = GameNounManager.GetAvatar()) {
 				const ResourceKey& key = avatar->mSpeciesKey;
 				bool changed = key.instanceID != s.sentKey.instanceID || key.groupID != s.sentKey.groupID;
-				if (key.instanceID && (changed || now - s.lastSpeciesSend >= 10000)) {
+				bool seqChanged = avatar->mProfileSeq != s.sentSeq;
+				if (key.instanceID && (changed || seqChanged || now - s.lastSpeciesSend >= 10000)) {
+					if (changed || seqChanged) {
+						Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
+							(void*)avatar->mpSpeciesProfile, (unsigned)avatar->mProfileSeq, (unsigned)s.sentSeq);
+					}
+					s.sentSeq = avatar->mProfileSeq;
 					s.lastSpeciesSend = now;
 					s.sentKey = key;
 					Writer w;

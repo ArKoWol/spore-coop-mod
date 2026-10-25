@@ -22,6 +22,7 @@ namespace PuppetMotion
 		DWORD lastTargetTick = 0;
 		float remoteSpeed = 0.0f;  // m/s, smoothed, from the change of the target position
 		DWORD lastOrder = 0;
+		float snap = 6.0f;           // farther than this behind the target: teleport (the puppet 6 m, mirrors near the avatar less)
 		DWORD holdUntil = 0;       // GetTickCount() until which a standing creature is left alone (see Hold)
 	};
 

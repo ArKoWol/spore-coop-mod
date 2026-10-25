@@ -77,14 +77,14 @@ namespace PuppetMotion
 		float distance = (target - position).Length();
 
 		// an animation (not a walk) is playing and the remote player stands: do not interrupt it with stop/turn orders
-		if (now < f.holdUntil && f.remoteSpeed < 0.6f && distance <= kSnapDistance) {
+		if (now < f.holdUntil && f.remoteSpeed < 0.6f && distance <= f.snap) {
 			return;
 		}
 
 		if (sMode == Mode::Teleport) {
 			puppet->Teleport(target, rotation);
 		}
-		else if (!f.started || distance > kSnapDistance) {
+		else if (!f.started || distance > f.snap) {
 			f.started = true;
 			f.moving = false;
 			puppet->StopMovement();
