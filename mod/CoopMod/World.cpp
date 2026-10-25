@@ -51,6 +51,7 @@ namespace
 		DWORD last = 0;
 		uint8_t age = 0;  // the age step the body was made for: a different one needs a new body
 		float lastHostHealth = -1.0f;  // the host's health we applied last
+		DWORD lastOffsetLog = 0;
 		uint32_t species = 0;  // the species the body was made for (a hatchling's species becomes known a moment after it appears)
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
 		bool dead = false;
@@ -566,10 +567,18 @@ namespace
 			}
 			else {
 				// the game's locomotion walks the animal to the host's position (legs move), see game/PuppetMotion.cpp
-				// Near the player a mirror must stand where the real animal stands, or his bites hit air (friend's test: the real animal
-				// had moved away, the walking mirror lagged behind at 4 m/s): snap sooner.
-				m.follower.snap = (m.pos - avatar->GetPosition()).Length() < 40.0f ? 2.0f : 6.0f;
 				PuppetMotion::Drive(m.follower, m.animal.get(), m.pos, rotation);
+				// Research (owner's report: in a fight the animal stood in front of the guest but at the host's side, and both could
+				// hit it): how far is the mirror from the host's position when the player is next to it? Rate limited.
+				static int offsetLogged = 0;
+				float toPlayer = (m.animal->GetPosition() - avatar->GetPosition()).Length();
+				float offset = (Vector3(st.pos.x, st.pos.y, st.pos.z) - m.animal->GetPosition()).Length();
+				if (toPlayer < 8.0f && offset > 1.0f && offsetLogged < 60 && now - m.lastOffsetLog > 1000) {
+					m.lastOffsetLog = now;
+					++offsetLogged;
+					Logf("mirror: %u is %.1f m from the host's position, %.1f m from our avatar (walking %d, remote speed %.1f)", e.first, offset,
+						toPlayer, m.follower.moving ? 1 : 0, m.follower.remoteSpeed);
+				}
 			}
 		}
 	}

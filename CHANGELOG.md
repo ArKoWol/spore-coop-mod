@@ -6,9 +6,9 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
-- **Mirrors near the player snap sooner; research logs for species change and corpses** (ArKoWol). Friend's test: the real animal moved away
-  while its walking mirror lagged (4 m/s), so his bites hit air; a mirror within 40 m of the avatar now teleports when more than 2 m behind
-  (6 m elsewhere). New log lines: `world: our avatar is species ... profile sequence` (does the host's editor change the key or only the profile?
+- **Research logs for species change, corpses and mirror offset** (ArKoWol). The faster snapping of mirrors near the player was a
+  wrong guess and is removed (the animal did not run away: it stood in front of the guest but at the host's side). New log lines:
+  `mirror: N is X m from the host's position ...` (how far a mirror next to the player stands from the real animal), `world: our avatar is species ... profile sequence` (does the host's editor change the key or only the profile?
   the host's edit changed the guest's puppet look on the host only) and `kill: mirror ... dead ... eaten ...` (why the guest cannot eat a
   corpse). Tested: not yet; no protocol change.
 
