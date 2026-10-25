@@ -5,6 +5,12 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Console window: Tab completion and history** (`scripts/console.ps1`, interactive mode): Tab completes the command after
+  the last `;` (all mod commands, `stage <name>`, and for `coopjoin` the remembered hosts: `last`, numbers, names); with
+  several matches it completes their common start and a second Tab lists them with a short help text. Up/Down: history,
+  Left/Right/Home/End/Delete edit the line, Esc clears it. Game messages that arrive while you type are printed above the
+  line, which is drawn again under them. Piped input still uses the plain prompt. Tried by exxecute in the real window.
+
 - **Mirrors copy size, age, health and the alpha flag of the host's animals** (second guest test: "my 3 babies with 6 HP are
   adults with 10 HP at the friend's, and my alpha with 13 HP is a normal one"). `EntityState` now carries `scale` (the body size),
   `age` (the game's age step, which decides baby or adult body) and the flags `kFlagDead` / `kFlagAlpha`; the host fills them

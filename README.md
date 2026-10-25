@@ -59,7 +59,8 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 | `coop dump`, `coop fps`, `coop motionlog`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
 
 The game accepts exactly one word after `coop`, so joining is the separate command `coopjoin`. In the remote console
-(`console.bat`) several commands go in one line separated by `;`: `coop dump; coop status`.
+(`console.bat`) several commands go in one line separated by `;`: `coop dump; coop status`; **Tab** completes commands
+(press it twice to list them) and Up/Down brings back earlier ones.
 
 ### When something goes wrong
 

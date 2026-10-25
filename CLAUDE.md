@@ -78,7 +78,9 @@ package/                what players get, laid out as in coop_package.zip
   The launcher (dev), `scripts\make_package.ps1` and `update.ps1` install the package as `<game>\Data\CoopMod.package`.
 - `scripts/setup.ps1` - one-time developer setup (Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game).
 - `scripts/launch.ps1` (wrapped by `launch_spore_mod.bat`) - the one-step test launcher: closes a running game, builds + installs (`-Mode dev`, default; before building it asks whether to pull when GitHub has new commits, `-NoUpdateCheck` skips that), `release` (install the latest release) or `play`; starts the game windowed (`-w`), waits for the mod and opens a PowerShell console connected to it; the console window closes when the game exits. Option: `-NoConsole`.
-- `scripts/console.ps1` (wrapped by `console.bat`, which also works where script execution is disabled) - remote game console: `console.bat` (interactive) or `console.bat "coop status" "coop host"` (one-shot); several commands in one line are separated by `;`.
+- `scripts/console.ps1` (wrapped by `console.bat`, which also works where script execution is disabled) - remote game console: `console.bat` (interactive) or `console.bat "coop status" "coop host"` (one-shot); several commands in one line are separated by `;`. The interactive
+  prompt is a small line editor: Tab completes commands (twice: lists them), Up/Down is the history. Add new console commands
+  to its `$commands` list too.
 - `scripts/make_package.ps1`, `scripts/publish.ps1` - build `coop_package.zip`, publish a release (needs `gh auth login`).
 - `package/` - the player files, in the same layout as inside `coop_package.zip`: `README.txt` (player instructions),
   `fix_spore_registry.ps1`, and `coop_update/` (`update.bat` / `update.ps1` / `repo.txt`): players run it to install or
