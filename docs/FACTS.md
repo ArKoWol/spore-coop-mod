@@ -168,6 +168,12 @@ seen in our tests.
   per machine when the stage starts (host 101 nests, friend 96 and 108, none at the same places). **Fruit matches only 6 of 74
   by position.** Plants, rocks and markers are identical. A `GamePlant` leaves and re-enters the game's noun list, so a scan
   that reports "gone" for it is wrong (that was the plant flicker) *(verified 2026-10-25)*.
+- **65 of the 101 animals sit at the planet's centre (0, 0, 0)** with 1 HP and a zero species key: the game's pool of animals that a
+  nest or a mating call spawns later; they are not roaming animals. Mirroring them gave 65 stacked copies on the guest that flew out of
+  the ground when a call used them. The host does not announce an animal closer than 100 m to the centre *(verified 2026-10-25, both dumps)*.
+  A zero species key is the player's own species (key 0 = the default key), so most animals correctly share the avatar's species.
+- The guest's dump holds 102 `Nest` objects at the host's places, yet no nest was visible: a nest made by `CreateHerd(..., createNest)`
+  of a disabled herd is probably not drawn *(guess; the herds of nests are enabled now)*.
 - Creature-mode actions go through `cCreatureModeStrategy::ExecuteAction(actionId, data)` *(SDK)*: EatFruit `D335362B`,
   EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638` *(verified 2026-10-25, `action:` log lines)*. EatFruit's target is
   a `Fruit` noun (`02c9cc91`) at the fruit's position; Mate (`D335362C`) targets a creature; an unknown action `045ab96e` fires

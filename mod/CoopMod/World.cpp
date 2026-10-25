@@ -271,6 +271,7 @@ namespace
 		// the animals that exist now
 		std::map<void*, EntityState> current;
 		std::set<void*> present;  // every animal that exists, announced or not
+		int pooled = 0;           // animals at the planet's centre (the game's pool), not announced
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
 			if (object->GetNounID() != Simulator::kCreatureAnimal || IsAvatar(object) || (void*)object == puppet) {
@@ -281,6 +282,14 @@ namespace
 				continue;
 			}
 			present.insert(object);
+			// Found in the dumps (2026-10-25): 65 of the planet's 101 animals sit at the planet's centre (0, 0, 0) with 1 HP and no species
+			// key: the game's pool of animals that a nest or a mating call "spawns" later. Mirroring them showed 65 copies stacked in one
+			// place at the guest, which then flew out of the ground when the call used them ("bodiless dummies, the sound comes from under
+			// the nest"). They are not announced until they have a place on the surface (the planet's radius is about 505).
+			if (animal->GetPosition().Length() < 100.0f) {
+				++pooled;
+				continue;
+			}
 			EntityState st;
 			st.kind = Kind::Creature;
 			const ResourceKey speciesKey = SpeciesKeyOf(s, animal);
@@ -323,8 +332,8 @@ namespace
 		static DWORD lastCountLog = 0;
 		if (now - lastCountLog > 10000) {
 			lastCountLog = now;
-			Logf("world: host sees %d animals, announces %d, %d wait for their species", (int)present.size(), (int)current.size(),
-				(int)(present.size() - current.size()));
+			Logf("world: host sees %d animals, announces %d, %d in the pool at the planet's centre, %d wait for their species", (int)present.size(),
+				(int)current.size(), pooled, (int)(present.size() - current.size()) - pooled);
 		}
 
 		s.host.AdvanceTick();
@@ -868,7 +877,8 @@ namespace
 				continue;
 			}
 			m.herd->mTargetHerdSize = 0;
-			m.herd->SetEnabled(false);
+			// The herd of a nest stays ENABLED: the 102 Nest objects the guest's dump shows were there at the host's places but not
+			// visible, probably because a disabled herd draws no nest. Animals such a herd may spawn are removed as strays.
 			m.nest = m.herd->mpNest;
 			if (!m.nest) {
 				m.nest = GameNounManager.CreateNest(info.pos, m.herd.get());

@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Cause of the "bodiless dummies" found in the dumps; nests try to show** (ArKoWol). 65 of the 101 animals sit at the planet's centre (the game's pool for
+  mating calls and nests); the host mirrored them, so the guest saw 65 stacked copies that flew out of the ground. The host no longer announces
+  animals within 100 m of the centre. The herds of nests we make stay enabled (nests were present in the guest's dump but invisible).
+  Details in `FACTS.md` section 8. Tested: not yet; no protocol change; both need the new build.
+
 - **Research logs: bodiless mirrors and invisible nests** (ArKoWol). Owner: after the mating call "bodiless dummies" appear around the guest's nest
   (half of the animals without a body, the sound comes from under the nest) and the host's nests are still not seen on the guest. The guest now logs how
   many mirrors have no body model (`mpAnimatedCreature` null) and, after each batch of nests, how many `Nest` objects the game holds and how
