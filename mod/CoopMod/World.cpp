@@ -588,6 +588,27 @@ namespace
 	// ones (the friend had 96 and 108, the host 101; none at the same places). The host's list is sent every 20 s; the guest
 	// removes its own nests once (except its avatar's) and makes the host's: an empty quiet herd with a nest at the same place.
 
+	// Reads a nest's position and the species profile of its herd. The host crashed (CoopMod.dll+0x16ad8, "reading 00000a27") when
+	// the guest connected and the first nest list was built, so every raw read of a game object here is guarded: a nest or herd the
+	// game has half-destroyed gives false instead of a crash. (No C++ objects with destructors in a function with __try.)
+	bool ReadNest(Simulator::cNest* nest, Simulator::cSpeciesProfile** profile, float* pos, Simulator::cHerd** herd)
+	{
+		__try {
+			Simulator::cHerd* h = nest->mpHerd.get();
+			if (!h) {
+				return false;
+			}
+			*herd = h;
+			*profile = h->mpSpeciesProfile;
+			const Vector3& p = nest->GetPosition();
+			pos[0] = p.x; pos[1] = p.y; pos[2] = p.z;
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
 	void HostNests(State& s, DWORD now)
 	{
 		if (!s.nestsNow && now - s.lastNests < kNestsEveryMs) {
@@ -596,24 +617,33 @@ namespace
 		s.nestsNow = false;
 		s.lastNests = now;
 		std::vector<State::NestInfo> list;
+		int unreadable = 0;
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
 			if (object->GetNounID() != Simulator::kNest) {
 				continue;
 			}
 			auto nest = object_cast<Simulator::cNest>(object);
-			if (!nest || !nest->mpHerd) {
+			if (!nest) {
 				continue;
 			}
-			ResourceKey key = KeyOfProfile(s, nest->mpHerd->mpSpeciesProfile);
+			Simulator::cSpeciesProfile* profile = nullptr;
+			Simulator::cHerd* herd = nullptr;
+			float pos[3] = { 0, 0, 0 };
+			if (!ReadNest(nest, &profile, pos, &herd)) {
+				++unreadable;
+				continue;
+			}
+			ResourceKey key = KeyOfProfile(s, profile);
 			if (!key.instanceID) {
 				continue;  // a nest of no known species cannot be made on the other side
 			}
 			State::NestInfo info;
-			info.pos = nest->GetPosition();
+			info.pos = Vector3(pos[0], pos[1], pos[2]);
 			info.key = key;
 			list.push_back(info);
 		}
+		Logf("nests: host list of %d nests built (%d unreadable)", (int)list.size(), unreadable);
 		const size_t perMessage = 100;
 		uint32_t chunks = (uint32_t)((list.size() + perMessage - 1) / perMessage);
 		if (chunks == 0) {

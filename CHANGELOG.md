@@ -5,6 +5,12 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fix attempt: the host crashed when the guest connected and the world was sent** (`CoopMod.dll+0x16ad8, reading 00000a27`, right after
+  `world: sending 10 files`, in the build with the nest sync). The first nest list is built at that moment from raw reads of the
+  game's nest and herd objects; those reads are now guarded (`ReadNest`, SEH): an object the game has half-destroyed is skipped and
+  counted ("nests: host list of N nests built (M unreadable)" in the log) instead of crashing. If it still crashes, the next step is
+  to read the nests from the guest side only after the first snapshot or to drop the species lookup of the herd.
+
 - **G3 and G2, first versions: animations and nests.** **`kProtocolVersion` is 10.** Both are untested in the game, both log what they do.
   - **Animations (G3).** A `PlayAnimation` detour (`PlayAnimation_detour`, `cCreatureBase`) tells `World::OnAnimation` which creature
     starts which animation. The host announces the animations of its avatar and of every replicated animal, the guest those of its
