@@ -5,6 +5,12 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Fix: stand-in models after the guest joined twice** (second test: 99 of 99 mirrors appeared, but still with the stand-in
+  species). The host sent each species definition once per connection; a guest that joined a second time (auto-join and then
+  `coopjoin` by hand within 10 s, or any reset of its world state) reset its table and never got the definitions again, so every
+  mirror waited 20 s and fell back to the stand-in. The host now repeats all definitions with every full snapshot (every 10 s).
+  The guest logs the stand-in once per species and says whether the definition "NEVER received". Host-side fix; no protocol change.
+
 - **Fix: the guest's animals all had our species' model, and only a quarter of them appeared** (found in the friend's
   `CoopMod.log` of the first test). (1) `cCreatureBase::mSpeciesKey` is **zero for most NPC animals**; the host therefore sent
   species `00000000` for all of them and the guest, finding no such species, used the stand-in (the avatar's species) for every

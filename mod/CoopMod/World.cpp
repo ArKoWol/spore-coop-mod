@@ -7,6 +7,7 @@
 
 #include <deque>
 #include <map>
+#include <set>
 #include <vector>
 
 namespace
@@ -67,7 +68,7 @@ namespace
 		bool haveWorld = false;  // a snapshot arrived: the guest's own animals are strays now
 		DWORD lastNeuter = 0, lastTelemetry = 0, lastLog = 0;
 		int strays = 0, removedStrays = 0;
-		bool warnedSpecies = false;
+		std::set<uint32_t> warnedSpeciesIds;
 		// telemetry received by the host
 		int guestTable = -1, guestMirrors = -1, guestStrays = -1;
 
@@ -209,6 +210,13 @@ namespace
 		if (s.fullNow || now - s.lastFull >= kFullEveryMs) {
 			s.fullNow = false;
 			s.lastFull = now;
+			// The species definitions go out again with every full snapshot: a guest that reset its world state (it joins a
+			// second time, or restarts) would otherwise never learn them, and every mirror would get the stand-in.
+			for (auto& known : s.speciesSent) {
+				Writer w;
+				w.U8(kMsgSpecies); w.U32(known.second.instanceID); w.U32(known.second.typeID); w.U32(known.second.groupID);
+				QueueReliable(s, w.buf);
+			}
 			QueueReliable(s, s.host.MakeFull());
 		}
 		if (sSendUnreliable) {
@@ -245,10 +253,10 @@ namespace
 				profile = SpeciesManager.GetSpeciesProfile(avatar->mSpeciesKey);
 			}
 			++s.standIns;
-			if (!s.warnedSpecies) {
-				s.warnedSpecies = true;
-				Logf("world: species %08x has no model here (%s), using the avatar's species as a stand-in", st.species,
-					wait.failed ? "the host has none" : (wait.done ? "installed but not found" : "timeout"));
+			if (s.warnedSpeciesIds.insert(st.species).second) {
+				Logf("world: species %08x has no model here (%s; definition %s), using the avatar's species as a stand-in",
+					st.species, wait.failed ? "the host has none" : (wait.done ? "installed but not found" : "timeout"),
+					s.species.count(st.species) ? "known" : "NEVER received");
 			}
 		}
 		if (!profile) {
