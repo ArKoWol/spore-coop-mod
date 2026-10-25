@@ -6,6 +6,7 @@
 #include "RecentHosts.h"
 #include "World.h"
 #include "Models.h"
+#include <Spore/App/cCreatureModeStrategy.h>
 #include <Spore/Simulator/SubSystem/UIEventLog.h>
 #include <Spore/Movie/MovieSystem.h>
 
@@ -46,6 +47,16 @@ member_detour(TakeDamage_detour, Simulator::cCombatant, int(float, uint32_t, int
 			return 0;
 		}
 		return original_function(this, damage, attackerId, type, push, attacker);
+	}
+};
+
+// Research (gate G1): every action of the creature mode (eat fruit, eat meat, pick up, mate, ...) is logged with its target.
+member_detour(ModeAction_detour, App::cCreatureModeStrategy, void(uint32_t, void*))
+{
+	void detoured(uint32_t actionId, void* actionData)
+	{
+		World::OnModeAction(actionId, actionData);
+		original_function(this, actionId, actionData);
 	}
 };
 
@@ -1957,6 +1968,7 @@ void Dispose()
 	NPCTickAI_detour::detach();
 	TakeDamage_detour::detach();
 	PlayAnimation_detour::detach();
+	ModeAction_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
@@ -1988,6 +2000,7 @@ void AttachDetours()
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
 	TakeDamage_detour::attach(GetAddress(Simulator::cCreatureAnimal, TakeDamage));
 	PlayAnimation_detour::attach(GetAddress(Simulator::cCreatureBase, PlayAnimation));
+	ModeAction_detour::attach(GetAddress(App::cCreatureModeStrategy, ExecuteAction));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));
 	sOrigPrintF = ArgScript::PrintF;

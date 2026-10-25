@@ -26,6 +26,9 @@ namespace PuppetMotion
 		sPuppet = Follower();
 	}
 
+	void Hold(Follower& follower, unsigned long ms) { follower.holdUntil = GetTickCount() + ms; }
+	void HoldPuppet(unsigned long ms) { Hold(sPuppet, ms); }
+
 	Mode GetMode() { return sMode; }
 
 	void SetMode(Mode mode)
@@ -72,6 +75,11 @@ namespace PuppetMotion
 
 		Vector3 position = puppet->GetPosition();
 		float distance = (target - position).Length();
+
+		// an animation (not a walk) is playing and the remote player stands: do not interrupt it with stop/turn orders
+		if (now < f.holdUntil && f.remoteSpeed < 0.6f && distance <= kSnapDistance) {
+			return;
+		}
 
 		if (sMode == Mode::Teleport) {
 			puppet->Teleport(target, rotation);

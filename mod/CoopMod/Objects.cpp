@@ -15,6 +15,13 @@ namespace
 	const float kMatchRadius = 0.75f;      // same kind within this distance = the same object on the other machine
 	const uint32_t kManifestChunk = 200;   // objects per manifest message
 
+	// Switched off after the third test (fruit and bushes flickered on the guest, fruit lay at other places): fruit also rots, falls
+	// and regrows by itself on each machine, so "it is gone here" is not "it was eaten", and the two sides kept destroying each
+	// other's objects. Scanning and the join manifest only LOG now (research); eating will be replicated from the game's own
+	// EatFruit / EatMeat actions (see World::OnModeAction).
+	const bool kBroadcast = false;
+	const bool kApplyManifest = false;
+
 	struct Obj
 	{
 		uint32_t noun = 0;
@@ -45,6 +52,8 @@ namespace
 		DWORD lastScan = 0;
 		bool primed = false;
 		int removesSent = 0, removesApplied = 0, removesNotFound = 0, adds = 0;
+		std::map<uint32_t, int> gone;  // per kind: how many disappeared here (research)
+		int goneLogged = 0;
 		// host: the guest's manifest while it arrives
 		std::vector<Obj> manifest;
 		uint32_t manifestChunks = 0, manifestGot = 0;
@@ -178,7 +187,7 @@ namespace
 			}
 		}
 		for (const Obj& g : toRemove) {
-			if (!refused.count(g.noun)) {
+			if (kApplyManifest && !refused.count(g.noun)) {
 				SendRemove(g);  // the guest destroys its copy
 				++s.removesSent;
 			}
@@ -192,7 +201,7 @@ namespace
 			Logf("eco: manifest %-10s matched %d, guest-only %d (removed at the guest), host-only %d", Name(noun), matched[noun], guestOnly[noun],
 				hostOnly[noun]);
 		}
-		App::ConsolePrintF("coop: objects compared with the guest, %d removed at the guest (see the eco: lines in the log)", s.removesSent);
+		App::ConsolePrintF("coop: objects compared with the guest (see the eco: lines in the log), %d removed at the guest", s.removesSent);
 		std::vector<Obj>().swap(s.manifest);
 	}
 }
@@ -229,10 +238,15 @@ namespace Objects
 			if (s.silent.erase(old.first)) {
 				continue;
 			}
-			SendRemove(old.second);
-			++s.removesSent;
-			Logf("eco: %s at %.1f %.1f %.1f is gone here -> told the other side", Name(old.second.noun), old.second.pos.x, old.second.pos.y,
-				old.second.pos.z);
+			++s.gone[old.second.noun];
+			if (kBroadcast) {
+				SendRemove(old.second);
+				++s.removesSent;
+			}
+			if (s.goneLogged++ < 60) {
+				Logf("eco: %s at %.1f %.1f %.1f is gone here%s", Name(old.second.noun), old.second.pos.x, old.second.pos.y, old.second.pos.z,
+					kBroadcast ? " -> told the other side" : " (research: not reported)");
+			}
 		}
 		for (auto& now2 : current) {
 			if (!s.seen.count(now2.first)) {
@@ -305,6 +319,9 @@ namespace Objects
 		if (!sState) {
 			App::ConsolePrintF("coop objects: idle");
 			return;
+		}
+		for (auto& g : sState->gone) {
+			App::ConsolePrintF("coop objects: %s gone here %d times", Name(g.first), g.second);
 		}
 		App::ConsolePrintF("coop objects: tracking %d (fruit, fruit groups, plants, eggs), removes sent %d, applied %d, not found %d, new here %d",
 			(int)sState->seen.size(), sState->removesSent, sState->removesApplied, sState->removesNotFound, sState->adds);

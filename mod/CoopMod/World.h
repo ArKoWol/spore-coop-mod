@@ -40,6 +40,9 @@ namespace World
 	// other side, which plays the same animation on its copy. `creature` is a cCreatureBase*.
 	void OnAnimation(void* creature, uint32_t animationId);
 
+	// Research: the game's creature-mode action (EatFruit, EatMeat, Pickup, Mate, ...) with its data; only logged for now.
+	void OnModeAction(uint32_t actionId, void* data);
+
 	// Console tests of the damage code on one PC: `coop hit` bites, `coop kill` kills the nearest animal.
 	void TestHit(bool kill);
 

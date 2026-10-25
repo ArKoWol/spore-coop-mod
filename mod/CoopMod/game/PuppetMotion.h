@@ -22,7 +22,13 @@ namespace PuppetMotion
 		DWORD lastTargetTick = 0;
 		float remoteSpeed = 0.0f;  // m/s, smoothed, from the change of the target position
 		DWORD lastOrder = 0;
+		DWORD holdUntil = 0;       // GetTickCount() until which a standing creature is left alone (see Hold)
 	};
+
+	// A non-walking animation (mating call, eating, singing) has just been started on this creature: for `ms` milliseconds,
+	// while the remote player stands, no stop/turn orders are given, otherwise they cut the animation after its first frames.
+	void Hold(Follower& follower, unsigned long ms);
+	void HoldPuppet(unsigned long ms);
 
 	// Called every frame with the newest remote state (target position and orientation, already smoothed).
 	void Drive(Simulator::cCreatureAnimal* puppet, const Vector3& target, const Math::Quaternion& rotation);

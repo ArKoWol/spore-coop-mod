@@ -948,6 +948,17 @@ namespace World
 				target->PlayAnimation(id);
 				sApplyingAnim = false;
 				++s.animPlayed;
+				// Reported by the friend: "looking for a partner" showed only its first frames. Our own walk/stand orders (every
+				// 100 ms) cut the animation: leave the creature alone for a while if it stands.
+				if (who != 0 && who != 0xFFFFFFFFu) {
+					auto m = s.mirrors.find(who);
+					if (m != s.mirrors.end()) {
+						PuppetMotion::Hold(m->second.follower, 2500);
+					}
+				}
+				else {
+					PuppetMotion::HoldPuppet(2500);
+				}
 			}
 			return;
 		}
@@ -1134,6 +1145,68 @@ namespace World
 				App::ConsolePrintF("coop: the host's world arrived (%d animals).", (int)s.guest->entities().size());
 			}
 		}
+	}
+
+	// Research for gate G1 (eating): the game's creature-mode actions (EatFruit, EatMeat, Pickup, Mate, Interact, ...) carry the
+	// acting creature and the target object. Reads the first two fields of the action data; guarded, nothing is changed.
+	bool ReadAction(void* data, void** creature, void** target, uint32_t* noun, float* pos)
+	{
+		__try {
+			void** fields = (void**)data;
+			*creature = fields[0];
+			*target = fields[1];
+			*noun = 0;
+			pos[0] = pos[1] = pos[2] = 0.0f;
+			if (*target) {
+				Simulator::cGameData* object = (Simulator::cGameData*)*target;
+				*noun = object->GetNounID();
+				if (auto spatial = object_cast<Simulator::cSpatialObject>(object)) {
+					const Vector3& p = spatial->GetPosition();
+					pos[0] = p.x; pos[1] = p.y; pos[2] = p.z;
+				}
+			}
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
+	void OnModeAction(uint32_t actionId, void* data)
+	{
+		static std::map<uint32_t, int>* seen = nullptr;  // freed in Shutdown
+		if (!seen) {
+			seen = new std::map<uint32_t, int>();
+		}
+		int count = ++(*seen)[actionId];
+		if (count > 5 && count % 100 != 0) {
+			return;
+		}
+		const char* name = "?";
+		bool known = true;
+		switch (actionId) {
+		case 0xD3353638: name = "Interact"; break;
+		case 0xD335362B: name = "EatFruit"; break;
+		case 0xD335362D: name = "EatMeat"; break;
+		case 0xD335362C: name = "Mate/LayEgg/Pickup1"; break;
+		case 0xD3353636: name = "Pickup"; break;
+		default: known = false; break;
+		}
+		if (!known) {
+			Logf("action: %08x (unknown), seen %d times", actionId, count);
+			return;
+		}
+		void* creature = nullptr;
+		void* target = nullptr;
+		uint32_t noun = 0;
+		float pos[3] = { 0, 0, 0 };
+		if (!ReadAction(data, &creature, &target, &noun, pos)) {
+			Logf("action: %08x %s, data unreadable", actionId, name);
+			return;
+		}
+		auto avatar = GameNounManager.GetAvatar();
+		Logf("action: %08x %s by %s, target noun %08x at %.1f %.1f %.1f, seen %d times", actionId, name,
+			creature == (void*)static_cast<Simulator::cCreatureBase*>(avatar) ? "our avatar" : "someone else", noun, pos[0], pos[1], pos[2], count);
 	}
 
 	void OnAnimation(void* creaturePtr, uint32_t animationId)

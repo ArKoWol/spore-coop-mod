@@ -5,6 +5,20 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Research result and fixes after the fourth test (trees/bushes flickering, fruit at other places, no nests, corpses, animations).**
+  The host's log of the join manifest says: **fruit matches only 6 of 74 by position (68 on each side differ), eggs differ, the 5 plants
+  were reported "gone" over and over** (a `GamePlant` leaves and re-enters the game's noun list). So fruit is generated per machine at
+  stage start like animals and nests; and the G1 scan told the guest "plant gone" again and again, so the guest kept destroying its
+  `GamePlant`s (the trees/bushes) and the game recreated them: that is the flicker. Changes: (1) `Objects.cpp`: broadcasting removals and
+  applying the join manifest are switched off (`kBroadcast`, `kApplyManifest` = false); the scan and the manifest only log (`eco:`
+  lines and `coop status` counters of what disappeared). (2) New research detour on the creature-mode actions
+  (`cCreatureModeStrategy::ExecuteAction`): `action:` lines show what the game does when an avatar eats fruit, eats meat, picks
+  something up, mates (EatFruit `D335362B`, EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638`), with the target's noun and
+  position. (3) Remote animations: a creature that stands is no longer given stop/turn orders for 2.5 s after a remote animation was
+  played on it (`PuppetMotion::Hold`); the orders every 100 ms cut "looking for a partner" after its first frames.
+  Next: replicate fruit like animals (move the guest's own fruit to the host's positions, destroy on eating, from the EatFruit action),
+  corpses (EatMeat on a mirror = request to the host), and find out why the guest sees no nests (needs the guest's `nests:` log lines).
+
 - **Fix: the host crashed when the guest connected (found with a link map).** The crash was inside `HostNests`, in `KeyOfProfile`: it
   iterated `SpeciesManager.mSpeciesProfiles` to find the key of a species profile, and the ModAPI layout of that hash map does not
   match this game build (`reading 3ea99f65`, a float used as a pointer). It was never reached before because animals mostly have a key
