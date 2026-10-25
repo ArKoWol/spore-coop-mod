@@ -56,6 +56,8 @@
     <ClInclude Include="game\CoopNet.h" />
     <ClInclude Include="game\SaveIds.h" />
     <ClInclude Include="game\LoadTrace.h" />
+    <ClInclude Include="game\UiDraw.h" />
+    <ClInclude Include="game\HostPanel.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -71,6 +73,8 @@
     <ClCompile Include="game\CoopMenu.cpp" />
     <ClCompile Include="game\SaveIds.cpp" />
     <ClCompile Include="game\LoadTrace.cpp" />
+    <ClCompile Include="game\UiDraw.cpp" />
+    <ClCompile Include="game\HostPanel.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

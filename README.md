@@ -35,10 +35,12 @@ Every change is listed in [`CHANGELOG.md`](CHANGELOG.md).
    API file. Run it again later to update. **Both players need the same version**, otherwise they refuse each other.
 3. Start the game (`SporebinEP1\SporeApp.exe` or the GOG shortcut). The mod starts it **windowed**: a minimized or
    full-screen game in the background stops running, and so does the co-op.
-4. **Host**: load a game, go into the creature stage, open the console (**Ctrl+Shift+C**) and type `coop host`.
-   Send the printed Steam ID to your friend.
-5. **Guest**: stay in the main menu, open the console and type `coopjoin <host's Steam ID>`. The host's world arrives,
-   your game restarts and reconnects by itself (your own save is kept as `Game0.coopbackup`). Press **Continue**.
+4. **Host**: load a game, go into the creature stage and press **Host co-op** (top right). Press **Copy my Steam ID** and
+   send it to your friend. (Console way: Ctrl+Shift+C, `coop host`.)
+5. **Guest**: in the main menu click the **CO-OP** star in the middle of the galaxy, then **Join** next to a friend you joined
+   before, or copy the host's Steam ID and press **Join by Steam ID**. The host's world arrives, your game restarts and
+   reconnects by itself (your own save is kept as `Game0.coopbackup`); press **Play** on the CO-OP star.
+   (Console way: `coopjoin <host's Steam ID>`.)
 
 Full player instructions: [`package/README.txt`](package/README.txt) (shipped as `README.txt` in the zip).
 

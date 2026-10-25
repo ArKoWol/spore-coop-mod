@@ -30,9 +30,11 @@ PLAY TOGETHER
 The game always starts in a window. Do not minimize it while you play: a minimized game stops,
 and so does the co-op. The console opens with Ctrl+Shift+C.
 
-1. HOST: load your game and go into the CREATURE stage. Type   coop host
-   It prints "Your Steam ID: 7656...". Send that number to your friend.
-2. GUEST: stay in the MAIN MENU (no game loaded). Type   coopjoin 7656...
+1. HOST: load your game and go into the CREATURE stage. Press "Host co-op" (top right of the screen),
+   then "Copy my Steam ID" and send that number to your friend. (Or type   coop host   in the console.)
+2. GUEST: stay in the MAIN MENU. Click the CO-OP star in the middle of the galaxy, copy the host's
+   Steam ID and press "Join by Steam ID" (or "Join" next to a friend you joined before).
+   (Or type   coopjoin 7656...   in the console.)
 3. GUEST: the host's world arrives ("coop: world received"). Your game closes and starts again
    by itself, installs the world and connects to the host again. You do not type anything.
    Your own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup (later joins: coopbackup2, 3, ...).

@@ -19,9 +19,22 @@ namespace CoopNet
 		uint64_t host = 0;             // the host we join / whose world is installed
 	};
 
+	struct HostState
+	{
+		bool hosting = false;      // a Steam host session runs
+		bool guestHere = false;    // a guest is connected (packets arrived in the last seconds)
+		uint64_t guest = 0;        // its Steam ID
+		uint64_t myId = 0;         // our Steam ID (give it to the friend)
+		bool joined = false;       // this game is a guest of somebody (no hosting then)
+	};
+
+	// starts hosting over Steam (what `coop host` does); false if Steam failed
+	bool Host();
+	HostState Hosting();
+
 	// starts a Steam join (what `coopjoin <id>` does); false if Steam failed
 	bool Join(uint64_t hostId);
-	// stops the session (Cancel in the window)
+	// stops the session (Cancel in the window, Stop hosting)
 	void Cancel();
 	JoinState State();
 	// Steam name of a friend ("" if unknown)

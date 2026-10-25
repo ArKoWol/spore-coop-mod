@@ -26,7 +26,7 @@ Claude, share this repo. The documents are how we understand each other: keep th
 6. Only one person publishes a release at a time (`latest` is simply the newest release). Tell the other before you do.
 7. Do not run destructive or outward-facing actions (publishing, deleting, force-push) without the owner's OK.
 8. **Every in-game window of the mod follows `docs/features/UI_STYLE.md`** (the look of the CO-OP window: glossy light
-   plate, orange outlined title, glossy pill buttons with hover). Reuse the drawing helpers of `game/CoopMenu.cpp`.
+   plate, orange outlined title, glossy pill buttons with hover). Reuse the drawing helpers of `game/UiDraw.cpp`.
 
 ## Documents: where to write what
 | What happened | Write it into | Not into |

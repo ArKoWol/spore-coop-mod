@@ -8,6 +8,7 @@
 #include "game/CoopMenu.h"
 #include "game/CoopNet.h"
 #include "game/LoadTrace.h"
+#include "game/HostPanel.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -1495,6 +1496,24 @@ namespace CoopNet
 		sWorldProgress = -1;
 	}
 
+	bool Host()
+	{
+		bool ok = SteamHostStart();
+		Logf("host: started from the in-game button: %s", ok ? "ok" : "Steam failed");
+		return ok;
+	}
+
+	HostState Hosting()
+	{
+		HostState s;
+		s.hosting = sTransport == Transport::Steam && sIsHost;
+		s.joined = sTransport == Transport::Steam && !sIsHost;
+		s.guestHere = s.hosting && sHavePeer && sReceived > 0 && GetTickCount() - sLastReceive < kReconnectMs;
+		s.guest = s.guestHere ? sPeerSteamId : 0;
+		s.myId = sSteam.myId;
+		return s;
+	}
+
 	JoinState State()
 	{
 		JoinState s;
@@ -1528,6 +1547,7 @@ static void NetUpdate()
 	MenuWorlds::HookMenuEnter(sModule);
 	LoadTrace::HookDatabases(sModule);
 	CoopMenu::Update();
+	HostPanel::Update();
 	if (sEcho) {
 		if (inGame) {
 			EchoFeed(GetTickCount());
@@ -2057,6 +2077,7 @@ void Dispose()
 	World::SetTransport(nullptr, nullptr);
 	World::Shutdown();
 	CoopMenu::Shutdown();
+	HostPanel::Shutdown();
 	MenuWorlds::Shutdown();
 	SteamStop();
 	ConsoleStop();

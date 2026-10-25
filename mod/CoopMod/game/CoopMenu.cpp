@@ -15,21 +15,15 @@
 #include <Spore\Simulator\cStarRecord.h>
 #include <Spore\Simulator\SubSystem\StarManager.h>
 
-#include <algorithm>
+#include "UiDraw.h"
+
 #include <ctime>
-namespace Gdiplus
-{
-	using std::min;
-	using std::max;
-}
-#include <objidl.h>
-#include <gdiplus.h>
-#pragma comment(lib, "gdiplus.lib")
 
 #include <string>
 #include <vector>
 
 using namespace Simulator;
+using namespace UiDraw;
 
 namespace
 {
@@ -86,12 +80,10 @@ namespace
 	bool sStarFailed = false;
 	uint32_t sLastSelected = 0;
 
-	UTFWin::Window* sPanel = nullptr;
-	UTFWin::ImageDrawable* sDrawable = nullptr;
-	ImagePtr* sImage = nullptr;
-	int sRenderCount = 0;
+	bool PanelHandler(const UTFWin::Message& message);
+	PictureWindow* sPicture = nullptr;  // heap: freed in Shutdown
+	bool sGdi = false;
 
-	ULONG_PTR sGdiToken = 0;
 
 	// the game's card of the selected star: found by its caption ("CO-OP..."), followed so our window sits next to it
 	// and closes with it
@@ -107,19 +99,6 @@ namespace
 			sUi = new Ui();
 		}
 		return *sUi;
-	}
-
-	std::wstring Wide(const std::string& utf8)
-	{
-		if (utf8.empty()) {
-			return L"";
-		}
-		int n = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
-		std::wstring out(n > 0 ? n - 1 : 0, L'\0');
-		if (n > 1) {
-			MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &out[0], n);
-		}
-		return out;
 	}
 
 	std::string Game0Dir()
@@ -156,78 +135,9 @@ namespace
 	// Styled after the game's own star card: a light glossy plate, an orange title with a dark outline, white button
 	// labels with an outline, glossy green pill buttons, a blue glossy progress bar.
 
-	typedef Gdiplus::Color C;
-
-	void RoundRect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& r, float radius)
-	{
-		float d = std::min(radius * 2, std::min(r.Width, r.Height));
-		path.AddArc(r.X, r.Y, d, d, 180, 90);
-		path.AddArc(r.X + r.Width - d, r.Y, d, d, 270, 90);
-		path.AddArc(r.X + r.Width - d, r.Y + r.Height - d, d, d, 0, 90);
-		path.AddArc(r.X, r.Y + r.Height - d, d, d, 90, 90);
-		path.CloseFigure();
-	}
-
-	void FillRound(Gdiplus::Graphics& g, const Gdiplus::RectF& r, float radius, const C& top, const C& bottom)
-	{
-		Gdiplus::GraphicsPath path;
-		RoundRect(path, r, radius);
-		Gdiplus::LinearGradientBrush brush(Gdiplus::RectF(r.X, r.Y - 1, r.Width, r.Height + 2), top, bottom,
-			Gdiplus::LinearGradientModeVertical);
-		g.FillPath(&brush, &path);
-	}
-
-	void StrokeRound(Gdiplus::Graphics& g, const Gdiplus::RectF& r, float radius, const C& color, float width)
-	{
-		Gdiplus::GraphicsPath path;
-		RoundRect(path, r, radius);
-		Gdiplus::Pen pen(color, width);
-		g.DrawPath(&pen, &path);
-	}
-
-	// a glossy highlight over the upper half of a rounded shape
-	void Gloss(Gdiplus::Graphics& g, const Gdiplus::RectF& r, float radius, BYTE alpha)
-	{
-		Gdiplus::RectF top(r.X + 2, r.Y + 2, r.Width - 4, r.Height * 0.48f);
-		FillRound(g, top, radius - 2, C(alpha, 255, 255, 255), C(0, 255, 255, 255));
-	}
-
-	enum class Align { Left, Center };
-
-	// text as a path: optional dark outline, then the fill (the game draws its headings this way)
-	void Text(Gdiplus::Graphics& g, const std::wstring& s, float size, bool bold, const C& fill, const Gdiplus::RectF& r,
-		Align align = Align::Left, float outline = 0, const C& outlineColor = C(255, 60, 30, 0))
-	{
-		Gdiplus::FontFamily family(L"Segoe UI");
-		Gdiplus::StringFormat format;
-		format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
-		format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
-		format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-		format.SetAlignment(align == Align::Center ? Gdiplus::StringAlignmentCenter : Gdiplus::StringAlignmentNear);
-		Gdiplus::GraphicsPath path;
-		path.AddString(s.c_str(), -1, &family, bold ? Gdiplus::FontStyleBold : Gdiplus::FontStyleRegular, size, r, &format);
-		if (outline > 0) {
-			Gdiplus::Pen pen(outlineColor, outline * 2);
-			pen.SetLineJoin(Gdiplus::LineJoinRound);
-			g.DrawPath(&pen, &path);
-		}
-		Gdiplus::SolidBrush brush(fill);
-		g.FillPath(&brush, &path);
-	}
-
 	void AddButton(Gdiplus::Graphics& g, const Gdiplus::RectF& r, const wchar_t* label, int action, bool primary)
 	{
-		float radius = r.Height / 2;
-		// soft shadow, dark rim, gradient body, gloss
-		FillRound(g, Gdiplus::RectF(r.X, r.Y + 3, r.Width, r.Height), radius, C(70, 0, 0, 0), C(70, 0, 0, 0));
-		FillRound(g, r, radius, primary ? C(255, 40, 110, 20) : C(255, 50, 70, 100), primary ? C(255, 30, 80, 10) : C(255, 35, 50, 75));
-		Gdiplus::RectF body(r.X + 2, r.Y + 2, r.Width - 4, r.Height - 4);
-		bool hot = sHover == action;
-		FillRound(g, body, radius - 2,
-			primary ? (hot ? C(255, 200, 255, 140) : C(255, 150, 230, 80)) : (hot ? C(255, 190, 220, 250) : C(255, 140, 175, 215)),
-			primary ? (hot ? C(255, 90, 200, 50) : C(255, 60, 160, 30)) : (hot ? C(255, 100, 140, 190) : C(255, 70, 105, 150)));
-		Gloss(g, body, radius - 2, 150);
-		Text(g, label, 16, true, C(255, 255, 255, 255), r, Align::Center, 1.6f, primary ? C(255, 25, 80, 10) : C(255, 25, 45, 75));
+		UiDraw::Button(g, r, label, primary, sHover == action);
 		Button b;
 		b.rect = r;
 		b.action = action;
@@ -355,24 +265,7 @@ namespace
 		}
 		(void)white;
 
-		IStream* stream = nullptr;
-		if (CreateStreamOnHGlobal(nullptr, TRUE, &stream) != S_OK) {
-			return false;
-		}
-		const CLSID pngEncoder = { 0x557cf406, 0x1a04, 0x11d3, { 0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e } };
-		bool ok = bitmap.Save(stream, &pngEncoder, nullptr) == Gdiplus::Ok;
-		if (ok) {
-			STATSTG stat = {};
-			stream->Stat(&stat, STATFLAG_NONAME);
-			png.resize((size_t)stat.cbSize.QuadPart);
-			LARGE_INTEGER zero = {};
-			stream->Seek(zero, STREAM_SEEK_SET, nullptr);
-			ULONG read = 0;
-			stream->Read(png.data(), (ULONG)png.size(), &read);
-			ok = read == png.size();
-		}
-		stream->Release();
-		return ok;
+		return EncodePng(bitmap, png);
 	}
 
 	// ------------------------------------------------------------------ the UTFWin window
@@ -380,12 +273,6 @@ namespace
 	void Show();
 	bool CardPlayScreenArea(Math::Rectangle& out);
 
-	class PanelProc : public UTFWin::DefaultWinProc<UTFWin::kEventFlagBasicInput>
-	{
-	public:
-		bool HandleUIMessage(UTFWin::IWindow* window, const UTFWin::Message& message) override;
-	};
-	PanelProc* sProc = nullptr;
 
 	void StartJoin(int index)
 	{
@@ -510,13 +397,13 @@ namespace
 
 	void Hide()
 	{
-		if (sPanel) {
-			sPanel->SetVisible(false);
+		if (sPicture) {
+			sPicture->Hide();
 		}
 		sVisible = false;
 	}
 
-	bool PanelProc::HandleUIMessage(UTFWin::IWindow* window, const UTFWin::Message& message)
+	bool PanelHandler(const UTFWin::Message& message)
 	{
 		if (message.IsType(UTFWin::kMsgMouseDown) || message.IsType(UTFWin::kMsgMouseWheel)) {
 			return true;  // keep clicks on the panel away from the galaxy
@@ -570,13 +457,8 @@ namespace
 
 	void Redraw()
 	{
-		if (!sGdiToken) {
-			Gdiplus::GdiplusStartupInput input;
-			if (Gdiplus::GdiplusStartup(&sGdiToken, &input, nullptr) != Gdiplus::Ok) {
-				sGdiToken = 0;
-				Logf("menu: GDI+ failed to start");
-				return;
-			}
+		if (!sGdi && !(sGdi = StartGdi())) {
+			return;
 		}
 		std::vector<uint8_t> png;
 		int height = 0;
@@ -584,44 +466,10 @@ namespace
 			Logf("menu: drawing the panel failed");
 			return;
 		}
-		wchar_t temp[MAX_PATH];
-		GetTempPathW(MAX_PATH, temp);
-		std::wstring dir = std::wstring(temp) + L"CoopModUI";
-		CreateDirectoryW(dir.c_str(), nullptr);
-		char name[32];
-		snprintf(name, sizeof(name), "coopui_%d", ++sRenderCount);
-		wchar_t file[48];
-		swprintf(file, 48, L"\\ui_%d.package", sRenderCount);
-		Models::Record record;
-		record.type = TypeIDs::png;
-		record.group = id("coopmod");
-		record.instance = id(name);
-		record.data.swap(png);
-		if (!Models::WritePackage(dir + file, { record })) {
-			return;
-		}
-		ImagePtr image;
-		if (!UTFWin::Image::GetImage(ResourceKey(record.instance, record.type, record.group), image) || !image) {
-			Logf("menu: the panel picture %s was not found after registering", name);
-			return;
-		}
 		UTFWin::IWindow* main = WindowManager.GetMainWindow();
 		if (!main) {
 			return;
 		}
-		if (!sPanel) {
-			sPanel = new UTFWin::Window();
-			sDrawable = new UTFWin::ImageDrawable();
-			sPanel->SetDrawable(sDrawable);
-			sProc = new PanelProc();
-			sPanel->AddWinProc(sProc);
-			main->AddWindow(sPanel);
-		}
-		sDrawable->SetImage(image.get());
-		if (!sImage) {
-			sImage = new ImagePtr();
-		}
-		*sImage = image;  // keep the picture alive while it is shown
 		const Math::Rectangle& screen = main->GetArea();
 		// next to the CO-OP star's card (the card's 3D planet is drawn over any UI, so the window must not cover it);
 		// without a card: right of the centre
@@ -647,10 +495,12 @@ namespace
 		}
 		x = std::max(8.0f, std::min(x, screen.GetWidth() - kWidth - 8.0f));
 		y = std::max(8.0f, std::min(y, screen.GetHeight() - height - 8.0f));
-		sPanel->SetArea(Math::Rectangle(x, y, x + kWidth, y + height));
-		sPanel->SetVisible(true);
-		sPanel->Invalidate();  // without it the window kept the old picture until the mouse touched it
-		main->BringToFront(sPanel);
+		if (!sPicture) {
+			sPicture = new PictureWindow(PanelHandler);
+		}
+		if (!sPicture->Show(png, x, y, kWidth, height)) {
+			return;
+		}
 		sVisible = true;
 		sDirty = false;
 	}
@@ -695,7 +545,7 @@ namespace
 	// a visible window (not ours) whose caption starts with "CO-OP"; invisible subtrees are skipped
 	UTFWin::IWindow* FindCoopCaption(UTFWin::IWindow* window, int depth)
 	{
-		if (!window || window == sPanel || depth > 14 || !(window->GetFlags() & UTFWin::kWinFlagVisible)) {
+		if (!window || (sPicture && window == sPicture->Window()) || depth > 14 || !(window->GetFlags() & UTFWin::kWinFlagVisible)) {
 			return nullptr;
 		}
 		if (depth > 0 && IsCoopCaption(window->GetCaption())) {
@@ -749,7 +599,7 @@ namespace
 			}
 		}
 		Logf("card: %*s%08x %s%s vis %d area %.0f,%.0f-%.0f,%.0f '%s'", depth * 2, "", w->GetControlID(),
-			w->Cast(UTFWin::IButton::TYPE) ? "BUTTON " : "", w == sPanel ? "OURS " : "", (w->GetFlags() & UTFWin::kWinFlagVisible) ? 1 : 0,
+			w->Cast(UTFWin::IButton::TYPE) ? "BUTTON " : "", (sPicture && w == sPicture->Window()) ? "OURS " : "", (w->GetFlags() & UTFWin::kWinFlagVisible) ? 1 : 0,
 			a.x1, a.y1, a.x2, a.y2, caption.c_str());
 		for (UTFWin::IWindow* child : w->children()) {
 			DumpTree(child, depth + 1, maxDepth);
@@ -911,8 +761,8 @@ namespace CoopMenu
 			EnsureStar();
 		}
 		if (!InMainMenu()) {
-			if (sVisible && sPanel) {
-				sPanel->SetVisible(false);  // keep the state, show it again in the menu
+			if (sVisible && sPicture) {
+				sPicture->Hide();  // keep the state, show it again in the menu
 			}
 			return;
 		}
@@ -1004,7 +854,7 @@ namespace CoopMenu
 			Logf("menu: our Play ignored (state %d, selected %08x)", (int)sState, selected);
 		}
 		FollowJoin();
-		if (sVisible && (sDirty || (sPanel && !sPanel->IsVisible()))) {
+		if (sVisible && (sDirty || (sPicture && !sPicture->Visible()))) {
 			Redraw();
 		}
 	}
@@ -1056,16 +906,11 @@ namespace CoopMenu
 	void Shutdown()
 	{
 		RestoreCardPlay();
-		if (sPanel) {
-			if (UTFWin::IWindow* main = WindowManager.GetMainWindow()) {
-				main->RemoveWindow(sPanel);
-			}
-			sPanel = nullptr;
-			sDrawable = nullptr;
+		if (sPicture) {
+			sPicture->Remove();
+			delete sPicture;
+			sPicture = nullptr;
 		}
-		sProc = nullptr;
-		delete sImage;
-		sImage = nullptr;
 		if (sStar) {
 			MenuWorlds::RemoveWorld(sStar->get());
 			delete sStar;
@@ -1073,9 +918,9 @@ namespace CoopMenu
 		}
 		delete sUi;
 		sUi = nullptr;
-		if (sGdiToken) {
-			Gdiplus::GdiplusShutdown(sGdiToken);
-			sGdiToken = 0;
+		if (sGdi) {
+			StopGdi();
+			sGdi = false;
 		}
 	}
 }

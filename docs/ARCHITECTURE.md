@@ -33,7 +33,9 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready (`coop menu/carddump`) |
 | `mod/CoopMod/game/SaveIds.cpp/.h` | research: RefPack and DBPF read/write; moves a save or a planet record to another star (used only with `COOP_MOVE_SAVE=1`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
-| `mod/CoopMod/game/CoopNet.h` | what the window needs from the session code (implemented in `dllmain.cpp`): `Join`, `Cancel`, `State` (answer, version, download share, staged, installed at start), `Name` |
+| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host`, `Cancel`, `State` (answer, version, download share, staged, installed at start), `Hosting` (hosting, guest here, own Steam ID), `Name` |
+| `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
+| `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 
 ## 3. Each frame

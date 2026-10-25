@@ -6,6 +6,10 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **"Host co-op" button in the creature stage** (exxecute; `game/HostPanel.cpp`): a small plate top right; hosting shows
+  "waiting for a friend" / "<name> is here", your Steam ID, Copy my Steam ID and Stop; hidden in the menu, editors, pause and
+  while you are a guest. The drawing helpers of the CO-OP window moved to `game/UiDraw.cpp` (shared by both windows).
+  Tested on 1 PC (a guest joining through it not tried yet). No protocol change.
 - **Research logging for the "hundreds of puppets after a mating call" report** (ArKoWol): the guest logs `world: census: N animals (M mirrors,
   K strays), H herds` whenever more animals exist than mirrors (at most every 5 s). The cause is not known yet (the host's log shows
   99 animals and no runaway; the guest's own game or our nest herds are suspected). Needs a two-PC test; tested: not yet; no protocol change.

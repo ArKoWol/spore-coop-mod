@@ -5,8 +5,9 @@
 > (2026-10-25).
 
 Every window the mod shows in the game looks like the CO-OP window (`mod/CoopMod/game/CoopMenu.cpp`), which copies the
-game's own star card. A new window reuses that file's drawing helpers (`FillRound`, `Gloss`, `Text`, `AddButton`,
-`AddPlayButton`) instead of drawing its own way; move them to a shared file when the second window appears.
+game's own star card. A new window reuses the shared helpers of `mod/CoopMod/game/UiDraw.cpp` (`Plate`, `Button`, `Text`,
+`FillRound`, `Gloss`, `PictureWindow`) instead of drawing its own way; the in-game host button (`game/HostPanel.cpp`) is the
+small example.
 
 ## How a window is made
 - UTFWin has no text window we can create from code, so a window is a **picture**: GDI+ draws it into a PNG, the PNG goes
