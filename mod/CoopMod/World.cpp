@@ -252,6 +252,7 @@ namespace
 
 		// the animals that exist now
 		std::map<void*, EntityState> current;
+		std::set<void*> present;  // every animal that exists, announced or not
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
 			if (object->GetNounID() != Simulator::kCreatureAnimal || IsAvatar(object) || (void*)object == puppet) {
@@ -261,6 +262,7 @@ namespace
 			if (!animal) {
 				continue;
 			}
+			present.insert(object);
 			EntityState st;
 			st.kind = Kind::Creature;
 			const ResourceKey speciesKey = SpeciesKeyOf(s, animal);
@@ -295,8 +297,16 @@ namespace
 			}
 		}
 		s.hostAnimals = (int)current.size();
+		// forget the waiting times of animals that no longer exist (NOT of those still held back: they are not in `current`;
+		// erasing them reset their clock every tick, so an animal without a species was never announced: 25 of 99 reached the guest)
 		for (auto it = s.unresolvedSince.begin(); it != s.unresolvedSince.end();) {
-			it = current.count(it->first) ? std::next(it) : s.unresolvedSince.erase(it);
+			it = present.count(it->first) ? std::next(it) : s.unresolvedSince.erase(it);
+		}
+		static DWORD lastCountLog = 0;
+		if (now - lastCountLog > 10000) {
+			lastCountLog = now;
+			Logf("world: host sees %d animals, announces %d, %d wait for their species", (int)present.size(), (int)current.size(),
+				(int)(present.size() - current.size()));
 		}
 
 		s.host.AdvanceTick();
@@ -742,13 +752,20 @@ namespace
 			Logf("nests: removed the guest's own %d herds and %d leftover nests", (int)herds.size(), (int)rest.size());
 		}
 
-		// where are the nests now?
+		// Where are the nests? Only our own record counts (the nests we made) plus the kept nest of the avatar. The first version
+		// looked for Nest objects at the host's positions in the game's object list and, finding none (the game places a nest
+		// on the ground, away from the asked position, or lists it later), made 5 more every half second: 295 nests in the
+		// friend's log.
 		std::vector<Vector3> existing;
+		for (auto& n : s.nestMirrors) {
+			existing.push_back(n.pos);
+		}
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
 			if (object->GetNounID() == Simulator::kNest) {
-				if (auto spatial = object_cast<Simulator::cSpatialObject>(object)) {
-					existing.push_back(spatial->GetPosition());
+				auto nest = object_cast<Simulator::cNest>(object);
+				if (nest && nest->mpHerd && nest->mpHerd.get() == avatarHerd) {
+					existing.push_back(nest->GetPosition());
 				}
 			}
 		}

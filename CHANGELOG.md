@@ -5,6 +5,15 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **Two bugs found in the friend's and the host's logs of the nest/animal test.** (1) **Endless nests**: `GuestNests` looked for Nest
+  objects at the host's positions in the game's object list, did not find the ones it had just made (the game puts a nest on the ground
+  away from the asked position, or lists it later) and made 5 more every half second: 295 nests after a few minutes. It now only trusts
+  its own record of the nests it made (plus the avatar's kept nest). (2) **Only 25 of 99 animals reached the guest**: an animal held
+  back while its species is unknown had its waiting time erased every tick (the cleanup compared with the announced animals only), so
+  it was never announced. Fixed with a set of every existing animal; the log shows `world: host sees N animals, announces M, K wait
+  for their species` every 10 s. Also confirmed by the friend's log: guest bites are sent to the host (`damage: guest, hit on mirror ...
+  -> request to the host`) and the guest's animations arrive (`anim: ... guest avatar`). No protocol change.
+
 - **Research result and fixes after the fourth test (trees/bushes flickering, fruit at other places, no nests, corpses, animations).**
   The host's log of the join manifest says: **fruit matches only 6 of 74 by position (68 on each side differ), eggs differ, the 5 plants
   were reported "gone" over and over** (a `GamePlant` leaves and re-enters the game's noun list). So fruit is generated per machine at
