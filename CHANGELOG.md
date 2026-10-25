@@ -5,6 +5,13 @@ Format: one bullet per change: what, why, and anything the other developer must 
 
 ## Unreleased
 
+- **The console window opens by itself at every start of the game** (also after the automatic restart, where the friend's
+  console stayed closed). The mod now opens `scripts\console.ps1` (`COOP_CONSOLE_PS1`, else searched up to 5 folders above the
+  game folder) when its console port is up, unless `COOP_NO_CONSOLE` is set; on a player's install without the script nothing
+  opens. The restart helper no longer opens the console, and `launch.ps1` no longer does either (it waits for `CoopMod initialized`
+  in the log instead of connecting to the port, which would kick the console out: the port serves one client). `-NoConsole`
+  sets `COOP_NO_CONSOLE`. Checked: launch gives one console window, `coop restart` gives a new game and one new console window.
+
 - **Fix: stand-in models after the guest joined twice** (second test: 99 of 99 mirrors appeared, but still with the stand-in
   species). The host sent each species definition once per connection; a guest that joined a second time (auto-join and then
   `coopjoin` by hand within 10 s, or any reset of its world state) reset its table and never got the definitions again, so every

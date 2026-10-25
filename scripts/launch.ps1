@@ -57,24 +57,26 @@ switch ($Mode) {
 
 # -- start the game (windowed: a minimized or unfocused fullscreen Spore runs no frames, so no co-op and no console)
 Add-Content $log "===== $(Get-Date -Format 'dd.MM.yyyy HH:mm:ss') launch ($Mode) =====" -Encoding ascii
-# the mod's automatic restart (after a received world) reopens this console through this variable
+# the mod opens the console window itself at every start of the game, also after its automatic restart
+# (COOP_NO_CONSOLE turns that off, COOP_CONSOLE_PS1 tells it which script)
 $env:COOP_CONSOLE_PS1 = Join-Path $PSScriptRoot 'console.ps1'
+if ($NoConsole) { $env:COOP_NO_CONSOLE = '1' } else { Remove-Item Env:COOP_NO_CONSOLE -ErrorAction SilentlyContinue }
+$logStart = if (Test-Path $log) { (Get-Item $log).Length } else { 0 }
 Start-Process $exe -ArgumentList '-w' -WorkingDirectory $gameDir
 Say 'game started, waiting for the mod...'
 
+# wait for the mod's "initialized" line in its log (connecting to its console port here would kick the console window out:
+# the port serves one client at a time)
 $ready = $false
 for ($i = 0; $i -lt 120 -and -not $ready; $i++) {
     Start-Sleep -Milliseconds 750
     if (-not (Get-Process SporeApp -ErrorAction SilentlyContinue)) { Fail 'the game closed during start (see CoopMod.log and the Windows Application log).' }
-    $c = New-Object Net.Sockets.TcpClient
-    try { $c.Connect('127.0.0.1', 27780); $ready = $true } catch { } finally { $c.Close() }
+    if (Test-Path $log) {
+        $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')
+        try { $null = $fs.Seek($logStart, 'Begin'); $text = (New-Object IO.StreamReader($fs)).ReadToEnd() } finally { $fs.Close() }
+        if ($text -match 'CoopMod initialized') { $ready = $true }
+    }
 }
-if (-not $ready) { Fail 'the mod console did not come up in 90 s. Is CoopMod.dll installed (CoopMod.log)?' }
-Start-Sleep -Milliseconds 700
-
-# -- the console window, connected to the game; it closes when the game exits
-if (-not $NoConsole) {
-    Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSScriptRoot\console.ps1`"")
-    Say 'console window opened (it closes with the game). Type: coop host | coopjoin <steamid> | coop status | exit'
-}
-
+if (-not $ready) { Fail 'the mod did not start in 90 s. Is CoopMod.dll installed (CoopMod.log)?' }
+if ($NoConsole) { Say 'started without the console window (use console.bat to connect).' }
+else { Say 'the mod opened the console window (it closes with the game). Type: coop host | coopjoin <steamid> | coop status | exit' }

@@ -1138,8 +1138,63 @@ static void FrameStats()
 	}
 }
 
-// Starts a hidden PowerShell that waits for this game to end and then starts it again (with `-w`); when the launcher
-// set COOP_CONSOLE_PS1 it also reopens the console window once the mod's console port is up again.
+// The repo's console script (scripts\console.ps1): the launcher's COOP_CONSOLE_PS1 if it points to a file, else looked for
+// up to 5 folders above the game folder (test\SPORE_A\SporebinEP1 -> <repo>\scripts\console.ps1). Empty on a player's install.
+static std::wstring FindConsoleScript()
+{
+	const wchar_t* fromEnv = _wgetenv(L"COOP_CONSOLE_PS1");
+	if (fromEnv && *fromEnv && GetFileAttributesW(fromEnv) != INVALID_FILE_ATTRIBUTES) {
+		return fromEnv;
+	}
+	wchar_t exe[MAX_PATH] = {};
+	GetModuleFileNameW(nullptr, exe, MAX_PATH);
+	std::wstring up = exe;
+	for (int level = 0; level < 6; ++level) {
+		size_t cut = up.find_last_of(L'\\');
+		if (cut == std::wstring::npos) {
+			break;
+		}
+		up.erase(cut);
+		if (level == 0) {
+			continue;  // the folder of the exe itself
+		}
+		for (const wchar_t* tail : { L"\\scripts\\console.ps1", L"\\console.ps1" }) {
+			std::wstring candidate = up + tail;
+			if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
+				return candidate;
+			}
+		}
+	}
+	return std::wstring();
+}
+
+// Every start of the game (also after the automatic restart) opens the console window, unless COOP_NO_CONSOLE is set
+// (launch.ps1 -NoConsole) or there is no console script (a player's install).
+static void OpenConsoleWindow()
+{
+	if (getenv("COOP_NO_CONSOLE")) {
+		return;
+	}
+	std::wstring script = FindConsoleScript();
+	if (script.empty()) {
+		Logf("console: no console.ps1 found, no console window");
+		return;
+	}
+	std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + script + L"\"";
+	STARTUPINFOW startup = { sizeof(startup) };
+	PROCESS_INFORMATION process = {};
+	if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, nullptr, &startup, &process)) {
+		CloseHandle(process.hThread);
+		CloseHandle(process.hProcess);
+		Logf("console: window opened (%ls)", script.c_str());
+	}
+	else {
+		Logf("console: could not open the window (error %lu)", GetLastError());
+	}
+}
+
+// Starts a hidden PowerShell that waits for this game to end and then starts it again (with `-w`). The new game opens
+// its own console window (OpenConsoleWindow).
 static void LaunchRestartHelper()
 {
 	wchar_t exe[MAX_PATH] = {};
@@ -1149,29 +1204,6 @@ static void LaunchRestartHelper()
 	wchar_t temp[MAX_PATH] = {};
 	GetTempPathW(MAX_PATH, temp);
 	std::wstring script = std::wstring(temp) + L"coop_restart.ps1";
-	const wchar_t* console = _wgetenv(L"COOP_CONSOLE_PS1");
-	// Without the launcher's variable (or when it points to a file that moved), look for the repo's console script above
-	// the game folder: test\SPORE_A\SporebinEP1 -> <repo>\scripts\console.ps1.
-	std::wstring found;
-	if (!console || !*console || GetFileAttributesW(console) == INVALID_FILE_ATTRIBUTES) {
-		console = nullptr;
-		std::wstring up = dir;
-		for (int level = 0; level < 5 && !console; ++level) {
-			size_t cut = up.find_last_of(L'\\');
-			if (cut == std::wstring::npos) {
-				break;
-			}
-			up.erase(cut);
-			for (const wchar_t* tail : { L"\\scripts\\console.ps1", L"\\console.ps1" }) {
-				std::wstring candidate = up + tail;
-				if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES) {
-					found = candidate;
-					console = found.c_str();
-					break;
-				}
-			}
-		}
-	}
 
 	FILE* f = _wfopen(script.c_str(), L"w, ccs=UTF-8");
 	if (!f) {
@@ -1179,24 +1211,14 @@ static void LaunchRestartHelper()
 		return;
 	}
 	fwprintf(f,
-		L"param([int]$GamePid, [string]$Exe, [string]$Dir, [string]$Console)\n"
+		L"param([int]$GamePid, [string]$Exe, [string]$Dir)\n"
 		L"Wait-Process -Id $GamePid -Timeout 90 -ErrorAction SilentlyContinue\n"
 		L"Start-Sleep -Seconds 1\n"
-		L"Start-Process -FilePath $Exe -ArgumentList '-w' -WorkingDirectory $Dir\n"
-		L"if ($Console -and (Test-Path $Console)) {\n"
-		L"  for ($i = 0; $i -lt 120; $i++) {\n"
-		L"    Start-Sleep -Milliseconds 750\n"
-		L"    $c = New-Object Net.Sockets.TcpClient\n"
-		L"    try { $c.Connect('127.0.0.1', 27780); $c.Close(); Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',('\"' + $Console + '\"'); break } catch { }\n"
-		L"  }\n"
-		L"}\n");
+		L"Start-Process -FilePath $Exe -ArgumentList '-w' -WorkingDirectory $Dir\n");
 	fclose(f);
 
 	std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + script + L"\" -GamePid " +
 		std::to_wstring(GetCurrentProcessId()) + L" -Exe \"" + exe + L"\" -Dir \"" + dir + L"\"";
-	if (console && *console) {
-		command += std::wstring(L" -Console \"") + console + L"\"";
-	}
 	STARTUPINFOW startup = { sizeof(startup) };
 	PROCESS_INFORMATION process = {};
 	if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, temp, &startup, &process)) {
@@ -1208,7 +1230,6 @@ static void LaunchRestartHelper()
 		Logf("restart: could not start the helper (error %lu)", GetLastError());
 	}
 }
-
 // Main thread: when the planned time has come, start the helper and close the game the normal way (WM_CLOSE, so it saves).
 static void RunRestartIfDue()
 {
@@ -1524,6 +1545,7 @@ static void ConsoleStart()
 	}
 	sConsoleThread = CreateThread(nullptr, 0, ConsoleThread, nullptr, 0, nullptr);
 	Logf("console: listening on 127.0.0.1:%u", (unsigned)kConsolePort);
+	OpenConsoleWindow();
 }
 
 static void ConsoleStop()
