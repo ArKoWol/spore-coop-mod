@@ -1,4 +1,4 @@
-# Compares two CoopDump.txt files (made by `coop dump` on two machines in the same save): gate G0 of docs/SYNC_REDESIGN.md.
+# Compares two CoopDump.txt files (made by `coop dump` on two machines in the same save): gate G0, docs/PLAN.md section 10.
 #   .\scripts\worlddiff.ps1 host\CoopDump.txt guest\CoopDump.txt
 # Prints the count per kind of object on both sides, the objects that exist only on one side (same kind, rounded
 # position 0.5 m) and the creature species the guest cannot build.

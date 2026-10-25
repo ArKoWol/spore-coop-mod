@@ -1,4 +1,4 @@
-// Objects.h : the world's objects that the players eat, pick up or that hatch (gate G1 of docs/SYNC_REDESIGN.md).
+// Objects.h : the world's objects that the players eat, pick up or that hatch (gate G1, docs/PLAN.md section 10).
 //
 // Fruit, fruit groups, plants and eggs exist on both machines from the same save and are not streamed. Each side watches
 // them; when one of them disappears (eaten, hatched, picked up) the side tells the other (reliable `kMsgRemove`: kind and

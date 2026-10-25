@@ -1,4 +1,4 @@
-// MenuWorlds.h : spike "a friend's world in the open universe" (docs/JOIN_FLOW.md).
+// MenuWorlds.h : spike "a friend's world in the open universe" (docs/features/JOIN_FLOW.md).
 //
 // The main menu (GGE mode, the galaxy) shows saved games as stars with kStarFlagSaveGame; StarManager keeps them in
 // mSavedGameStarRecords. These commands look at that list and try to add an empty test world to it while the menu is open,

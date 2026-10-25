@@ -1,4 +1,4 @@
-// coop_core.h : the replication core of the co-op mod (milestone M0 of docs/DESIGN.md).
+// coop_core.h : the replication core of the co-op mod (milestone M0, see docs/PLAN.md section 10).
 //
 // Plain C++17, no Spore and no Windows headers, so it is tested without the game (tests/core_tests.cpp, with a
 // network that loses, duplicates and reorders packets). The game adapter (game/) feeds it the host's entities and turns

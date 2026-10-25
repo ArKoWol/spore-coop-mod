@@ -1,4 +1,4 @@
-// Models.h : creature models travel with the co-op session (spike S8, gate G2 of docs/SYNC_REDESIGN.md).
+// Models.h : creature models travel with the co-op session (spike S8, gate G2, docs/PLAN.md section 10).
 //
 // A save holds only creature KEYS, never their bodies. The bodies of the animals of a planet live in the host's
 // EditorSaves.package / Pollination.package, so a guest without them cannot build those species. The host reads the

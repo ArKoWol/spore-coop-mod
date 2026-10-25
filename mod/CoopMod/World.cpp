@@ -533,7 +533,7 @@ namespace
 	}
 
 	// The guest's own game keeps making animals (herds, hatching, respawn). Once the host's table exists they are
-	// strays: remove them, every half second, so the guest only sees the host's animals (risk R2 of DESIGN.md).
+	// strays: remove them, every half second, so the guest only sees the host's animals (R2 in docs/PLAN.md section 10).
 	void GuestNeuter(State& s, DWORD now, void* puppet)
 	{
 		if (now - s.lastNeuter < kNeuterEveryMs) {

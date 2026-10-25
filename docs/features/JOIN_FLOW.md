@@ -1,7 +1,10 @@
-# Co-op join flow: from the main menu into a friend's world (draft, 2026-10-25, exxecute)
+# Co-op join flow: from the main menu into a friend's world
 
-Status: proposal for discussion with the owner. Nothing here is built yet. Every "spike" below is a small experiment that
-ends in a log line; the design changes if a spike fails.
+> Status: draft · Owner: exxecute · Updated: 2026-10-25
+> Read when: you work on hosting, joining, the main menu or the world transfer. Spike results are also in `../STATUS.md`.
+
+Proposal for discussion with the owner. Every "spike" below is a small experiment that ends in a log line; the design changes
+if a spike fails.
 
 ## 0. Goals (from the second developer)
 
@@ -71,12 +74,12 @@ co-op start, points it at
   `StarManager` builds its own path to `Game0`, that path needs a second detour).
 
 The game cannot switch universes while it runs (the galaxy is in memory and its databases stay open from the start: see
-"Hard-won facts"). So entering the friend's universe means **one start of the game in co-op mode**. Two ways to make that
+`../FACTS.md` section 6). So entering the friend's universe means **one start of the game in co-op mode**. Two ways to make that
 start invisible, section 4.
 
 ### 2.2 Skip "Continue" entirely
 After the co-op start the mod loads the friend's planet itself with `cGamePersistenceManager::LoadGame` (spike **J2**, same as
-S7 in `DESIGN.md`). The player sees: "Joining Artyom's world" screen, then the creature stage. No main menu in between, no
+S7 in `../PLAN.md` section 10). The player sees: "Joining Artyom's world" screen, then the creature stage. No main menu in between, no
 Continue button. If J2 fails, fallback: the main menu shows the single slot with our banner "CO-OP: Artyom's world, press
 Play" (section 5.4).
 
@@ -210,7 +213,7 @@ spore> coop menu
 | E13 | Restart works but the host is gone by then | strip "Artyom is offline", [Wait] [Back to your worlds] |
 | E14 | Guest closes the game while in the friend's world | next normal launch is the own world (the co-op start is per launch, never sticky) |
 | E15 | Host loaded another save / another planet since | hash differs, world re-sent; the old cache folder is replaced (it is only a cache) |
-| E16 | Guest's progress in the host's world | lives in the host's save + sidecar (`DESIGN.md` section 5); the guest's cache copy is never treated as progress |
+| E16 | Guest's progress in the host's world | lives in the host's save + sidecar (`../PLAN.md` section 8); the guest's cache copy is never treated as progress |
 | E17 | Which creature the guest plays | v1: as today; later "Choose your creature" step from own creations (S7/S8, G2) before the join completes |
 | E18 | Old installs with `Game0` = a host's world (`coop_host.txt` inside, like this PC now) | one-time migration: move it to `Coop\<id>`, restore the newest `Game0.coopbackupN` without `coop_host.txt`; ask first |
 | E19 | Friend not on the Steam friends list | "Join by Steam ID" field (advanced), or add them as a Steam friend |

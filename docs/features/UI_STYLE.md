@@ -1,5 +1,9 @@
 # In-game UI style (rule for every window of the mod)
 
+> Status: agreed · Owner: exxecute · Updated: 2026-10-25
+> Read when: you make or change any window the mod shows in the game. Note: `game/CoopMenu.cpp` is not in the repo yet
+> (2026-10-25).
+
 Every window the mod shows in the game looks like the CO-OP window (`mod/CoopMod/game/CoopMenu.cpp`), which copies the
 game's own star card. A new window reuses that file's drawing helpers (`FillRound`, `Gloss`, `Text`, `AddButton`,
 `AddPlayButton`) instead of drawing its own way; move them to a shared file when the second window appears.

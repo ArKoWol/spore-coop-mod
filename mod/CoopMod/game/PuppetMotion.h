@@ -1,4 +1,4 @@
-// PuppetMotion.h : how the remote player's puppet follows the received positions (spike S3 of docs/DESIGN.md).
+// PuppetMotion.h : how the remote player's puppet follows the received positions (spike S3, docs/PLAN.md section 10).
 // Teleporting the puppet every frame makes it slide with its legs still; letting the game's own locomotion walk it
 // to the received position makes the game play the walk/run/idle animations itself.
 #pragma once

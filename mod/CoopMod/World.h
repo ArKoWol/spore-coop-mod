@@ -1,4 +1,4 @@
-// World.h : the shared world (milestone M2 of docs/DESIGN.md). The host's animals are replicated to the guest.
+// World.h : the shared world (milestone M2, docs/PLAN.md section 10). The host's animals are replicated to the guest.
 //
 // Host: every 100 ms the animals of the simulation are copied into coop::HostWorld; its deltas (unreliable, channel 2),
 // events and a full snapshot every 10 s (reliable, channel 3) go to the guest.

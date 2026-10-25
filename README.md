@@ -11,13 +11,13 @@ planet** and see each other's creature walking around.
 | Works | Not yet |
 |---|---|
 | Connecting over Steam by Steam ID, no port forwarding | The other player has **your** creature's look, not their own |
-| The host's world is sent to the guest automatically; the guest's game restarts and rejoins by itself | Eating, fighting, singing, health: nothing of this is synced |
-| The other player's creature walks, stops and turns (game's own walk animation) | Plants, fruit, eggs and nests are not shared (eaten fruit stays on the other side) |
-| First version of shared animals: the host's animals are copied to the guest (not tested on two PCs yet) | Running: the other player's creature walks at most at walking speed and falls behind a sprint |
-| A remote console to type game commands from PowerShell | Tribe, civilization, space stages |
+| The host's world is sent to the guest automatically; the guest's game restarts and rejoins by itself | Fruit at the same places, corpses both can eat, species relations, own progress per player |
+| The other player's creature walks, stops and turns (game's own walk animation) | Running, walking backwards or sideways |
+| The host's animals on the guest (model, size, health); guest bites and host damage go through the host | PvP and respawn at your own nest |
+| A remote console to type game commands from PowerShell | Cell, tribe, civilization, space stages |
 
-The plan and the order in which the rest gets built are in [`docs/SYNC_REDESIGN.md`](docs/SYNC_REDESIGN.md) and
-[`docs/DESIGN.md`](docs/DESIGN.md). Every change is listed in [`CHANGELOG.md`](CHANGELOG.md).
+The detailed state is in [`docs/STATUS.md`](docs/STATUS.md), the plan for every stage in [`docs/PLAN.md`](docs/PLAN.md).
+Every change is listed in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What you need
 
@@ -76,8 +76,8 @@ The game accepts exactly one word after `coop`, so joining is the separate comma
 
 The mod is a C++ DLL loaded by [SporeModLoader](https://github.com/Rosalie241/SporeModLoader) and built on the
 [Spore ModAPI](https://github.com/Spore-Community/Spore-ModAPI). Read [`CLAUDE.md`](CLAUDE.md) first: the rules for working
-in this repo (two developers, each with their own AI assistant) and the **hard-won facts** about the game, so nobody
-rediscovers them.
+in this repo (two developers, each with their own AI assistant), the order in which to read the documents and where to
+write what. The **hard-won facts** about the game are in [`docs/FACTS.md`](docs/FACTS.md), so nobody rediscovers them.
 
 ```
 git clone https://github.com/ArKoWol/spore-coop-mod
@@ -126,7 +126,7 @@ SporeApp.exe
 | `assets/` | files packed into the game's data (the splash picture after the EA logo) |
 | `scripts/` | developer tools (PowerShell) |
 | `package/` | what players get, in the zip's layout: instructions, registry fix, updater |
-| `docs/` | `DESIGN.md` (product decisions), `SYNC_REDESIGN.md` (how the world is kept equal), `HANDOFF_B.md` (work split) |
+| `docs/` | status, plan, decisions, architecture, hard-won facts, testing, feature designs (index: [`docs/README.md`](docs/README.md)) |
 
 Game files, saves and Valve's `steam_api.dll` are never part of this repository.
 
