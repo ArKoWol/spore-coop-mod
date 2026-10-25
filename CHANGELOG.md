@@ -10,6 +10,8 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
   show the real world download, the game restarts and installs the host's world; then the CO-OP star is a copy of the host's
   newest creature save, ready, and the card's Play enters it while the mod rejoins. Errors: no answer (20 s), other mod version,
   no world (30 s), Steam off. Test friend and the fake download are gone (`coop menuready` too). Tested on 2 PCs. No protocol change.
+- **Docs: results of the 2026-10-25 two-PC test** (ArKoWol). `STATUS.md` test log and `FACTS.md` sections 8: newborns right, fruit and
+  plants regenerate at stage start, eating plays but vomit and mating-call effects do not (next try: replay `PlayAbility`). Docs only.
 
 - **Fix: the guest's game crashed on the lethal bite of a mirror** (ArKoWol). Friend's log: three bites on a mirror, `action: 045ab96e`, then
   `SporeApp.exe+0x797779, reading 0x14` in game code only: the game's native death of a mirror (no nest herd, no tuning) is not safe.

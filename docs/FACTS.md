@@ -157,7 +157,14 @@ seen in our tests.
   by position.** Plants, rocks and markers are identical. A `GamePlant` leaves and re-enters the game's noun list, so a scan
   that reports "gone" for it is wrong (that was the plant flicker) *(verified 2026-10-25)*.
 - Creature-mode actions go through `cCreatureModeStrategy::ExecuteAction(actionId, data)` *(SDK)*: EatFruit `D335362B`,
-  EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638` *(verified 2026-10-25, `action:` log lines)*.
+  EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638` *(verified 2026-10-25, `action:` log lines)*. EatFruit's target is
+  a `Fruit` noun (`02c9cc91`) at the fruit's position; Mate (`D335362C`) targets a creature; an unknown action `045ab96e` fires
+  with a mating call and just before a kill *(verified 2026-10-25)*.
+- **At the start of a stage the trees and fruit are generated and regenerate for a few seconds** (shapes of trees and fruit on
+  them change on the guest, then it stops) *(verified 2026-10-25, owner's two-PC test)*.
+- **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well, but the carnivore's vomit after a fruit,
+  and the waves and notes of the mating call (only the head-up frames played) are not shown on the other machine. These come
+  from the ability and effect system, not from `PlayAnimation` *(guess; the replay of `PlayAbility` is the next try)*.
 
 ## 9. Combat, DNA and species relations
 - `TakeDamage`'s 4th argument is a push vector; pass `(0,0,0)` *(SporeCoop)*. The animal's `TakeDamage` is entered with `this` =

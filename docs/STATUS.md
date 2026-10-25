@@ -59,4 +59,5 @@ Newest first. One line per test: date, build (commit), who, what was tested, res
 
 | Date | Build | Who | What | Result |
 |---|---|---|---|---|
+| 2026-10-25 | 8d35044 era (protocol 11) | both | eggs, bites, eating, animations | newborn has the right species; guest crashed on the lethal bite (fixed f632199); fruit does not vanish when eaten (switched off, to redo); eating plays, carnivore vomit and mating-call effects do not; trees/fruit jump for a few seconds at the start |
 | 2026-10-25 | 287fc81 era | both | nests, animals, plants, actions | endless nests and 25 of 99 animals found and fixed; guest bites reach the host; guest animations arrive |
