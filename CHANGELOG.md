@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Join flow re-planned, now ArKoWol's area** (docs only; owner's decisions D19-D22). **exxecute:** `features/JOIN_FLOW.md` was
+  rewritten from your draft: a friend's world is played in a "co-op launch" (swapped in for one launch from `Games\Coop\<id>`, own
+  `Game0` restored at every start), a CO-OP button replaces the star, Rich Presence and manifests come later (M1-M5). Path C is
+  parked (J8 failed). Nothing in the code changed yet.
+
 - **Four fixes from the 2026-10-25 test, protocol 13** (ArKoWol). (1) Creature edits: `kMsgAvatarSpecies` carries a hash of the body; the
   same key with another body is fetched and built under an alias key (puppet, host-species mirrors). (2) Corpses: the host sends each
   corpse's food value (`kMsgCorpse` 116), the corpse is placed once, not every frame. (3) Fights: "settle snap" in `PuppetMotion`.

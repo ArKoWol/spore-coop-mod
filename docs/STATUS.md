@@ -34,21 +34,20 @@ change), **partly**, **not done**.
 Animals that waited for their species were never announced (25 of 99 reached the guest): fixed 2026-10-25, to check.
 
 ## 2. Join flow from the main menu (`features/JOIN_FLOW.md`)
-| Spike | Question | State |
+| Part | What | State |
 |---|---|---|
-| main-menu world | a new save star shows up in the open menu | passed 2026-10-25 |
-| J6 | Play on such a star loads its copied save | passed 2026-10-25 |
-| J7 | does the galaxy save keep the star | open |
-| J8 | a save from another universe works on our star | paused 2026-10-25: a save moved to our star stops before reading its planets (`FACTS.md` section 6) |
-| J5 | our own window over the menu | works on 2 PCs 2026-10-25 (CO-OP star + window, real join through the restart) |
-| - | CO-OP star after leaving a game without saving | known bug: it vanishes until the next start (GitHub issue) |
-| J1-J4 | save-area redirect, `LoadGame` from the mod, Rich Presence, fetch before start | open |
+| today | CO-OP star + window, Steam join, download, restart; the guest's `Game0` is swapped into `Game0.coopbackupN` and not restored | works on 2 PCs 2026-10-25 |
+| M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | not started (plan 2026-10-31) |
+| M2 + J9 | CO-OP button instead of the star (closes the GitHub issue), host's star selected in the co-op launch | not started |
+| M3 + J3 | Steam Rich Presence: who hosts, version before connecting, invites | not started |
+| M4 / M5 | manifest to skip downloads / join from the launcher without the restart (J4) | not started |
+| J8 (path C) | a save from another universe on our star | failed 2026-10-25, parked |
 
 ## 3. Who does what
 | Who | Area | Now |
 |---|---|---|
-| ArKoWol + Claude | world truth and lifecycle: dump, objects, events, telemetry, the plan | next: `PLAN.md` section 7 step 1 |
-| exxecute + Claude | how the other player looks and acts (models, animation, walking), join flow and menu UI | CO-OP star bug (GitHub issue), join without the restart |
+| ArKoWol + Claude | world truth and lifecycle, the plan; since 2026-10-31 also the join flow (`features/JOIN_FLOW.md`) | creature-stage fixes (protocol 13, to check); join flow M1 next |
+| exxecute + Claude | how the other player looks and acts (models, animation, walking), menu UI | - |
 
 ## 4. Known gaps in the repo
 - `README.md`'s player table is kept short and points here.

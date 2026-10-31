@@ -1,6 +1,6 @@
 # Co-op plan for every stage
 
-> Status: agreed with the owner (2026-10-25) · Owner: ArKoWol · Updated: 2026-10-25
+> Status: agreed with the owner (2026-10-25) · Owner: ArKoWol · Updated: 2026-10-31
 > Read when: before you start any gameplay work, and before you propose a change of direction. This is the only live plan;
 > the decisions behind it, with dates, are in `DECISIONS.md`. What is done is in `STATUS.md`.
 
@@ -19,7 +19,7 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 6. **Each player has his own editor.** Guest in the editor: the host plays on. Host in the editor: the guest's world probably
    freezes; the guest sees "host is in the editor" and may open his own editor.
 7. **Save**: the world in the host's save; the guest's personal data in a sidecar file next to it (section 8). Only the host
-   saves. Joining as today: world transfer and a restart (`features/JOIN_FLOW.md` plans the menu version).
+   saves. Joining: world transfer and one restart into a "co-op launch" (`features/JOIN_FLOW.md`).
 8. **Leaving**: the guest leaves = his creature disappears, his tribe or cities stay and are invulnerable while he is away;
    the host leaves = the session ends.
 
@@ -81,7 +81,7 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 The host's save is the world. The guest's personal data (species and creature file, DNA, brain level, parts, relation table,
 and later his tribe/civ identity) is written by the host into a sidecar `Game0\coop_players.json` next to the save, on every
 save and when the guest's progress changes. A returning guest (same Steam ID) gets it back. The guest's own `Game0` is never
-overwritten (today it is kept as `Game0.coopbackupN`; `features/JOIN_FLOW.md` removes the swap).
+overwritten (today it is kept as `Game0.coopbackupN`; `features/JOIN_FLOW.md` M1 replaces that with a swap for one launch).
 
 ## 9. Least certain parts and their fallbacks
 

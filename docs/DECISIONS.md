@@ -1,11 +1,19 @@
 # Decisions of the owner
 
-> Status: agreed · Owner: ArKoWol · Updated: 2026-10-25
+> Status: agreed · Owner: ArKoWol · Updated: 2026-10-31
 > Read when: before you question the direction or propose something that changes it. Add a line here for every new
 > decision of the owner; never edit an old line except to mark it replaced.
 
 Newest first. Each line: what was decided, and which earlier decision it replaces. `PLAN.md` always follows the newest
 decisions.
+
+## 2026-10-31: join flow (`features/JOIN_FLOW.md`)
+| # | Decision | Replaces |
+|---|---|---|
+| D22 | Old installs whose `Game0` is a host's world: the menu asks once whether to restore the own save from `Game0.coopbackup*`; nothing is deleted | - |
+| D21 | The guest starts joining from a CO-OP button in the main menu; the CO-OP star goes away | the CO-OP star of 2026-10-25 |
+| D20 | A friend's world is played in a "co-op launch": swapped in place of `Game0` for one launch from `Games\Coop\<id>`, the own `Game0` restored at every start; entering costs one restart (path C parked) | the permanent swap into `Game0.coopbackupN` |
+| D19 | The join flow is ArKoWol's area (with Claude); exxecute no longer works on it | D5 for the start flow |
 
 ## 2026-10-25: plan for every stage (long chat with the owner)
 | # | Decision | Replaces |
@@ -27,7 +35,7 @@ decisions.
 ## 2026-10-24: design v2.1
 | # | Decision | Status |
 |---|---|---|
-| D5 | Work split: ArKoWol + Claude = world truth and lifecycle (dump, objects, events, telemetry); exxecute + Claude = how the other player looks and acts (species/models, animation, walking) and the start flow | current, see `STATUS.md` |
+| D5 | Work split: ArKoWol + Claude = world truth and lifecycle (dump, objects, events, telemetry); exxecute + Claude = how the other player looks and acts (species/models, animation, walking) and the start flow | current; the start flow replaced by D19 |
 | D4 | Stage change only when both reached the goal; both go through the editor; the game continues when both are ready | refined by D10, D13 |
 | D3 | One world owned by the host; each player has his own creature and progress (DNA, brain, parts); the host's save holds both players (sidecar) | current |
 | D2 | A new co-op game skips the cell stage | **replaced by D7** |

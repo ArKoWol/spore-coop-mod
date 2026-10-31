@@ -15,7 +15,7 @@
 | `ARCHITECTURE.md` | how the mod works now: files, frame, protocol, transfer, console, puppet, sync rules, tools | before you change code | your change makes it wrong |
 | `FACTS.md` | hard-won facts about the game, ModAPI, Steam, saves, creatures, combat, other stages | before game-facing code | you learn something about the game or the tools |
 | `TESTING.md` | how to test on two PCs, tools, test rules | before you test or call anything done | the way of testing changes |
-| `features/JOIN_FLOW.md` | joining from the main menu instead of the console (exxecute) | you work on joining or the menu | that feature's design changes |
+| `features/JOIN_FLOW.md` | joining from the main menu: the co-op launch, CO-OP button, who is hosting (ArKoWol) | you work on joining or the menu | that feature's design changes |
 | `features/UI_STYLE.md` | how every in-game window of the mod looks and is made (exxecute) | you make or change a window | the style changes |
 
 A new large feature gets its own `features/<name>.md` and a row here. Nothing else is added to `docs/` without the owner's OK.
