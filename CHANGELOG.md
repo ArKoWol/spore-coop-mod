@@ -6,6 +6,8 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Protocol 15**: M4 (manifest) and exxecute's abilities/effects/voices both changed the packets as protocol 14 at the same time;
+  the two kinds of 14 build do not fit together, so the merged build is 15 and refuses both. Both must update. Built, not tested.
 - **M2 of the join flow: a CO-OP button in the main menu replaces the CO-OP star** (ArKoWol; `game/CoopMenu.cpp`, `game/MenuWorlds.cpp`).
   The star, `CO-OP.spo`, the hidden card Play, `HoldPlay`, `SaveIds` and the star dev commands (`coop slots/addworld/addcenter/delworld/
   menureload/ggefind/holdplay/playnow/carddump`) are gone, which closes the issue "CO-OP star vanishes after leaving a game without saving".
@@ -16,6 +18,14 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
   cache + received files, checks every file, then replaces the cache; a failed check retries once, then `CoopNet::State().error`
   (also `.upToDate`); a cancelled or cut-off download deletes `.incoming`. Logic: 85 checks in `tests\run_core_tests.bat`; not tested
   on 2 PCs; **protocol 14, both must update**; watch the `world:` lines in `CoopMod.log`.
+- **Click on the friend's creature to follow it** (exxecute; `game/FollowFriend.cpp`). Our avatar walks after it with `MoveTo`
+  (stays 3 m behind); W/A/S/D, arrows, a click elsewhere or on the friend again stop it; the own name plate shows "(following)".
+  The hovered object comes from `GameViewManager.GetHoveredObject()`. Not tested (works with `coop echo` too). No protocol change.
+
+- **Abilities, effects and voices of creatures reach the other side, protocol 14** (exxecute; `game/Actions.cpp`, STATUS 3e).
+  `PlayAnimation` alone showed only the first frames of a song, dance or mating call and no vomit. Now `PlayAbility` (non-attack),
+  the creature effect pools and `PlayVoice` are captured and replayed on the copy; effects and voices only of the avatars.
+  `coop actionlog` logs it; `coop echo` replays it on one PC. Not tested; **both must update** (protocol 14).
 
 - **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
   removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror

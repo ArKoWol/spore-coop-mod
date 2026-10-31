@@ -34,6 +34,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
 | `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, `upToDate`, `error`, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
+| `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
+| `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here; for a guest in a co-op launch the plate `In <host>'s world` with Leave |
 | `mod/CoopMod/game/CoopLaunch.cpp/.h` | the co-op launch in the game: `Prepare()` from `DllMain` (calls `core/coop_launch.h`, logs `launch:` lines), `Active/Host/Notice`, `HostName`; in the main menu a plate with the notice of a failed folder move and the one-time restore question of an old install |
@@ -51,7 +53,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **14** (14: manifest world transfer). Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **15** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -81,6 +83,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 114 `kMsgEaten` | guest -> host | the guest ate this animal's corpse (netId); the host removes the real one |
 | 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar and a hash of its body; the receiver builds the puppet from it (model requests go both ways) |
 | 116 `kMsgCorpse` | host -> guest | once per dead animal: netId, food value, flags (the guest writes the food value into the corpse) |
+| 117 `kMsgAction` | both | creature (as in 112) played an ability (type), started or stopped a creature effect (effect id, pool id), or a voice (name) |
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host takes a snapshot of the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, held in
@@ -190,6 +193,11 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   record of what it moved or made counts.
 - **Animations**: the same animation of the same creature is sent at most every 400 ms; a creature within 1 m of its target
   gets no stop/turn orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
+- **Abilities, effects, voices** (`game/Actions.cpp`): detours of `cCreatureBase::PlayAbility`, `CreateEffectForPool1(Renamed)`,
+  `CreateEffectForPool2Renamed`, `StartOrStopEffectFromPool1/2`, `StopEffectFromPools` and `PlayVoice`. Only the outermost call
+  is sent; an attack ability is not (bites stay `PlayAnimation` + damage); inside a sent ability its animations, effects and
+  voices are not sent (the replayed ability makes them). Effects and voices only of the avatars. The receiver plays the ability
+  by type (`GetAbilityIndexByType`), starts the effect under the same pool id and stops it on the sender's stop or after 8 s.
 - **Avatars**: both sides send their own avatar's health, max health and size 5 times a second (`kMsgAvatar`) and show them
   on their puppet of the other player.
 - **Damage** (PLAN rule 3, the actor decides): the guest's own bite on a mirror is applied by the game on his machine at once

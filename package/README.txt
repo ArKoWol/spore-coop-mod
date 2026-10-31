@@ -56,6 +56,8 @@ What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
 
 If the guest leaves and comes back, just type  coopjoin last  (the mod remembers the hosts you joined).
 
+Click on your friend's creature and yours follows it. W/A/S/D, a click elsewhere or on the friend again stop it.
+
 
 COMMANDS
 --------

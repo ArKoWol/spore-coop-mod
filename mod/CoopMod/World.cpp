@@ -5,6 +5,7 @@
 #include "Models.h"
 #include "Objects.h"
 #include "game/PuppetMotion.h"
+#include "game/Actions.h"
 #include "../../core/coop_core.h"
 
 #include <algorithm>
@@ -1455,6 +1456,7 @@ namespace World
 		}
 		s.isHost = host;
 		s.puppet = puppet;
+		Actions::Update();
 		if (host || s.haveWorld) {
 			Objects::Update(host, inGame);  // eaten / hatched / picked-up fruit, plants and eggs
 		}
@@ -1597,21 +1599,7 @@ namespace World
 			Reader r(data, size);
 			r.U8();
 			uint32_t who = r.U32(), id = r.U32();
-			Simulator::cCreatureAnimal* target = nullptr;
-			if (host) {
-				if (who == 0xFFFFFFFFu) {
-					target = static_cast<Simulator::cCreatureAnimal*>(s.puppet);
-				}
-			}
-			else if (who == 0) {
-				target = static_cast<Simulator::cCreatureAnimal*>(s.puppet);
-			}
-			else {
-				auto m = s.mirrors.find(who);
-				if (m != s.mirrors.end() && !m->second.dead) {
-					target = m->second.animal.get();
-				}
-			}
+			auto target = static_cast<Simulator::cCreatureAnimal*>(CreatureOf(who));
 			if (r.ok && target) {
 				sApplyingAnim = true;
 				target->PlayAnimation(id);
@@ -1619,16 +1607,11 @@ namespace World
 				++s.animPlayed;
 				// Reported by the friend: "looking for a partner" showed only its first frames. Our own walk/stand orders (every
 				// 100 ms) cut the animation: leave the creature alone for a while if it stands.
-				if (who != 0 && who != 0xFFFFFFFFu) {
-					auto m = s.mirrors.find(who);
-					if (m != s.mirrors.end()) {
-						PuppetMotion::Hold(m->second.follower, 2500);
-					}
-				}
-				else {
-					PuppetMotion::HoldPuppet(2500);
-				}
+				HoldCreature(who, 2500);
 			}
+			return;
+		}
+		if (Actions::OnMessage(data, size)) {
 			return;
 		}
 		if (Objects::OnMessage(data, size, host)) {
@@ -1989,34 +1972,74 @@ namespace World
 		}
 	}
 
-	void OnAnimation(void* creaturePtr, uint32_t animationId)
+	bool WhoOf(void* creaturePtr, uint32_t* who)
 	{
-		if (!sState || sApplyingAnim) {
-			return;
+		if (!sState) {
+			return false;
 		}
 		State& s = *sState;
 		auto creature = static_cast<Simulator::cCreatureBase*>(creaturePtr);
 		auto avatar = GameNounManager.GetAvatar();
-		uint32_t who = 0;
 		if (avatar && creature == static_cast<Simulator::cCreatureBase*>(avatar)) {
-			who = s.isHost ? 0u : 0xFFFFFFFFu;
+			*who = s.isHost ? 0u : 0xFFFFFFFFu;
+			return true;
 		}
-		else if (s.isHost) {
-			bool found = false;
-			for (auto& id : s.ids) {
-				auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(id.first));
-				if (static_cast<Simulator::cCreatureBase*>(animal) == creature) {
-					who = id.second;
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				return;  // the guest's puppet and strangers
+		if (!s.isHost) {
+			return false;  // the guest does not announce what its mirrors do
+		}
+		for (auto& id : s.ids) {
+			auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(id.first));
+			if (static_cast<Simulator::cCreatureBase*>(animal) == creature) {
+				*who = id.second;
+				return true;
 			}
 		}
-		else {
-			return;  // the guest does not announce the animations of mirrors
+		return false;  // the guest's puppet and strangers
+	}
+
+	void* CreatureOf(uint32_t who)
+	{
+		if (!sState) {
+			return nullptr;
+		}
+		State& s = *sState;
+		if (s.isHost) {
+			return who == 0xFFFFFFFFu ? s.puppet : nullptr;
+		}
+		if (who == 0) {
+			return s.puppet;
+		}
+		auto m = s.mirrors.find(who);
+		return m != s.mirrors.end() && !m->second.dead ? m->second.animal.get() : nullptr;
+	}
+
+	void HoldCreature(uint32_t who, unsigned long ms)
+	{
+		if (!sState) {
+			return;
+		}
+		if (who == 0 || who == 0xFFFFFFFFu) {
+			PuppetMotion::HoldPuppet(ms);
+			return;
+		}
+		auto m = sState->mirrors.find(who);
+		if (m != sState->mirrors.end()) {
+			PuppetMotion::Hold(m->second.follower, ms);
+		}
+	}
+
+	void OnAnimation(void* creaturePtr, uint32_t animationId)
+	{
+		if (!sState || sApplyingAnim || Actions::Replaying()) {
+			return;
+		}
+		State& s = *sState;
+		uint32_t who = 0;
+		if (!WhoOf(creaturePtr, &who)) {
+			return;
+		}
+		if (Actions::InAbility()) {
+			return;  // the ability itself is sent (game/Actions.cpp) and plays this animation on the other side
 		}
 		if (++s.animSeen[animationId] <= 3 || s.animSeen[animationId] % 200 == 0) {
 			Logf("anim: %08x played by %s %u (seen %d times)", animationId, who == 0 ? "the host avatar" : (who == 0xFFFFFFFFu ? "the guest avatar" : "animal"), who, s.animSeen[animationId]);
