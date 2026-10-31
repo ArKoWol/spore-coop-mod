@@ -186,6 +186,36 @@ namespace
 		return true;
 	}
 
+	bool ReadWords(const void* data, uint32_t* out, int n)
+	{
+		__try {
+			for (int i = 0; i < n; ++i) {
+				out[i] = ((const uint32_t*)data)[i];
+			}
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
+	// The type and category of ability `index` of `creature`; false when there is none (an index past the list may read garbage).
+	bool ReadAbility(Simulator::cCreatureBase* creature, int index, int* type, int* category)
+	{
+		__try {
+			Simulator::cCreatureAbility* ability = creature->GetAbility(index);
+			if (!ability) {
+				return false;
+			}
+			*type = (int)ability->mType;
+			*category = ability->mCategory;
+			return *type > 0 && *type < 200;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
 	// An attack ability (bite, strike, charge, spit) is left to PlayAnimation and the damage messages, as before.
 	bool IsAttack(Simulator::cCreatureBase* creature, int index)
 	{
@@ -349,6 +379,36 @@ namespace Actions
 		sEchoTarget = nullptr;
 	}
 
+	void OnModeAction(uint32_t actionId, void* data)
+	{
+		switch (actionId) {
+		case 0xD3353638: case 0xD335362B: case 0xD335362D: case 0xD335362C: case 0xD3353636:
+			return;  // Interact, EatFruit, EatMeat, Mate, Pickup: known (World::OnModeAction)
+		}
+		int& n = S().seen[Key(0xFF, actionId)];
+		if (++n > 5 && !sLogging) {
+			return;
+		}
+		uint32_t w[8] = {};
+		if (!data || !ReadWords(data, w, 8)) {
+			Logf("action: mode action %08x, data unreadable", actionId);
+			return;
+		}
+		Logf("action: mode action %08x data %08x %08x %08x %08x %08x %08x %08x %08x", actionId, w[0], w[1], w[2], w[3], w[4], w[5],
+			w[6], w[7]);
+		// a small number among the words may be the index of one of our avatar's abilities
+		auto avatar = GameNounManager.GetAvatar();
+		if (!avatar) {
+			return;
+		}
+		for (int i = 0; i < 8; ++i) {
+			int type = 0, category = 0;
+			if (w[i] < 32 && ReadAbility(avatar, (int)w[i], &type, &category)) {
+				Logf("action:   word %d = %u: ability type %d, category %d", i, w[i], type, category);
+			}
+		}
+	}
+
 	bool OnMessage(const uint8_t* data, uint32_t size)
 	{
 		if (size < 6 || data[0] != kMsgAction) {
@@ -367,7 +427,7 @@ namespace Actions
 				name[i] = (char)r.U8();
 			}
 			if (r.ok) {
-				if (sLogging) {
+				if (sLogging || ++S().seen[Key(0x80 | kVoice, (uint32_t)id(name))] <= 3) {
 					Logf("action: replay voice %s on %u (%s)", name, who, target ? "ok" : "no copy");
 				}
 				Replay(who, target, [&](Simulator::cCreatureBase* t) { t->PlayVoice(name, p2, p3); });
@@ -379,7 +439,7 @@ namespace Actions
 		if (!r.ok) {
 			return true;
 		}
-		if (sLogging) {
+		if (sLogging || ++S().seen[Key(0x80 | kind, id)] <= 3) {
 			Logf("action: replay %s %08x pool %08x on %u (%s)", KindName(kind), id, pool, who, target ? "ok" : "no copy");
 		}
 		Replay(who, target, [&](Simulator::cCreatureBase* t) {

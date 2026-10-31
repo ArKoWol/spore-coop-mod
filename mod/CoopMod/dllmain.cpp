@@ -69,6 +69,7 @@ member_detour(ModeAction_detour, App::cCreatureModeStrategy, void(uint32_t, void
 	void detoured(uint32_t actionId, void* actionData)
 	{
 		World::OnModeAction(actionId, actionData);
+		Actions::OnModeAction(actionId, actionData);
 		original_function(this, actionId, actionData);
 	}
 };

@@ -16,7 +16,8 @@ namespace
 	DWORD sLastSettleLog = 0;
 	int sSettleLogged = 0;
 
-	const float kHoldDistance = 1.0f;     // an animation is only protected from stop/turn orders while the creature is this close to its target
+	const float kHoldDistance = 1.6f;     // an animation is only protected from stop/turn orders while the creature is this close to its target
+	                                      // (a standing creature may stand up to kWalkUpDistance away: the hold must cover that)
 	const float kStopSpeed = 0.4f;        // the remote player counts as standing below this speed
 	const float kArriveDistance = 1.0f;   // a creature walking up to a standing target stops this close (the game stops by itself at ~0.7 m)
 	const float kWalkUpDistance = 1.5f;   // a standing creature starts walking up only when farther than this (no step-stop jitter)

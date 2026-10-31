@@ -15,6 +15,10 @@ namespace Actions
 	// A message from the other side; false when it is not ours.
 	bool OnMessage(const uint8_t* data, uint32_t size);
 
+	// Research: a creature-mode action of our avatar (cCreatureModeStrategy::ExecuteAction). The social abilities (sing, dance)
+	// do not go through cCreatureBase::PlayAbility: the unknown actions are logged with their data and the abilities it may name.
+	void OnModeAction(uint32_t actionId, void* data);
+
 	// Every frame while a session runs: stops replayed effects the other side never stopped.
 	void Update();
 

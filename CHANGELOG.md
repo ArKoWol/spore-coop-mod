@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: replayed animations were cut on the other player's creature; research for songs and dances** (exxecute). A standing
+  puppet may stand up to 1.5 m off since the walking change, but an animation was only protected within 1 m (now 1.6 m). In the
+  first test no ability went through `PlayAbility`: unknown creature-mode actions are logged with their data (`action: mode action`)
+  and replays are logged (`action: replay`). Tested: not yet; no protocol change. Next test: both sing, dance, vomit; send both logs.
+
 - **Protocol 15**: M4 (manifest) and exxecute's abilities/effects/voices both changed the packets as protocol 14 at the same time;
   the two kinds of 14 build do not fit together, so the merged build is 15 and refuses both. Both must update. Built, not tested.
 - **M2 of the join flow: a CO-OP button in the main menu replaces the CO-OP star** (ArKoWol; `game/CoopMenu.cpp`, `game/MenuWorlds.cpp`).

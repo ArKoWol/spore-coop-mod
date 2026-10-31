@@ -204,7 +204,8 @@ seen in our tests.
   and the waves and notes of the mating call (only the head-up frames played) are not shown on the other machine. These come
   from the ability and effect system, not from `PlayAnimation` *(guess; `game/Actions.cpp` replays `PlayAbility`, the
   effect pools and `PlayVoice` since 2026-10-31, not seen in the game yet)*. `PlayAbility` does not play skill abilities (glide,
-  jump, mating call, sprint, sneak) *(SDK)*.
+  jump, mating call, sprint, sneak) *(SDK)*. The player's abilities did not go through `cCreatureBase::PlayAbility` in the first
+  two-PC test; effects did (vomit `e55dc391` after a fruit) *(guess, 2026-10-31: no `action: ability` line)*.
 
 ## 9. Combat, DNA and species relations
 - `TakeDamage`'s 4th argument is a push vector; pass `(0,0,0)` *(SporeCoop)*. The animal's `TakeDamage` is entered with `this` =
