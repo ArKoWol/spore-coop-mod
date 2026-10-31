@@ -36,6 +36,10 @@ namespace World
 	// applies it to its own avatar. `victim` is a cCreatureAnimal*, `attacker` a cCombatant* (may be null).
 	bool FilterDamage(void* victim, float damage, int type, void* attacker);
 
+	// The species relation manager's ApplyEvent asks here (game/Kills.cpp). False = drop the event: on the guest, events on the
+	// host's puppet and on mirrors, except right after our own avatar's bite on that mirror. `creature` is a cCreatureBase*.
+	bool AllowRelationEvent(void* creature, int event);
+
 	// The game's PlayAnimation detour tells us which creature starts which animation (bite, eat, sing, ...); it is sent to the
 	// other side, which plays the same animation on its copy. `creature` is a cCreatureBase*.
 	void OnAnimation(void* creature, uint32_t animationId);

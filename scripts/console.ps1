@@ -113,6 +113,7 @@ $commands = @(
     @('coop abs', 'absolute / relative puppet positions'),
     @('coop dump', 'list every entity (and CoopDump.txt)'),
     @('coop modeltest', 'check the creature model transfer on one PC'),
+    @('coop killcheck', 'one PC: a mirror-like herd gets a herd type the game knows (lethal-bite crash fix)'),
     @('coop fps', 'log frames per second and window focus'),
     @('coop menu', 'open the CO-OP window'),
     @('stage cell', 'switch to the cell stage'),

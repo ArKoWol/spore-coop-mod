@@ -13,6 +13,7 @@
 #include "game/Actions.h"
 #include "game/FollowFriend.h"
 #include "game/SelfTest.h"
+#include "game/Kills.h"
 #include "game/CoopLaunch.h"
 #include "game/WorldTransfer.h"
 #include "game/Presence.h"
@@ -495,7 +496,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 16;  // 16: kMsgInvite and the Rich Presence key (game/Presence.cpp)
+static const uint32_t kProtocolVersion = 17;  // 16: kMsgInvite and the Rich Presence key (game/Presence.cpp); 17: corpse food both ways, eaten at the end, lethal hit native
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1782,7 +1783,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1852,6 +1853,12 @@ public:
 		}
 		else if (strcmp(sub, "hit") == 0 || strcmp(sub, "kill") == 0) {
 		World::TestHit(strcmp(sub, "kill") == 0);
+	}
+	else if (strcmp(sub, "killcheck") == 0) {
+		// game/Kills.cpp: does a herd made like a mirror's have a herd type the game knows (the lethal-bite crash), and does the repair work?
+		char detail[256];
+		bool ok = Kills::SelfCheck(detail, sizeof(detail));
+		App::ConsolePrintF("coop killcheck: %s (%s)", ok ? "PASS" : "FAIL", detail);
 	}
 	else if (strcmp(sub, "modeltest") == 0) {
 			// one-PC check of the model transfer: read the avatar's species from the resource manager, write it as a
@@ -2109,6 +2116,7 @@ void Dispose()
 	TakeDamage_detour::detach();
 	PlayAnimation_detour::detach();
 	Actions::Detach();
+	Kills::Detach();
 	ModeAction_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
@@ -2144,6 +2152,7 @@ void AttachDetours()
 	TakeDamage_detour::attach(GetAddress(Simulator::cCreatureAnimal, TakeDamage));
 	PlayAnimation_detour::attach(GetAddress(Simulator::cCreatureBase, PlayAnimation));
 	Actions::Attach();
+	Kills::Attach();
 	ModeAction_detour::attach(GetAddress(App::cCreatureModeStrategy, ExecuteAction));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));

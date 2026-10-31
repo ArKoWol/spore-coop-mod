@@ -24,6 +24,7 @@ Never run the guest's game minimized or fullscreen in the background: a minimize
 | `coop echo` | one-PC puppet test: a copy of you 0.4 s later, 4 m to the side |
 | `coop motionlog`, `coop fps` | puppet motion and frame-rate diagnostics |
 | `coop selftest` + `tests\actions_test.ps1` | one PC, game in the creature stage: abilities, an animation and an effect of our avatar must be captured and replayed on the echo puppet (`selftest: RESULT: PASS`); keys 1-9 are pressed and what the game called is logged |
+| `coop killcheck` | one PC, creature stage: a herd made like a mirror's, its herd type known to the game or not, and the repair (`PASS` / `FAIL`; also the first check of `coop selftest`) |
 | `coop actionlog` | log every ability, creature effect and voice that is sent and replayed (`action:` lines) |
 | `coop facing`, `coop run` | the puppet's steps back / sideways (`always`, `steps`, `off`) and its speed matching (on / off) |
 | `tests\run_core_tests.bat` | the replication core with a fake world, and the co-op launch folder logic (`core/coop_launch.h`) and the world-transfer manifest (`core/coop_manifest.h`: diff, build, verify, cleanup) on temporary folders; no game, seconds |

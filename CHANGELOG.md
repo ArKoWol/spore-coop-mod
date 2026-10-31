@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The guest's lethal bite is native again (DNA for his kill) and the guest can eat corpses, protocol 17** (exxecute; `game/Kills.cpp`,
+  STATUS 4a, 2f). Crash cause found: the extinction reads the herd type of the mirror's herd, unknown to the game (`FACTS.md` 9); it is now
+  copied from a game herd first, relation events of mirrors are dropped unless our own bite. The mirror corpse was removed at the first
+  bite (`mbHasBeenEaten` is set when eating starts): now food left goes both ways (`kMsgCorpseFood` 119), `kMsgEaten` when used up.
+  Not tested; **protocol 17, both must update**; run `coop killcheck` once; watch `kills:`, `relation:`, `damage: ... LETHAL`, `eat:`.
+
 - **Creature-stage priorities (MoSCoW) and a new split of the work, agreed (D23)** (exxecute; docs only, `PLAN.md` 7.1,
   `STATUS.md` 3). Seven Musts for playable co-op; exxecute takes the guest's own creature, corpses, the guest's DNA for a kill
   and respawn; join flow M5 waits. Proposed by exxecute, agreed by ArKoWol on 2026-10-31. Not tested (no code); no protocol change.
