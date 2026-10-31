@@ -39,6 +39,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
 | `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), presses keys 1-9 |
 | `mod/CoopMod/game/Respawn.cpp/.h` | death and respawn of both players: watches our avatar (`respawn:` lines), health 0 in `kMsgAvatar` while dead, puts us beside our own nest after a respawn far from it, removes the friend's puppet while he is dead; `coop die` (one-PC test) |
+| `mod/CoopMod/game/OwnCreature.cpp/.h` | the player's own creature: watches the editor (mode, new creature records in EditorSaves), the avatar's profile in memory, reads our body from every database (`ReadFresh`), writes `Games\CoopOwnCreature.txt` and switches the guest's avatar to it in a co-op launch (`own:` lines) |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here, Invite (opens the list of `InvitePanel`); for a guest in a co-op launch the plate `In <host>'s world` with Leave |
@@ -186,8 +187,14 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   1.5 m off a standing target for 600 ms is teleported there ("settle snap": blocked by a body or a hit reaction). Removed with `GameNounManager.DestroyInstance(herd)`.
 - **The other player's creature**: each side sends its avatar's species key and a hash of its body (`kMsgAvatarSpecies`,
   on change and every 10 s, the hash read again each time). The key is the creature key inside the avatar's species profile
-  (`mCreatureKey`, which an edit may change) when a body can be read under it, else `avatar->mSpeciesKey`; the host announces
+  (`mCreatureKey`, which an edit may change) when a body can be read under it, else `avatar->mSpeciesKey`; a creature record the
+  editor added to EditorSaves during its last visit wins over both (`game/OwnCreature.cpp`). Our body is read from every database
+  holding it, the EditorSaves copy first (`OwnCreature::ReadFresh`, also when the other side asks for our model); the editor's close
+  and a change of the profile in memory make it read again at once. The host announces
   the animals sharing that profile with the same key, and re-reads every profile's key instead of caching it forever.
+  **The guest's own creature**: outside a co-op launch the avatar's key goes into `Games\CoopOwnCreature.txt` (else, in the main
+  menu, the citizen species of the newest creature save); in a co-op launch the guest's avatar gets that profile and species key
+  5 s after it appears and its model is reloaded (`SetModelKey` or `GrowUp`); `COOP_NO_OWN_CREATURE=1` turns it off.
   The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);

@@ -11,6 +11,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
   the respawn place; hits on a dead player are dropped; an avatar respawned >60 m from its herd's nest is put beside it (the
   guest's nest is his copy of the save's player nest, at the host's nest). Not tested; no protocol change (old builds ignore
   it). One PC: `coop die` (`respawn-test: RESULT`). Watch `respawn:` lines on both PCs (`ARCHITECTURE.md` section 7).
+- **Creature edits reach the friend; the guest plays his own creature** (exxecute; `game/OwnCreature.cpp`, STATUS 3c). The editor's
+  close, the profile in memory and new creature records in EditorSaves now trigger a re-read; a new key the editor wrote is announced,
+  bodies are read from every database (EditorSaves copy first). In a co-op launch the guest's avatar switches 5 s after the start to the
+  creature of `Games\CoopOwnCreature.txt` (written when he plays his own world; `COOP_NO_OWN_CREATURE=1` turns it off; no `SetSpecies`
+  in ModAPI, the switch is a guess). Not tested; no protocol change (16). Before the test the guest loads his own creature game once.
 
 - **Creature-stage priorities (MoSCoW) and a new split of the work, agreed (D23)** (exxecute; docs only, `PLAN.md` 7.1,
   `STATUS.md` 3). Seven Musts for playable co-op; exxecute takes the guest's own creature, corpses, the guest's DNA for a kill

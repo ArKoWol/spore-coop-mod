@@ -56,7 +56,10 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
    "Your own saves are in a backup. Restore them?". Restore moves them back to Game0 (the game
    restarts once); the friend's world is kept in Games\Coop. Nothing is deleted.
 
-What you see: the other player's creature walks next to you (for now it has YOUR creature's look).
+What you see: the other player's creature walks next to you (for now it may have YOUR creature's look).
+Being tested: the guest plays his OWN creature in the host's world. For that the guest must have
+played his own creature stage once with this version (the mod remembers the creature then).
+COOP_NO_OWN_CREATURE=1 keeps the host's creature for the guest.
 What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
 
 If the guest leaves and comes back, just type  coopjoin last  (the mod remembers the hosts you joined).

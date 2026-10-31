@@ -7,6 +7,7 @@
 #include "game/PuppetMotion.h"
 #include "game/Actions.h"
 #include "game/Respawn.h"
+#include "game/OwnCreature.h"
 #include "../../core/coop_core.h"
 
 #include <algorithm>
@@ -1409,12 +1410,18 @@ namespace World
 
 	// The key our avatar is announced under: the creature key of its species profile when it has one (the editor may change the shared
 	// profile in place to a NEW key while avatar->mSpeciesKey stays), else the avatar's species key.
+	// A creature the editor wrote in its last visit (game/OwnCreature.cpp) wins: in the 2026-10-31 test the profile's key and the body
+	// under it stayed the same after an edit.
 	ResourceKey WantedOwnKey(Simulator::cCreatureAnimal* avatar)
 	{
 		ResourceKey key = avatar->mSpeciesKey;
 		uint32_t raw[3] = { 0, 0, 0 };
 		if (avatar->mpSpeciesProfile && ReadProfileKey(avatar->mpSpeciesProfile, raw) && raw[0]) {
 			key = ResourceKey(raw[0], raw[1], raw[2]);
+		}
+		uint32_t edited[3] = { 0, 0, 0 };
+		if (OwnCreature::EditedKey(edited)) {
+			key = ResourceKey(edited[0], edited[1], edited[2]);
 		}
 		return key;
 	}
@@ -1483,17 +1490,19 @@ namespace World
 				const ResourceKey wanted = WantedOwnKey(avatar);
 				const bool wantedChanged = !SameKey(wanted, s.wantedKey);
 				const bool seqChanged = avatar->mProfileSeq != s.sentSeq;
+				// the editor closed or the profile changed in memory (game/OwnCreature.cpp): read the body again now
+				const bool edited = OwnCreature::TakeChange();
 				// while the new key has no body yet (fallback) it is tried again every second
-				if (wanted.instanceID && (wantedChanged || seqChanged || s.ownFallback || now - s.lastSpeciesSend >= 10000)) {
+				if (wanted.instanceID && (wantedChanged || seqChanged || edited || s.ownFallback || now - s.lastSpeciesSend >= 10000)) {
 					std::vector<Models::Record> records;
 					ResourceKey key = wanted;
-					bool read = Models::Read(key.instanceID, key.typeID, key.groupID, records, true);
+					bool read = OwnCreature::ReadFresh(key.instanceID, key.typeID, key.groupID, records);
 					bool fallback = false;
 					if (!read && !SameKey(wanted, avatar->mSpeciesKey) && avatar->mSpeciesKey.instanceID) {
 						// no body under the profile's key (yet): keep announcing the avatar's species key, nothing breaks
 						fallback = true;
 						key = avatar->mSpeciesKey;
-						read = Models::Read(key.instanceID, key.typeID, key.groupID, records, true);
+						read = OwnCreature::ReadFresh(key.instanceID, key.typeID, key.groupID, records);
 					}
 					if (wantedChanged || fallback != s.ownFallback) {
 						Logf("world: our avatar's profile key %08x/%08x/%08x: %s (species key %08x/%08x/%08x, game maps the profile key to %s)",
@@ -1507,6 +1516,10 @@ namespace World
 					const bool changed = !SameKey(key, s.sentKey);
 					const uint32_t hash = read ? Models::Hash(records) : 0;
 					const bool hashChanged = !s.sentHashValid || hash != s.sentHash;
+					if (edited && !changed && !hashChanged) {
+						Logf("world: after the editor / a profile change our avatar's body %08x is unchanged (hash %08x): no new body found",
+							key.instanceID, hash);
+					}
 					if (changed || seqChanged || wantedChanged || hashChanged || now - s.lastSpeciesSend >= 10000) {
 						if (changed || seqChanged) {
 							Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
@@ -1720,7 +1733,9 @@ namespace World
 			r.U8();
 			uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
 			std::vector<Models::Record> records;
-			if (!Models::Read(instance, type, group, records)) {
+			// our own avatar's body is read the way its hash was made (the copy in EditorSaves first, game/OwnCreature.cpp)
+			const bool own = s.sentKey.instanceID == instance && s.sentKey.groupID == group;
+			if (!(own ? OwnCreature::ReadFresh(instance, type, group, records) : Models::Read(instance, type, group, records))) {
 				Logf("world: the other side asked for species %08x, we have no record for it", instance);
 				Writer w; w.U8(kMsgModelNone); w.U32(instance);
 				QueueReliable(s, w.buf);

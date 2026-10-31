@@ -10,7 +10,7 @@ planet** and see each other's creature walking around.
 
 | Works | Not yet |
 |---|---|
-| Connecting over Steam by Steam ID, no port forwarding | The other player has **your** creature's look, not their own |
+| Connecting over Steam by Steam ID, no port forwarding | The other player has **your** creature's look, not their own (being tested: the guest plays his own creature once he has played his own creature stage with this version; `COOP_NO_OWN_CREATURE=1` turns it off) |
 | The host's world is sent to the guest automatically; the guest's game restarts and rejoins by itself | Fruit at the same places, corpses both can eat, species relations, own progress per player |
 | The other player's creature walks, stops and turns (game's own walk animation) | Running, walking backwards or sideways |
 | The host's animals on the guest (model, size, health); guest bites and host damage go through the host | PvP and respawn at your own nest |
