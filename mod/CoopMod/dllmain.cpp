@@ -17,6 +17,7 @@
 #include "game/WorldTransfer.h"
 #include "game/Presence.h"
 #include "game/InvitePanel.h"
+#include "game/OwnCreature.h"
 #include "../../core/coop_launch.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
@@ -1543,6 +1544,7 @@ static void NetUpdate()
 	SelfTest::Update();
 	Presence::Update();     // starts Steam in the main menu, publishes our state, scans the friends while the window is open
 	InvitePanel::Update();  // the host's invite list, the toast of an invitation in the main menu
+	OwnCreature::Update(inGame);  // editor watch, own creature file, the guest's own creature in a co-op launch
 	if (sSteam.ready && sTransport != Transport::Steam) {
 		SteamIdlePump();
 	}
@@ -2094,6 +2096,7 @@ void Dispose()
 	HostPanel::Shutdown();
 	NamePlates::Shutdown();
 	InvitePanel::Shutdown();
+	OwnCreature::Shutdown();
 	Presence::Shutdown();
 	SteamStop();
 	ConsoleStop();

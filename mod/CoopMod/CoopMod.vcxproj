@@ -65,6 +65,7 @@
     <ClInclude Include="game\NamePlates.h" />
     <ClInclude Include="game\Presence.h" />
     <ClInclude Include="game\InvitePanel.h" />
+    <ClInclude Include="game\OwnCreature.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -89,6 +90,7 @@
     <ClCompile Include="game\NamePlates.cpp" />
     <ClCompile Include="game\Presence.cpp" />
     <ClCompile Include="game\InvitePanel.cpp" />
+    <ClCompile Include="game\OwnCreature.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

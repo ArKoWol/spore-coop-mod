@@ -158,14 +158,19 @@ seen in our tests.
 - `SetSpecies` on a creature during world load crashes: wait about 3 s after the load *(SporeCoop)*.
 - A dead mirror flies away unless it is pinned to the corpse position every frame *(SporeCoop)*.
 - **After an edit in the creature editor `avatar->mSpeciesKey`, `mProfileSeq` and the `bem` record under that key stay the same**,
-  while every creature of the species changes look on the editing machine *(verified 2026-10-31, both logs)*. So the edit changes
-  the shared species profile; it probably points to a new creature key (`profile->mCreatureKey`) *(guess)*.
+  while every creature of the species changes look on the editing machine; the profile's `mCreatureKey` stayed too, and the body
+  read through `FindRecord` kept its hash *(verified 2026-10-31, both logs)*. Where the new body is (a new key in EditorSaves, a
+  second copy of the record, or only in memory) is not known: `game/OwnCreature.cpp` logs all three (`own:` lines) *(guess)*.
+- The creature editor (`Editors::GetEditor()`) holds the key it was opened with in `mEditorRequest->mModelKey` and a parent key in
+  `mParentAssetKey`; the profile has `creatureSeq` (+0x53C); the resource manager lists every database that holds a key with
+  `GetDatabaseList(list, &key)`; `cCreatureAnimal::Create` takes a `bIsAvatar` flag *(SDK)*. **ModAPI has no `SetSpecies`** *(SDK)*.
 - **`TakeDamage` with no attacker on a mirror brings its health to 0 but never sets `mbDead`** (`kill: ... dead 0 -> 0, health 0.0`):
   no corpse, so the guest cannot eat it *(verified 2026-10-31)*. Probably the death is processed in the creature's tick, which is
   skipped for mirrors *(guess)*. A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*: 100 on the host's corpses,
   200 on a fresh mirror *(verified 2026-10-31)*.
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
-  avatar 3 s after the load *(SporeCoop)*.
+  avatar 3 s after the load *(SporeCoop)*. We set `mpSpeciesProfile`, `mSpeciesKey`, `mProfileSeq` of the avatar and reload the
+  model (`SetModelKey` when the model key is the species key, else `GrowUp`) instead *(guess, built 2026-10-31, not tried)*.
 
 ## 8. What a creature-stage planet contains
 - First real dump (host, owner's save, 2026-10-24): 4188 nouns: 101 CreatureAnimal, 123 Herd, **101 Nest** (one per herd, all
