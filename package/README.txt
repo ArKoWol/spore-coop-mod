@@ -30,11 +30,16 @@ PLAY TOGETHER
 The game always starts in a window. Do not minimize it while you play: a minimized game stops,
 and so does the co-op. The console opens with Ctrl+Shift+C.
 
-1. HOST: load your game and go into the CREATURE stage. Press "Host co-op" (top right of the screen),
-   then "Copy my Steam ID" and send that number to your friend. (Or type   coop host   in the console.)
-2. GUEST: stay in the MAIN MENU. Click the CO-OP button (small plate, bottom left of the screen), copy
-   the host's Steam ID and press "Join by Steam ID" (or "Join" next to a friend you joined before).
-   (Or type   coopjoin 7656...   in the console.)
+1. HOST: load your game and go into the CREATURE stage. Press "Host co-op" (top right of the screen).
+   Your Steam friends who run the mod now see you in their CO-OP window (Steam must be running).
+   "Invite" lists friends who sit in their main menu; press Invite next to a name and the friend gets
+   a message "<you> invites you to <planet>  [Join] [Not now]". Or press "Copy my Steam ID" and send
+   that number. (Or type   coop host   in the console.)
+2. GUEST: stay in the MAIN MENU. Click the CO-OP button (small plate, bottom left of the screen). The
+   window lists your invitations, friends who are hosting ("Join"), friends who run the mod and the
+   hosts you joined before. A grey Join says why: another mod version (both run update.bat), the
+   world is full, or the host is in the editor / a menu. "Refresh" looks again (Steam must be running).
+   Or copy the host's Steam ID and press "Join by Steam ID". (Or type   coopjoin 7656...   in the console.)
 3. GUEST: the host's world arrives ("coop: world received"). Your game closes and starts again
    by itself as a "co-op launch" and connects to the host again. You do not type anything.
    The friend's world is played IN PLACE of your saves for this one run: your own saves are put

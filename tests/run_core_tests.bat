@@ -17,5 +17,8 @@ cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\launc
 out\launch_tests.exe || exit /b 1
 rem the world-transfer manifest (core\coop_manifest.h): diff, build, verify on temporary folders
 cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\manifest_tests.exe manifest_tests.cpp || exit /b 1
-out\manifest_tests.exe
+out\manifest_tests.exe || exit /b 1
+rem the Rich Presence string and the list rules (core\coop_presence.h)
+cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\presence_tests.exe presence_tests.cpp || exit /b 1
+out\presence_tests.exe
 exit /b %errorlevel%

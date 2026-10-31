@@ -42,6 +42,9 @@ namespace UiDraw
 	// a glossy pill button: primary = green (do it), else blue; hot = under the mouse (lighter)
 	void Button(Gdiplus::Graphics& g, const Gdiplus::RectF& r, const wchar_t* label, bool primary, bool hot, float textSize = 16);
 
+	// a pill button that cannot be pressed (grey, no hover); the reason belongs on the row next to it
+	void ButtonDisabled(Gdiplus::Graphics& g, const Gdiplus::RectF& r, const wchar_t* label, float textSize = 16);
+
 	// PNG bytes of a bitmap
 	bool EncodePng(Gdiplus::Bitmap& bitmap, std::vector<uint8_t>& png);
 

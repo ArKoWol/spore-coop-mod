@@ -10,6 +10,7 @@
 #include "MenuWorlds.h"
 #include "CoopNet.h"
 #include "CoopLaunch.h"
+#include "Presence.h"
 #include "../Log.h"
 #include "../RecentHosts.h"
 
@@ -38,24 +39,36 @@ namespace
 
 	enum class State { List, Connecting, Downloading, Restarting, Ready, Leaving, Error };
 
-	struct Friend
+	// one line of the list (JOIN_FLOW section 5): a section title or a player
+	struct Row
 	{
-		std::string name;    // UTF-8
-		std::string detail;  // second line
+		enum Kind { Header, Invitation, Hosting, Mod, Recent };
+		Kind kind = Header;
+		std::string name;    // UTF-8; a Header's title
+		std::string detail;  // second line: the state, or why Join is disabled
 		uint64_t steamId = 0;
+		bool join = false;     // has a Join button
+		bool enabled = true;   // false: the button is grey and cannot be pressed, `detail` says why
+		bool warn = false;     // `detail` is a reason (drawn in red)
 	};
 
 	struct Button
 	{
 		Gdiplus::RectF rect;
-		int action = 0;  // kCancel, kBack, kById, kLeave, or kJoin + friend index
+		int action = 0;  // kCancel, kBack, kById, kLeave, kRefresh, or kJoin + row index
 	};
-	const int kCancel = 2, kBack = 3, kById = 5, kLeave = 6, kJoin = 100;
+	const int kCancel = 2, kBack = 3, kById = 5, kLeave = 6, kRefresh = 7, kJoin = 100;
+
+	const int kMaxEntries = 8;     // players listed at most (the rest is counted in the window and named in the log)
+	const int kRowH = 66, kHeaderH = 26, kBannerH = 30, kEmptyH = 44, kMoreH = 22;
 
 	// heap objects, freed in Shutdown (no static destructors: ModAPI routes new/delete to the game's heap)
 	struct Ui
 	{
-		std::vector<Friend> friends;
+		std::vector<Row> rows;
+		int hidden = 0;        // players that did not fit
+		std::string banner;    // a line above the list ("Start Steam and log in, then press Refresh"), "" = none
+		int contentH = 0;      // pixels the list needs
 		std::vector<Button> buttons;
 		std::string worldOf;  // name of the friend whose world is (being) installed / played
 		std::string planet;   // co-op launch: the planet the host plays ("" = unknown)
@@ -72,6 +85,11 @@ namespace
 	int sProgressShown = -1;   // percent drawn last
 	int sHover = -1;           // action of the button under the mouse (drawn lighter)
 	bool sLeaveRequested = false;  // our Leave button (co-op launch): the restart is asked from Update
+	bool sJoinRequested = false;   // JoinHost (the toast of an invitation): started from Update
+	uint64_t sJoinId = 0;
+	std::string* sJoinName = nullptr;  // heap: freed in Shutdown
+	unsigned sRevisionShown = 0;       // Presence::Revision() the list was built from
+	float sListScreenH = 0;            // the screen height the list was built for (rows that fit)
 
 	bool PanelHandler(const UTFWin::Message& message);
 	bool ButtonHandler(const UTFWin::Message& message);
@@ -110,28 +128,137 @@ namespace
 		return *sUi;
 	}
 
+	// The list of the window, in this order (JOIN_FLOW section 5): invitations, friends with a world (Join, or grey with the
+	// reason), friends running the mod without a world (state text), recent sessions that are not online with the mod.
+	// At most kMaxEntries players and what fits the screen; the rest is counted.
 	void LoadFriends()
 	{
 		Ui& ui = U();
-		ui.friends.clear();
-		for (size_t i = 0; i < 5; ++i) {
+		ui.rows.clear();
+		ui.hidden = 0;
+		ui.banner.clear();
+		sRevisionShown = Presence::Revision();
+		const unsigned mine = CoopNet::ProtocolVersion();
+		const bool online = Presence::SteamOk() && Presence::Available();
+
+		std::vector<Row> invitations, hosting, mods, recent;
+		for (const Presence::Invite& invite : Presence::Invites()) {
+			Row r;
+			r.kind = Row::Invitation;
+			r.name = invite.name;
+			r.steamId = invite.host;
+			r.join = true;
+			r.detail = "invites you to " + (invite.planet.empty() ? std::string("a world") : invite.planet);
+			if (const Presence::Friend* f = Presence::FindFriend(invite.host)) {
+				coop::presence::Block block = coop::presence::JoinBlock(f->info, mine);
+				if (block != coop::presence::Block::None) {
+					r.enabled = false;
+					r.warn = true;
+					r.detail = coop::presence::BlockReason(block, f->info, f->name);
+				}
+			}
+			invitations.push_back(r);
+		}
+		for (const Presence::Friend& f : Presence::Friends()) {
+			bool invited = false;
+			for (const Row& r : invitations) {
+				invited = invited || r.steamId == f.id;
+			}
+			if (invited) {
+				continue;
+			}
+			Row r;
+			r.name = f.name;
+			r.steamId = f.id;
+			coop::presence::Block block = coop::presence::JoinBlock(f.info, mine);
+			if (coop::presence::HasSession(f.info)) {
+				r.kind = Row::Hosting;
+				r.join = true;
+				r.detail = coop::presence::StateText(f.info);
+				if (block != coop::presence::Block::None) {
+					r.enabled = false;
+					r.warn = true;
+					r.detail = coop::presence::BlockReason(block, f.info, f.name);
+				}
+				hosting.push_back(r);
+			}
+			else {
+				r.kind = Row::Mod;
+				r.detail = coop::presence::StateText(f.info);
+				if (f.info.protocol != mine) {
+					r.warn = true;
+					r.detail = coop::presence::BlockReason(coop::presence::Block::Protocol, f.info, f.name);
+				}
+				mods.push_back(r);
+			}
+		}
+		for (size_t i = 0; i < 10; ++i) {
 			uint64_t id = 0;
 			long long when = 0;
 			char name[128] = {};
 			if (!RecentHosts::Get(i, id, name, sizeof(name), when)) {
 				break;
 			}
-			Friend f;
-			f.steamId = id;
-			f.name = name[0] ? name : std::to_string(id);
+			bool listed = Presence::FindFriend(id) != nullptr;
+			for (const Row& r : invitations) {
+				listed = listed || r.steamId == id;
+			}
+			if (listed) {
+				continue;  // already above, with its state
+			}
+			Row r;
+			r.kind = Row::Recent;
+			r.steamId = id;
+			r.name = name[0] ? name : std::to_string(id);
+			r.join = true;
 			char detail[128] = "joined before";
 			time_t t = (time_t)when;
 			if (struct tm* local = localtime(&t)) {
-				strftime(detail, sizeof(detail), "joined %d.%m %H:%M  -  online state not checked yet", local);
+				strftime(detail, sizeof(detail), online ? "joined %d.%m %H:%M  -  not online with the mod" : "joined %d.%m %H:%M  -  online state not checked", local);
 			}
-			f.detail = detail;
-			ui.friends.push_back(f);
+			r.detail = detail;
+			recent.push_back(r);
 		}
+
+		if (!Presence::SteamOk()) {
+			ui.banner = "Start Steam and log in, then press Refresh";  // E1
+		}
+		else if (!Presence::Available()) {
+			ui.banner = "No friends list: steam_api_coop.dll is too old (update.bat)";
+		}
+
+		// what fits: the screen's height minus the fixed parts of the window and the button plate
+		float screenH = sScreenH > 0 ? sScreenH : 720;
+		sListScreenH = sScreenH;
+		int budget = (int)screenH - 16 - kButtonH - 140 - 56 - (ui.banner.empty() ? 0 : kBannerH) - kMoreH;
+		int entries = 0, used = 0, total = 0;
+		const struct { const char* title; std::vector<Row>* rows; } sections[] = {
+			{ "Invitations", &invitations }, { "Friends hosting", &hosting }, { "Friends running the mod", &mods },
+			{ "Recent sessions", &recent },
+		};
+		for (const auto& section : sections) {
+			total += (int)section.rows->size();
+			bool titled = false;
+			for (const Row& r : *section.rows) {
+				int need = kRowH + (titled ? 0 : kHeaderH);
+				if (entries >= kMaxEntries || used + need > budget) {
+					++ui.hidden;
+					Logf("menu: list: %s '%s' does not fit (at most %d players, %d px free)", section.title, r.name.c_str(), kMaxEntries, budget - used);
+					continue;
+				}
+				if (!titled) {
+					titled = true;
+					Row header;
+					header.kind = Row::Header;
+					header.name = section.title;
+					ui.rows.push_back(header);
+				}
+				ui.rows.push_back(r);
+				used += need;
+				++entries;
+			}
+		}
+		ui.contentH = used + (ui.banner.empty() ? 0 : kBannerH) + (total == 0 ? kEmptyH : 0) + (ui.hidden ? kMoreH : 0);
 	}
 
 	bool InMainMenu()
@@ -157,8 +284,7 @@ namespace
 	{
 		Ui& ui = U();
 		ui.buttons.clear();
-		int rows = (int)ui.friends.size();
-		height = sState == State::List ? 140 + rows * 66 + 56 : 262;
+		height = sState == State::List ? 140 + ui.contentH + 56 : 262;
 		const int pad = 10;  // room for the shadow around the plate
 
 		Gdiplus::Bitmap bitmap(kWidth, height, PixelFormat32bppARGB);
@@ -189,23 +315,55 @@ namespace
 
 		float y = plate.Y + 86;
 		if (sState == State::List) {
-			for (int i = 0; i < rows; ++i) {
-				const Friend& f = ui.friends[i];
-				Gdiplus::RectF row(left - 10, y, width + 20, 58);
-				FillRound(g, row, 16, C(255, 214, 222, 232), C(255, 236, 240, 246));
-				StrokeRound(g, row, 16, C(255, 168, 180, 196), 1.2f);
-				Text(g, Wide(f.name), 18, true, ink, Gdiplus::RectF(row.X + 18, y + 6, width - 150, 26));
-				Text(g, Wide(f.detail), 12.5f, false, soft, Gdiplus::RectF(row.X + 18, y + 31, width - 150, 20));
-				AddButton(g, Gdiplus::RectF(row.X + row.Width - 118, y + 12, 104, 34), L"Join", kJoin + i, true);
-				y += 66;
+			const C red(255, 190, 50, 40);
+			if (!ui.banner.empty()) {
+				Text(g, Wide(ui.banner), 14, true, red, Gdiplus::RectF(left, y, width, 26));
+				y += kBannerH;
 			}
-			Text(g, L"Copy a friend's Steam ID, then:", 12.5f, false, soft,
-				Gdiplus::RectF(left, plate.Y + plate.Height - 48, width - 200, 34));
+			if (ui.rows.empty()) {
+				Text(g, L"No friend is online with the mod right now.", 14, false, soft, Gdiplus::RectF(left, y, width, 34));
+			}
+			for (size_t i = 0; i < ui.rows.size(); ++i) {
+				const Row& f = ui.rows[i];
+				if (f.kind == Row::Header) {
+					Text(g, Wide(f.name), 13, true, soft, Gdiplus::RectF(left - 4, y, width, kHeaderH - 4));
+					y += kHeaderH;
+					continue;
+				}
+				Gdiplus::RectF row(left - 10, y, width + 20, 58);
+				if (f.kind == Row::Invitation) {
+					FillRound(g, row, 16, C(255, 255, 238, 190), C(255, 255, 248, 222));  // warm: somebody asks for you
+					StrokeRound(g, row, 16, C(255, 214, 168, 80), 1.2f);
+				}
+				else {
+					FillRound(g, row, 16, C(255, 214, 222, 232), C(255, 236, 240, 246));
+					StrokeRound(g, row, 16, C(255, 168, 180, 196), 1.2f);
+				}
+				float textW = f.join ? width - 150 : width - 20;
+				Text(g, Wide(f.name), 18, true, ink, Gdiplus::RectF(row.X + 18, y + 6, textW, 26));
+				Text(g, Wide(f.detail), 12.5f, false, f.warn ? red : soft, Gdiplus::RectF(row.X + 18, y + 31, textW, 20));
+				if (f.join) {
+					Gdiplus::RectF join(row.X + row.Width - 118, y + 12, 104, 34);
+					if (f.enabled) {
+						AddButton(g, join, L"Join", kJoin + (int)i, true);
+					}
+					else {
+						UiDraw::ButtonDisabled(g, join, L"Join");
+					}
+				}
+				y += kRowH;
+			}
+			if (ui.hidden) {
+				Text(g, Wide("+" + std::to_string(ui.hidden) + " more not shown"), 12.5f, false, soft, Gdiplus::RectF(left, y, width, kMoreH));
+			}
+			AddButton(g, Gdiplus::RectF(left - 4, plate.Y + plate.Height - 50, 96, 34), L"Refresh", kRefresh, false);
+			Text(g, L"Or a copied Steam ID:", 12.5f, false, soft,
+				Gdiplus::RectF(left + 100, plate.Y + plate.Height - 48, width - 300, 34));
 			AddButton(g, Gdiplus::RectF(right - 196, plate.Y + plate.Height - 50, 196, 34), L"Join by Steam ID", kById, false);
 		}
 		else if (sState == State::Connecting) {
 			Text(g, Wide("Connecting to " + ui.worldOf + "..."), 20, true, ink, Gdiplus::RectF(left, y, width, 30));
-			Text(g, L"Your friend must be hosting: creature stage, then coop host.", 13, false, soft, Gdiplus::RectF(left, y + 36, width, 22));
+			Text(g, L"Your friend must be hosting: creature stage, Host co-op.", 13, false, soft, Gdiplus::RectF(left, y + 36, width, 22));
 			AddButton(g, Gdiplus::RectF(right - 110, plate.Y + plate.Height - 52, 110, 36), L"Cancel", kCancel, false);
 		}
 		else if (sState == State::Restarting) {
@@ -274,17 +432,14 @@ namespace
 
 	// ------------------------------------------------------------------ the join
 
-	void StartJoin(int index)
+	void BeginJoin(uint64_t steamId, const std::string& name)
 	{
 		Ui& ui = U();
-		if (index < 0 || index >= (int)ui.friends.size()) {
-			return;
-		}
-		const Friend& f = ui.friends[index];
-		ui.worldOf = f.name;
-		Logf("menu: join %s (%llu)", f.name.c_str(), (unsigned long long)f.steamId);
+		ui.worldOf = name;
+		Logf("menu: join %s (%llu)", name.c_str(), (unsigned long long)steamId);
+		Presence::DismissInvite(steamId, true);  // an invitation of this host is answered
 		sDirty = true;
-		if (!CoopNet::Join(f.steamId)) {
+		if (!CoopNet::Join(steamId)) {
 			ui.error = "Steam did not start. Is Steam running and are you logged in?";
 			sState = State::Error;
 			return;
@@ -293,6 +448,15 @@ namespace
 		sHostSeenAt = 0;
 		sProgressShown = -1;
 		sState = State::Connecting;
+	}
+
+	void StartJoin(int index)
+	{
+		Ui& ui = U();
+		if (index < 0 || index >= (int)ui.rows.size() || !ui.rows[index].join || !ui.rows[index].enabled) {
+			return;
+		}
+		BeginJoin(ui.rows[index].steamId, ui.rows[index].name);
 	}
 
 	// "Join by Steam ID": the ID comes from the clipboard (17 digits, 7656...); it is added to the list as a friend and joined
@@ -323,13 +487,13 @@ namespace
 			Logf("menu: join by Steam ID: clipboard has no Steam ID ('%s')", digits.c_str());
 			return;
 		}
-		Friend f;
-		f.steamId = _strtoui64(digits.c_str(), nullptr, 10);
-		f.name = digits;
-		f.detail = "from the clipboard";
-		ui.friends.insert(ui.friends.begin(), f);
 		Logf("menu: join by Steam ID %s", digits.c_str());
-		StartJoin(0);
+		std::string name = digits;
+		uint64_t steamId = _strtoui64(digits.c_str(), nullptr, 10);
+		if (const Presence::Friend* friendOnline = Presence::FindFriend(steamId)) {
+			name = friendOnline->name;
+		}
+		BeginJoin(steamId, name);
 	}
 
 	// follows a running join: answer, world download, restart; errors when nothing happens
@@ -432,6 +596,10 @@ namespace
 				}
 				else if (b.action == kById) {
 					JoinFromClipboard();
+				}
+				else if (b.action == kRefresh) {
+					Presence::Refresh();
+					sDirty = true;
 				}
 				else if (b.action >= kJoin) {
 					StartJoin(b.action - kJoin);
@@ -644,6 +812,7 @@ namespace CoopMenu
 	{
 		if (!InMainMenu()) {
 			// keep the state, show it again in the menu
+			Presence::WatchFriends(Presence::kWatchWindow, false);
 			if (sPicture && sPicture->Visible()) {
 				sPicture->Hide();
 			}
@@ -677,10 +846,30 @@ namespace CoopMenu
 				sDirty = true;
 			}
 		}
+		if (sJoinRequested) {
+			sJoinRequested = false;
+			bool busy = sState == State::Connecting || sState == State::Downloading || sState == State::Restarting
+				|| sState == State::Leaving || sState == State::Ready;
+			if (busy || !sJoinName) {
+				Logf("menu: join of %llu ignored, the window is busy (state %d)", (unsigned long long)sJoinId, (int)sState);
+			}
+			else {
+				sVisible = true;  // the window shows the join
+				sButtonDirty = true;
+				BeginJoin(sJoinId, *sJoinName);
+			}
+		}
 		FollowJoin();
 		const Math::Rectangle& screen = main->GetArea();
 		if (screen.GetWidth() != sScreenW || screen.GetHeight() != sScreenH) {
 			sButtonDirty = true;  // the screen changed size: place both plates again
+			sDirty = true;
+		}
+		// the list follows the friends: scanned every 5 s while the window shows it, rebuilt when something changed
+		bool listShown = sVisible && sState == State::List;
+		Presence::WatchFriends(Presence::kWatchWindow, listShown);
+		if (listShown && (Presence::Revision() != sRevisionShown || sScreenH != sListScreenH)) {
+			LoadFriends();
 			sDirty = true;
 		}
 		if (sButtonDirty || !sButton || !sButton->Visible()) {
@@ -697,6 +886,17 @@ namespace CoopMenu
 		Redraw();
 	}
 
+	void JoinHost(uint64_t steamId, const std::string& name)
+	{
+		// started from Update, outside the UI message of the toast's click
+		if (!sJoinName) {
+			sJoinName = new std::string();
+		}
+		*sJoinName = name;
+		sJoinId = steamId;
+		sJoinRequested = true;
+	}
+
 	void Shutdown()
 	{
 		if (sPicture) {
@@ -711,6 +911,8 @@ namespace CoopMenu
 		}
 		delete sUi;
 		sUi = nullptr;
+		delete sJoinName;
+		sJoinName = nullptr;
 		if (sGdi) {
 			StopGdi();
 			sGdi = false;

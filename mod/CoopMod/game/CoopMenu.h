@@ -11,6 +11,9 @@
 // has a Leave button (the game restarts in the own world).
 #pragma once
 
+#include <cstdint>
+#include <string>
+
 namespace CoopMenu
 {
 	// every frame: the button plate in the main menu, the window, the join and the co-op launch's start
@@ -18,6 +21,10 @@ namespace CoopMenu
 
 	// coop menu: opens the window (also outside the main menu, for testing)
 	void Open();
+
+	// Join this host as the window's Join button does (the Join of an invitation's toast, game/InvitePanel.cpp). The window opens
+	// on the join; ignored while a join or a co-op launch is running.
+	void JoinHost(uint64_t steamId, const std::string& name);
 
 	// Dispose: removes the plates, frees GDI+
 	void Shutdown();

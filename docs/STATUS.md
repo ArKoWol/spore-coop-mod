@@ -40,7 +40,7 @@ Animals that waited for their species were never announced (25 of 99 reached the
 | today | CO-OP star + window, Steam join, download, restart (seen on 2 PCs 2026-10-25, before M1) | works |
 | M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | partly seen on 2 PCs 2026-10-31: the co-op launch moved the folders and joined; Leave, restore and the migration answer "Restore" still to see |
 | M2 + J9 | CO-OP button instead of the star (closes the GitHub issue), host's star selected in the co-op launch | built 2026-10-31 (bottom-left plate, `COOP_BUTTON_CORNER`; J9 write, `COOP_NO_SELECT` turns it off), to check on 2 PCs |
-| M3 + J3 | Steam Rich Presence: who hosts, version before connecting, invites | not started |
+| M3 + J3 | Steam Rich Presence: who hosts, version before connecting, invites | built 2026-10-31 (protocol 16, 55 logic checks): Steam starts in the menu, friends list with reasons, invites; to check on 2 PCs |
 | M4 | manifest: a rejoin downloads only what differs, every file checked (protocol 14) | built 2026-10-31, logic tested (85 checks), to check on 2 PCs |
 | M5 | join from the launcher without the restart (J4) | not started |
 | J8 (path C) | a save from another universe on our star | failed 2026-10-25, parked |

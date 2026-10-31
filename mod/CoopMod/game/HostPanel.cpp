@@ -4,6 +4,8 @@
 #include "CoopNet.h"
 #include "CoopLaunch.h"
 #include "UiDraw.h"
+#include "InvitePanel.h"
+#include "Presence.h"
 #include "../Log.h"
 
 #include <string>
@@ -14,9 +16,12 @@ using namespace UiDraw;
 namespace
 {
 	const int kWidth = 300;
+	const int kHostingWidth = 380;  // hosting with the friends list available: room for the Invite button
 	const int kLeaveWidth = 340;  // the guest's plate in a co-op launch: "In <host>'s world" and Leave
 	const int kMargin = 16;  // from the screen's top right corner
-	const int kCopy = 1, kStop = 2, kHost = 3, kLeave = 4;
+	const int kCopy = 1, kStop = 2, kHost = 3, kLeave = 4, kInvite = 5;
+	float sAnchorRight = 0, sAnchorBottom = 0;  // the visible plate on screen (0 = hidden)
+	bool sInviteShown = false;                  // the Invite button was drawn as "open"
 
 	struct Hit
 	{
@@ -82,7 +87,8 @@ namespace
 		}
 		sHits->clear();
 		const CoopNet::HostState& s = sShown;
-		width = sLeaveShown ? kLeaveWidth : kWidth;
+		bool canInvite = s.hosting && Presence::Available();
+		width = sLeaveShown ? kLeaveWidth : canInvite ? kHostingWidth : kWidth;
 		height = sLeaveShown ? 64 : s.hosting ? 150 : 96;
 		Gdiplus::Bitmap bitmap(width, height, PixelFormat32bppARGB);
 		Gdiplus::Graphics g(&bitmap);
@@ -129,13 +135,21 @@ namespace
 			wchar_t line[96];
 			swprintf(line, 96, L"Your Steam ID: %llu", (unsigned long long)s.myId);
 			Text(g, line, 12, false, soft, Gdiplus::RectF(left, plate.Y + 42, textWidth, 18));
-			Text(g, L"Your friend: CO-OP button, Join by Steam ID", 11.5f, false, soft, Gdiplus::RectF(left, plate.Y + 60, textWidth, 18));
+			Text(g, canInvite ? L"Your friend: CO-OP button (he sees you there), or Invite" : L"Your friend: CO-OP button, Join by Steam ID",
+				11.5f, false, soft, Gdiplus::RectF(left, plate.Y + 60, textWidth, 18));
 			Gdiplus::RectF copy(left - 2, plate.Y + plate.Height - 42, 160, 30);
 			Button(g, copy, copied ? L"Copied!" : L"Copy my Steam ID", true, sHover == kCopy, 13);
 			AddHit(copy, kCopy);
-			Gdiplus::RectF stop(plate.X + plate.Width - 92, plate.Y + plate.Height - 42, 76, 30);
+			Gdiplus::RectF stop(plate.X + plate.Width - 76, plate.Y + plate.Height - 42, 60, 30);
 			Button(g, stop, L"Stop", false, sHover == kStop, 13);
 			AddHit(stop, kStop);
+			if (canInvite) {
+				// green while the list is closed, blue while it is open (the same button closes it)
+				sInviteShown = InvitePanel::IsOpen();
+				Gdiplus::RectF invite(copy.X + copy.Width + 8, copy.Y, 76, 30);
+				Button(g, invite, L"Invite", !sInviteShown, sHover == kInvite, 13);
+				AddHit(invite, kInvite);
+			}
 		}
 		return EncodePng(bitmap, png);
 	}
@@ -171,11 +185,19 @@ namespace
 		if (sPicture) {
 			sPicture->Hide();
 		}
+		sAnchorRight = sAnchorBottom = 0;
 	}
 }
 
 namespace HostPanel
 {
+	bool Anchor(float& right, float& bottom)
+	{
+		right = sAnchorRight;
+		bottom = sAnchorBottom;
+		return sAnchorBottom > 0;
+	}
+
 	void Update()
 	{
 		CoopNet::HostState s = CoopNet::Hosting();
@@ -217,7 +239,13 @@ namespace HostPanel
 				CoopNet::Cancel();
 				s = CoopNet::Hosting();
 			}
+			else if (action == kInvite) {
+				InvitePanel::Toggle();
+			}
 			sDirty = true;
+		}
+		if (s.hosting && InvitePanel::IsOpen() != sInviteShown) {
+			sDirty = true;  // the Invite button's colour follows the list
 		}
 		if (s.hosting != sShown.hosting || s.guestHere != sShown.guestHere || s.guest != sShown.guest || s.myId != sShown.myId) {
 			sDirty = true;
@@ -258,6 +286,8 @@ namespace HostPanel
 		}
 		if (sPicture->Show(png, screenW - width - kMargin, (float)kMargin, width, height)) {
 			sDirty = false;
+			sAnchorRight = screenW - kMargin - 8;      // the picture has a margin for the shadow around the plate
+			sAnchorBottom = (float)(kMargin + height - 12);
 		}
 	}
 
