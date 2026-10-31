@@ -90,8 +90,16 @@ an old install with backups is restored by the question.
   Protocol bump.
 
 ## 6. M4: rejoin without downloading again
-The host first sends a manifest (file names, sizes, CRC32 of its `Game0`); the guest compares it with `Coop\<id>` and asks only
-for what differs. Also catches a truncated download (E10). Protocol bump.
+Built (protocol 14, not yet seen on 2 PCs); how it works: `../ARCHITECTURE.md` section 5, code `core/coop_manifest.h` and
+`game/WorldTransfer.cpp`. The host first sends a manifest (file names, sizes, CRC32 of its `Game0`); the guest compares it with
+`Coop\<id>` and asks only for what differs. Also catches a truncated download (E10).
+- Nothing differs: `JoinState.upToDate`, straight to `CoopLaunch.txt` and the restart (the window's text for it, `Your copy is up
+  to date`, is wired by the menu code, not by this step).
+- A check that fails (size or CRC32) deletes `.incoming` and retries the whole download once from a fresh manifest, then
+  `JoinState.error`. The cache is never touched by a failed download.
+- E9 is `NetStop` (cancel) and `GuestUpdate` (host silent 10 s, or nothing on the file channel for 30 s).
+- Open: the window shows `JoinState.error` only after its menu code reads it; until then a failed download ends as `answered
+  but sends no world`.
 
 ## 7. M5 (later): join without the restart, from the launcher
 `launch_spore_mod.bat join last | <name>`: a small helper (or the launcher) fetches the world into `Coop\<id>` before the game

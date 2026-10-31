@@ -21,7 +21,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 
 | File | What it does |
 |---|---|
-| `mod/CoopMod/dllmain.cpp` | start-up and shutdown, console commands, Steam/UDP transport, `StatePacket`, world transfer, restart, remote console, puppet, detours (`NPCTickAI`, `TakeDamage`, `PlayAnimation`, `ExecuteAction`, movie), crash handler, `kProtocolVersion` |
+| `mod/CoopMod/dllmain.cpp` | start-up and shutdown, console commands, Steam/UDP transport, `StatePacket`, glue of the world transfer, restart, remote console, puppet, detours (`NPCTickAI`, `TakeDamage`, `PlayAnimation`, `ExecuteAction`, movie), crash handler, `kProtocolVersion` |
 | `mod/CoopMod/World.cpp/.h` | the shared world: the host's animals streamed to the guest as mirrors, species and model requests, avatar health, damage requests, nests, animation events |
 | `mod/CoopMod/Objects.cpp/.h` | fruit, fruit groups, plants, eggs: scan and removal events (broadcast and manifest apply switched off, they only log: `eco:` lines) |
 | `mod/CoopMod/Entities.cpp/.h` | `coop dump`: what exists in the world, per noun type |
@@ -33,11 +33,13 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready, a Leave button in a co-op launch (`coop menu/carddump`) |
 | `mod/CoopMod/game/SaveIds.cpp/.h` | research: RefPack and DBPF read/write; moves a save or a planet record to another star (used only with `COOP_MOVE_SAVE=1`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
-| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
+| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, `upToDate`, `error`, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here; for a guest in a co-op launch the plate `In <host>'s world` with Leave |
 | `mod/CoopMod/game/CoopLaunch.cpp/.h` | the co-op launch in the game: `Prepare()` from `DllMain` (calls `core/coop_launch.h`, logs `launch:` lines), `Active/Host/Notice`, `HostName`; in the main menu a plate with the notice of a failed folder move and the one-time restore question of an old install |
+| `mod/CoopMod/game/WorldTransfer.cpp/.h` | the world transfer on channel 1: the host's snapshot, manifest and chunk pump; the guest's state (download, retry, staged, error, abort); calls `core/coop_manifest.h` |
+| `core/coop_manifest.h` | the manifest logic (plain C++, Win32 file calls only): CRC32, wire formats, snapshot of a folder, diff against the cache, the `Download` (chunks in, build, verify), `Commit`, `RemoveIncoming`; tests in `tests/manifest_tests.cpp` |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 | `core/coop_launch.h` | the folder logic of the co-op launch (Win32 file calls only, no game headers): restore, launch, migration; tests in `tests/launch_tests.cpp` |
 
@@ -50,14 +52,21 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **13**. Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **14** (14: manifest world transfer). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
 | 0 | avatar state (`StatePacket`) | unreliable |
-| 1 | save-game files (world transfer) | reliable |
+| 1 | world transfer: manifest, wanted files, file chunks (table below) | reliable |
 | 2 | world deltas (`World.h` `kChannelDelta`) | unreliable |
 | 3 | world events (`World.h` `kChannelReliable`) | reliable, ordered |
+
+| Channel 1 message (first u32) | Direction | Meaning |
+|---|---|---|
+| `'SPMF'` | host -> guest | manifest: count, then per file name, size, CRC32 (`core/coop_manifest.h`) |
+| `'SPND'` | guest -> host | names of the files the guest needs; not sent when nothing is needed |
+| `'SPFL'` | host -> guest | chunk of a needed file: name[64], offset, total size, data length, up to 60 KB data |
+| `'SPRQ'` | guest -> host | "send a fresh manifest" (the one retry after a download that did not check out) |
 
 | Message (first byte) | Direction | Meaning |
 |---|---|---|
@@ -75,10 +84,24 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 116 `kMsgCorpse` | host -> guest | once per dead animal: netId, food value, flags (the guest writes the food value into the corpse) |
 
 ## 5. World transfer (joining)
-When a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, 60 KB chunks, a
-few per frame because Steam's send buffer is small). The client writes them to `Games\Coop\<host id>.incoming\` (plus
-`coop_host.txt`, the host's Steam ID) and renames that to `Games\Coop\<host id>\` only when the last file is complete (an
-older copy of the same host is replaced: it is a cache, the host's save is the real one). It then writes `Games\CoopLaunch.txt`
+When a client first contacts the host, the host takes a snapshot of the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, held in
+memory so manifest and bytes agree) and sends the manifest (`'SPMF'`: name, size, CRC32 per file). The client compares it with its
+cache `Games\Coop\<host id>` (`MakePlan`: a file is kept when size and CRC32 match) and answers with the names it needs (`'SPND'`).
+The host sends only those files (`'SPFL'`, 60 KB chunks, a few per frame because Steam's send buffer is small). The client
+builds `Games\Coop\<host id>.incoming\` from the unchanged cache files plus the received ones plus `coop_host.txt` (the host's
+Steam ID), checks every file against the manifest (size + CRC32, no other file), and only then replaces the cache
+(`Commit`: old cache aside, new folder in, old cache deleted). Flows of the guest (`game/WorldTransfer.cpp`):
+- **Up to date** (every file matches, no extra file, `coop_host.txt` right): nothing is sent or built; straight to `CoopLaunch.txt`
+  (`JoinState.upToDate`).
+- **Partial / full**: as above. Files the manifest no longer lists are not carried over (a cache with extra files is rebuilt even when
+  nothing is needed).
+- **Check fails** (wrong CRC, bad chunk): `.incoming` is deleted, the guest sends `'SPRQ'` and downloads everything once more from
+  a fresh manifest; the second failure ends the join with `JoinState.error` (and a console line). The cache is not touched.
+- **Cancel / host gone** (no packet for `kReconnectMs`, or nothing on the file channel for 30 s): `NetStop`/`GuestUpdate` delete
+  `Coop\<id>.incoming` (the only folder `RemoveIncoming` deletes), `JoinState.error` says why. A killed game leaves its
+  `.incoming`; the next download clears it.
+
+After the world is complete the mod writes `Games\CoopLaunch.txt`
 (the host id) and the game is **restarted by the mod itself** 3 s later: a hidden PowerShell `%TEMP%\coop_restart.ps1` waits
 for the process to end and starts `SporeApp.exe -w` again; the game is closed with `WM_CLOSE` (`COOP_NO_RESTART` turns the
 restart off; `coop restart` tests it without a world). The new game opens its own console window (`OpenConsoleWindow`:

@@ -59,6 +59,7 @@
     <ClInclude Include="game\UiDraw.h" />
     <ClInclude Include="game\HostPanel.h" />
     <ClInclude Include="game\CoopLaunch.h" />
+    <ClInclude Include="game\WorldTransfer.h" />
     <ClInclude Include="game\NamePlates.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
@@ -78,6 +79,7 @@
     <ClCompile Include="game\UiDraw.cpp" />
     <ClCompile Include="game\HostPanel.cpp" />
     <ClCompile Include="game\CoopLaunch.cpp" />
+    <ClCompile Include="game\WorldTransfer.cpp" />
     <ClCompile Include="game\NamePlates.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />

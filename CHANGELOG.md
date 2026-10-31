@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **M4 of the join flow: a rejoin downloads only what differs, protocol 14** (ArKoWol; `core/coop_manifest.h`, `game/WorldTransfer.cpp`).
+  The host sends a manifest (name, size, CRC32); the guest asks only for changed or missing files, builds `Coop\<id>.incoming` from
+  cache + received files, checks every file, then replaces the cache; a failed check retries once, then `CoopNet::State().error`
+  (also `.upToDate`); a cancelled or cut-off download deletes `.incoming`. Logic: 85 checks in `tests\run_core_tests.bat`; not tested
+  on 2 PCs; **protocol 14, both must update**; watch the `world:` lines in `CoopMod.log`.
+
 - **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
   removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror
   gets the game's tick for 2 s, else `mbDead` is set (it never became a corpse); the guest moves its own drawn nests to the host's
