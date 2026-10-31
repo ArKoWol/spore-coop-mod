@@ -24,6 +24,7 @@ namespace PuppetMotion
 		DWORD lastOrder = 0;
 		float snap = 6.0f;           // farther than this behind the target: teleport (the puppet 6 m, mirrors near the avatar less)
 		DWORD holdUntil = 0;       // GetTickCount() until which a standing creature is left alone (see Hold)
+		DWORD farSince = 0;        // since when the remote creature stands and ours stands off its place (settle snap), 0 = not
 	};
 
 	// A non-walking animation (mating call, eating, singing) has just been started on this creature: for `ms` milliseconds,

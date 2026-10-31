@@ -11,6 +11,8 @@ namespace
 	bool sLogging = false;
 	PuppetMotion::Follower sPuppet;  // the remote player's puppet
 	DWORD sLastLog = 0;
+	DWORD sLastSettleLog = 0;
+	int sSettleLogged = 0;
 
 	const float kHoldDistance = 1.0f;     // an animation is only protected from stop/turn orders while the creature is this close to its target
 	const float kSnapDistance = 6.0f;     // farther than this behind: Teleport
@@ -18,6 +20,8 @@ namespace
 	const float kArriveDistance = 0.6f;   // close enough to stand still
 	const DWORD kOrderIntervalMs = 100;   // how often a new move order is given
 	const float kLeadSeconds = 0.35f;     // aim a bit ahead of the remote player so the puppet keeps walking smoothly
+	const float kSettleDistance = 1.5f;   // the remote creature stands and ours is farther than this from it ...
+	const DWORD kSettleMs = 600;          // ... for this long (blocked by a body, locked by a hit reaction): Teleport it there
 }
 
 namespace PuppetMotion
@@ -82,7 +86,35 @@ namespace PuppetMotion
 			return;
 		}
 
+		// Settle snap: the remote creature stands but ours stands off its place (blocked by an avatar body, locked by combat or
+		// hit reactions, so MoveTo never gets it there and it never falls 6 m behind). Only counted outside kHoldDistance, so a
+		// held animation is never cut. In a fight the animal would otherwise stand at two different places for the two players.
+		bool settle = false;
+		if (f.remoteSpeed < kStopSpeed && distance > kSettleDistance) {
+			if (!f.farSince) {
+				f.farSince = now ? now : 1;
+			}
+			else if (now - f.farSince >= kSettleMs) {
+				settle = true;
+			}
+		}
+		else {
+			f.farSince = 0;
+		}
+
 		if (sMode == Mode::Teleport) {
+			puppet->Teleport(target, rotation);
+		}
+		else if (settle && f.started) {
+			if (sSettleLogged < 60 && now - sLastSettleLog >= 1000) {
+				sLastSettleLog = now;
+				++sSettleLogged;
+				Logf("motion: settle snap of %s, %.1f m from the target after %d ms (moving %d)", &f == &sPuppet ? "the puppet" : "a mirror",
+					distance, (int)(now - f.farSince), f.moving ? 1 : 0);
+			}
+			f.farSince = 0;
+			f.moving = false;
+			puppet->StopMovement();
 			puppet->Teleport(target, rotation);
 		}
 		else if (!f.started || distance > f.snap) {
