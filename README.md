@@ -38,9 +38,12 @@ Every change is listed in [`CHANGELOG.md`](CHANGELOG.md).
 4. **Host**: load a game, go into the creature stage and press **Host co-op** (top right). Press **Copy my Steam ID** and
    send it to your friend. (Console way: Ctrl+Shift+C, `coop host`.)
 5. **Guest**: in the main menu click the **CO-OP** star in the middle of the galaxy, then **Join** next to a friend you joined
-   before, or copy the host's Steam ID and press **Join by Steam ID**. The host's world arrives, your game restarts and
-   reconnects by itself (your own save is kept as `Game0.coopbackup`); press **Play** on the CO-OP star.
-   (Console way: `coopjoin <host's Steam ID>`.)
+   before, or copy the host's Steam ID and press **Join by Steam ID**. The host's world arrives and your game restarts
+   by itself as a **co-op launch**: the friend's world is played in place of your saves for this one run (yours are put
+   aside and come back at the next start, nothing is deleted) and the game reconnects by itself; press **Play** on the
+   CO-OP star. (Console way: `coopjoin <host's Steam ID>`.)
+6. **Leave**: press **Leave** (the small plate in the game, or in the CO-OP window), or type `coop leave`: the game
+   restarts in your own world. Simply closing the game works too: the next start is always your own world.
 
 Full player instructions: [`package/README.txt`](package/README.txt) (shipped as `README.txt` in the zip).
 
@@ -54,6 +57,7 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 | `coop friends` | the hosts you joined before, with their Steam names |
 | `coop status` | connection state, received packets, puppet, shared-world counts |
 | `coop off` | leave the session |
+| `coop leave` | in a friend's world (co-op launch): restart the game in your own world |
 | `coop sendworld` / `coop noworld` | host: send the world again / stop sending it automatically |
 | `coop udphost` / `coopudpjoin <ip>` | fallback over plain UDP, port 27777 (no world transfer, needs VPN or port forwarding) |
 | `coop move` / `coop walk` / `coop teleport` | how the other player's creature follows (`move` is the default) |
@@ -97,7 +101,7 @@ Daily work, from the repo root:
 | `launch_spore_mod.bat` | check GitHub, build, install into the test copy, start the game windowed, open a console connected to it (each step shows a spinner) |
 | `console.bat "coop status"` | type game commands from PowerShell (or `console.bat` for an interactive prompt) |
 | `update.bat` | check GitHub for new commits and a new release |
-| `tests\run_core_tests.bat` | tests of the replication core, no game needed |
+| `tests\run_core_tests.bat` | tests of the replication core and of the co-op launch folder logic, no game needed |
 | `.\scripts\publish.ps1` | build the package and publish a GitHub release (tell the other developer first) |
 
 Logs: `test\SPORE_A\SporebinEP1\CoopMod.log` (the mod) and `spore_log.txt` (ModAPI). Every change goes into

@@ -36,10 +36,19 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
    Steam ID and press "Join by Steam ID" (or "Join" next to a friend you joined before).
    (Or type   coopjoin 7656...   in the console.)
 3. GUEST: the host's world arrives ("coop: world received"). Your game closes and starts again
-   by itself, installs the world and connects to the host again. You do not type anything.
-   Your own save is kept in %APPDATA%\Spore\Games\Game0.coopbackup (later joins: coopbackup2, 3, ...).
-4. GUEST: press Continue and enter the creature stage. The window title says
-   "CO-OP: you are in the HOST's world".
+   by itself as a "co-op launch" and connects to the host again. You do not type anything.
+   The friend's world is played IN PLACE of your saves for this one run: your own saves are put
+   aside (%APPDATA%\Spore\Games\Game0.own) and come back at the next start. Nothing is deleted.
+   The friend's world is kept in %APPDATA%\Spore\Games\Coop\<his Steam ID>.
+4. GUEST: press Play on the CO-OP star and enter the creature stage. The window title says
+   "CO-OP: you are in the HOST's world", and a small plate shows "In <name>'s world - Leave".
+5. GUEST: to go back to your own world press Leave (the plate, or the CO-OP window in the main menu)
+   or type   coop leave   : the game restarts in your own world. Closing the game works too:
+   the next start is always your own world, even after a crash.
+6. If you used an older version of the mod: your own saves may still sit in a backup folder
+   (Game0.coopbackup). The first time the main menu opens the mod asks once
+   "Your own saves are in a backup. Restore them?". Restore moves them back to Game0 (the game
+   restarts once); the friend's world is kept in Games\Coop. Nothing is deleted.
 
 What you see: the other player's creature walks next to you (for now it has YOUR creature's look).
 What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
@@ -57,6 +66,7 @@ coopjoin <number>      ... or by their number in coop friends
 coop friends           the list of hosts you joined, with numbers
 coop status            what is connected
 coop off               leave the session
+coop leave             in a friend's world: restart the game in your own world
 coop sendworld         host: send the world to the guest again
 coop noworld           host: do not send the world automatically
 coop udphost           fallback without Steam: host over UDP port 27777 (needs VPN or port forwarding,

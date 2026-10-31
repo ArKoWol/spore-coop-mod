@@ -36,8 +36,8 @@ Animals that waited for their species were never announced (25 of 99 reached the
 ## 2. Join flow from the main menu (`features/JOIN_FLOW.md`)
 | Part | What | State |
 |---|---|---|
-| today | CO-OP star + window, Steam join, download, restart; the guest's `Game0` is swapped into `Game0.coopbackupN` and not restored | works on 2 PCs 2026-10-25 |
-| M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | not started (plan 2026-10-31) |
+| today | CO-OP star + window, Steam join, download, restart (seen on 2 PCs 2026-10-25, before M1) | works |
+| M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | built 2026-10-31, folder logic tested (63 checks), game side to check on 2 PCs |
 | M2 + J9 | CO-OP button instead of the star (closes the GitHub issue), host's star selected in the co-op launch | not started |
 | M3 + J3 | Steam Rich Presence: who hosts, version before connecting, invites | not started |
 | M4 / M5 | manifest to skip downloads / join from the launcher without the restart (J4) | not started |

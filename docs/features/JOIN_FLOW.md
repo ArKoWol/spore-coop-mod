@@ -43,6 +43,7 @@ Files under `%APPDATA%\Spore\Games\`:
 | `Coop\<host steam id>\` | the host's world as last received (a cache: the host's save is the real one) |
 | `Coop\<host steam id>.incoming\` | a download in progress; renamed to the folder above only when complete |
 | `Game0.own\` | your own `Game0` while a co-op launch runs (exists only then) |
+| `CoopNoOwn.txt` | marker instead of `Game0.own` when the player had no `Game0` at all: restore only moves the host's world away and invents no `Game0` |
 | `CoopLaunch.txt` | written before the restart: host id. Read and deleted at the next start (replaces `CoopAutoJoin.txt`) |
 
 What the mod does in `DllMain`, before the game opens anything, in this order:
@@ -50,18 +51,21 @@ What the mod does in `DllMain`, before the game opens anything, in this order:
    `coop_host.txt`) and `Game0.own` to `Game0`.
 2. **Co-op launch**: if `CoopLaunch.txt` names a host and `Coop\<id>` exists: move `Game0` to `Game0.own` and `Coop\<id>` to
    `Game0`; this run is a co-op launch (auto-join, no hosting, Leave plate).
-3. A move that fails (a zombie process holds the folder, `../FACTS.md` section 2) is logged and shown; the co-op launch is not
-   started and nothing is ever deleted.
+3. A move that fails (a zombie process holds the folder, `../FACTS.md` section 2) is retried twice, then undone as far as it went,
+   logged and shown (console at start, plate in the main menu); the co-op launch is not started and nothing is ever deleted.
+   `CoopLaunch.txt` is consumed anyway, so a failure does not repeat at every start. A taken target name gets `.old2`, `.old3`.
+The code is `core/coop_launch.h` (tested without the game, `tests/launch_tests.cpp`) and `game/CoopLaunch.cpp`.
 
-Leave (in-game plate, co-op window in the menu): closes the game and starts it again without `CoopLaunch.txt`; step 1 restores.
+Leave (in-game plate, co-op window in the menu, console `coop leave`): closes the game and starts it again without
+`CoopLaunch.txt`; step 1 restores. A co-op launch cannot host (`coop host` is refused).
 The guest's game may save inside the co-op launch: that lands in the cache only (only the host saves, `../PLAN.md` rule 7).
 Replaced code: `Game0.coopready`, `InstallPendingWorld`'s swap into `Game0.coopbackupN`, `CoopAutoJoin.txt`.
 
 **Migration of old installs** (D22): `Game0` holds `coop_host.txt` (a host's world) and a `Game0.coopbackup*` without it
 exists. The first time the menu opens, our window asks once: `Your own saves are in a backup (Game0.coopbackup). Restore them?
 [Restore] [Not now]`. Restore writes `CoopMigrate.txt` and restarts; at that start the mod moves `Game0` to `Coop\<id>` and the
-oldest backup without `coop_host.txt` to `Game0`. Other backups stay (named in the log). The answer is remembered
-(`CoopMigrateAsked.txt`); nothing is deleted.
+oldest backup without `coop_host.txt` to `Game0` (this runs before step 1). Other backups stay (named in the log). The answer
+is remembered (`CoopMigrateAsked.txt`); nothing is deleted. The question is not asked in a co-op launch.
 
 Done when (two PCs): join, play, Leave -> own save is back; join, kill the game in the co-op launch -> next start is the own save;
 an old install with backups is restored by the question.

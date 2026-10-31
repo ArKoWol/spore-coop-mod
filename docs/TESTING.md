@@ -24,7 +24,7 @@ Never run the guest's game minimized or fullscreen in the background: a minimize
 | `coop echo` | one-PC puppet test: a copy of you 0.4 s later, 4 m to the side |
 | `coop motionlog`, `coop fps` | puppet motion and frame-rate diagnostics |
 | `coop facing`, `coop run` | the puppet's steps back / sideways (`always`, `steps`, `off`) and its speed matching (on / off) |
-| `tests\run_core_tests.bat` | the replication core with a fake world, no game, seconds |
+| `tests\run_core_tests.bat` | the replication core with a fake world, and the co-op launch folder logic (`core/coop_launch.h`) on temporary folders; no game, seconds |
 | `crash:` lines in `CoopMod.log`, link map | find a crash (`FACTS.md` section 4) |
 
 ## 3. Rules

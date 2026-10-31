@@ -10,6 +10,8 @@
 #include "game/LoadTrace.h"
 #include "game/HostPanel.h"
 #include "game/NamePlates.h"
+#include "game/CoopLaunch.h"
+#include "../../core/coop_launch.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
 #include "World.h"
@@ -640,10 +642,11 @@ static void HandlePacket(const StatePacket& p)
 
 // The host sends the files of its save game folder (Games\Game0, about 3 MB) so the client can load the
 // same world. Files travel as reliable messages on channel 1, a few chunks per frame because Steam's send
-// buffer is small. The client's own save is kept as Game0.coopbackup (later ones: coopbackup2, 3, ...).
+// buffer is small. The client keeps the received world in Games\Coop\<host id>.
 // The running game keeps planetRecords.pkp/.pkt and PlanetScripts.pld open (read share only) from startup,
-// so Game0 cannot be replaced while it runs: the received world waits in Game0.coopready and is installed
-// by InstallPendingWorld() when the next game starts, before the game opens its save.
+// so Game0 cannot be replaced while it runs: the world waits in Games\Coop\<host id> and CoopLaunch::Prepare()
+// swaps it in for the next launch (the "co-op launch"), before the game opens its save. The client's own Game0
+// is never touched for good (core/coop_launch.h).
 static const uint32_t kFileMagic = 0x4C465053;  // 'SPFL'
 static const uint32_t kChunk = 60 * 1024;
 static const int kFileChannel = 1;
@@ -663,7 +666,7 @@ struct FilePacket
 #pragma pack(pop)
 static const size_t kFileHeader = offsetof(FilePacket, data);
 
-// Written into a received world (Game0.coopready, later Game0): the host's Steam ID.
+// Written into a received world (Coop\<id>, in a co-op launch Game0): the host's Steam ID.
 static const char* kSaveHostFile = "coop_host.txt";
 
 static std::string GamesDir()
@@ -695,68 +698,20 @@ static void DeleteDir(const std::string& dir)
 	RemoveDirectoryA(dir.c_str());
 }
 
-// Set when this run started by installing a received world: a world sent again (the client joins again
-// after the restart and the host sends on every first contact) is then ignored instead of asking for
-// another restart.
+// Set when this run is a co-op launch (CoopLaunch::Prepare put the host's world in place of Game0): a world sent again
+// (the client joins again after the restart and the host sends on every first contact) is then ignored instead of
+// asking for another restart.
 static bool sWorldInstalledAtStart = false;
 static float sWorldProgress = -1;  // client: share of the world received (0..1), -1 = none arriving (CoopNet::State)
 static bool sWorldStaged = false;
 static bool sWorldIgnoredNotice = false;
 
-// Called from DllMain, before the game opens anything in Game0.
-static void InstallPendingWorld()
-{
-	std::string games = GamesDir();
-	std::string ready = games + "\\Game0.coopready";
-	if (GetFileAttributesA(ready.c_str()) == INVALID_FILE_ATTRIBUTES) {
-		return;
-	}
-	std::string save = games + "\\Game0";
-	// Never delete an earlier backup: the first one holds the player's own save. Use the first free name:
-	// Game0.coopbackup, Game0.coopbackup2, Game0.coopbackup3, ...
-	std::string backup = games + "\\Game0.coopbackup";
-	for (int n = 2; GetFileAttributesA(backup.c_str()) != INVALID_FILE_ATTRIBUTES && n < 1000; ++n) {
-		backup = games + "\\Game0.coopbackup" + std::to_string(n);
-	}
-	bool hadSave = GetFileAttributesA(save.c_str()) != INVALID_FILE_ATTRIBUTES;
-	bool movedOld = !hadSave || MoveFileA(save.c_str(), backup.c_str()) != 0;
-	bool movedNew = movedOld && MoveFileA(ready.c_str(), save.c_str()) != 0;
-	sWorldInstalledAtStart = movedNew;
-	Logf("world: installed at start %d (backup %d as %s, error %lu)", movedNew ? 1 : 0, (hadSave && movedOld) ? 1 : 0,
-		backup.c_str(), movedNew ? 0 : GetLastError());
-}
-
 // After a world is received the mod restarts the game by itself (the running game keeps Game0 locked, so the world is
-// installed at the next start) and joins the same host again at that start. The host's Steam ID travels in
-// Games\CoopAutoJoin.txt, which is read once and deleted. COOP_NO_RESTART turns the automatic restart off.
-static const char* kAutoJoinFile = "CoopAutoJoin.txt";
+// swapped in at the next start) and joins the same host again at that start. The host's Steam ID travels in
+// Games\CoopLaunch.txt, which the next start reads once and deletes (core/coop_launch.h). A restart without that file is
+// Leave. COOP_NO_RESTART turns the automatic restart after a download off.
 static DWORD sRestartAt = 0;  // GetTickCount() deadline of the restart, 0 = none planned
 static bool sRestartDone = false;
-
-static std::string AutoJoinPath() { return GamesDir() + "\\" + kAutoJoinFile; }
-
-static void WriteAutoJoin(uint64_t hostId)
-{
-	if (FILE* f = fopen(AutoJoinPath().c_str(), "w")) {
-		fprintf(f, "%llu\n", (unsigned long long)hostId);
-		fclose(f);
-	}
-}
-
-// Returns the host id left by the previous run and deletes the file; 0 if there is none.
-static uint64_t TakeAutoJoin()
-{
-	unsigned long long id = 0;
-	std::string path = AutoJoinPath();
-	if (FILE* f = fopen(path.c_str(), "r")) {
-		if (fscanf(f, "%llu", &id) != 1) {
-			id = 0;
-		}
-		fclose(f);
-		DeleteFileA(path.c_str());
-	}
-	return id;
-}
 
 static struct WorldSend
 {
@@ -880,8 +835,12 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 	}
 
 	std::string games = GamesDir();
-	std::string incoming = games + "\\Game0.coopincoming";
+	// Coop\<host id>.incoming while the download runs; renamed to Coop\<host id> only when it is complete
+	std::string coopDir = games + "\\Coop";
+	std::string worldDir = coopDir + "\\" + std::to_string((unsigned long long)sPeerSteamId);
+	std::string incoming = worldDir + ".incoming";
 	if (p.fileIndex == 0 && p.offset == 0) {
+		CreateDirectoryA(coopDir.c_str(), nullptr);
 		DeleteDir(incoming);
 		CreateDirectoryA(incoming.c_str(), nullptr);
 		App::ConsolePrintF("coop: receiving the world...");
@@ -909,19 +868,18 @@ static void WorldReceiveChunk(const unsigned char* bytes, int size)
 			fprintf(f, "%llu\n", (unsigned long long)sPeerSteamId);
 			fclose(f);
 		}
-		std::string ready = games + "\\Game0.coopready";
-		DeleteDir(ready);
-		bool staged = MoveFileA(incoming.c_str(), ready.c_str()) != 0;
+		// the older copy of this host's world is only a cache (the host's save is the real one): replaced by the new one
+		DeleteDir(worldDir);
+		bool staged = MoveFileA(incoming.c_str(), worldDir.c_str()) != 0 && coop::launch::WriteLaunch(games, sPeerSteamId);
 		sWorldStaged = staged;
 		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
 		if (staged && !getenv("COOP_NO_RESTART")) {
-			WriteAutoJoin(sPeerSteamId);
 			sRestartAt = GetTickCount() + 3000;
-			App::ConsolePrintF("coop: world received. The game restarts by itself in 3 s and joins the host again (your old save is kept as a Game0.coopbackup folder).");
+			App::ConsolePrintF("coop: world received. The game restarts by itself in 3 s and opens the host's world (your own saves stay as they are).");
 		}
 		else if (staged) {
-			App::ConsolePrintF("coop: world received. Restart the game to install it (your old save is kept as a Game0.coopbackup folder),");
-			App::ConsolePrintF("coop: then  coopjoin  the host again and choose Continue.");
+			App::ConsolePrintF("coop: world received. Restart the game to open it (your own saves stay as they are); the new start joins the host again,");
+			App::ConsolePrintF("coop: then choose Continue.");
 		}
 		else {
 			App::ConsolePrintF("coop: could not store the received world (see CoopMod.log).");
@@ -1497,8 +1455,33 @@ namespace CoopNet
 		sWorldProgress = -1;
 	}
 
+	bool Leave()
+	{
+		if (!sWorldInstalledAtStart) {
+			return false;
+		}
+		if (!sRestartAt) {
+			Logf("leave: closing the game, the next start is the player's own world");
+			App::ConsolePrintF("coop: leaving the friend's world: the game restarts in your own world...");
+			sRestartDone = false;
+			sRestartAt = GetTickCount() + 500;
+		}
+		return true;
+	}
+
+	void RestartGame()
+	{
+		sRestartDone = false;
+		sRestartAt = GetTickCount() + 500;
+		Logf("restart: requested by the window");
+	}
+
 	bool Host()
 	{
+		if (sWorldInstalledAtStart) {
+			Logf("host: refused, this run is a co-op launch");
+			return false;
+		}
 		bool ok = SteamHostStart();
 		Logf("host: started from the in-game button: %s", ok ? "ok" : "Steam failed");
 		return ok;
@@ -1558,6 +1541,7 @@ static void NetUpdate()
 	MenuWorlds::HookMenuEnter(sModule);
 	LoadTrace::HookDatabases(sModule);
 	CoopMenu::Update();
+	CoopLaunch::Update();
 	HostPanel::Update();
 	NamePlates::Update();
 	if (sEcho) {
@@ -1789,7 +1773,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1805,8 +1789,16 @@ public:
 		const char* sub = args[0];
 		Logf("coop command: %s", sub);
 
-		if (strcmp(sub, "host") == 0) {
-			if (SteamHostStart()) {
+		if (strcmp(sub, "leave") == 0) {
+			if (!CoopNet::Leave()) {
+				App::ConsolePrintF("coop: this is not a co-op launch (you are in your own world), nothing to leave");
+			}
+		}
+		else if (strcmp(sub, "host") == 0) {
+			if (sWorldInstalledAtStart) {
+				App::ConsolePrintF("coop: this run plays a friend's world (co-op launch), it cannot host. coop leave first.");
+			}
+			else if (SteamHostStart()) {
 				App::ConsolePrintF("coop: hosting over Steam. Your Steam ID: %llu", (unsigned long long)sSteam.myId);
 				App::ConsolePrintF("coop: give it to the other player: coopjoin %llu", (unsigned long long)sSteam.myId);
 			}
@@ -2027,19 +2019,19 @@ void Initialize()
 	ConsoleStart();
 	sConsoleListener = App::AddUpdateFunction(ConsoleUpdate);
 	Logf("CoopMod initialized (protocol %u)", (unsigned)kProtocolVersion);
-	// A restart caused by a received world: the world is installed (DllMain), now join the same host again.
-	uint64_t autoJoin = TakeAutoJoin();
-	if (autoJoin && sWorldInstalledAtStart) {
-		Logf("autojoin: joining host %llu", (unsigned long long)autoJoin);
+	if (CoopLaunch::Notice()[0]) {
+		App::ConsolePrintF("coop: %s", CoopLaunch::Notice());
+	}
+	// A co-op launch (the host's world is Game0, DllMain): join the same host again.
+	if (sWorldInstalledAtStart) {
+		uint64_t autoJoin = CoopLaunch::Host();
+		Logf("autojoin: co-op launch, joining host %llu", (unsigned long long)autoJoin);
 		if (SteamJoinStart(autoJoin)) {
-			App::ConsolePrintF("coop: the received world is installed, joining the host again automatically...");
+			App::ConsolePrintF("coop: co-op launch: the host's world is open, joining the host again automatically. Leave: coop leave");
 		}
 		else {
-			App::ConsolePrintF("coop: the received world is installed, but joining failed (see CoopMod.log): coopjoin %llu", (unsigned long long)autoJoin);
+			App::ConsolePrintF("coop: co-op launch, but joining failed (see CoopMod.log): coopjoin %llu", (unsigned long long)autoJoin);
 		}
-	}
-	else if (sWorldInstalledAtStart) {
-		App::ConsolePrintF("coop: the received world is installed. coopjoin the host again, then choose Continue.");
 	}
 }
 
@@ -2100,6 +2092,7 @@ void Dispose()
 	World::SetTransport(nullptr, nullptr);
 	World::Shutdown();
 	CoopMenu::Shutdown();
+	CoopLaunch::Shutdown();
 	HostPanel::Shutdown();
 	NamePlates::Shutdown();
 	MenuWorlds::Shutdown();
@@ -2230,7 +2223,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 	case DLL_PROCESS_ATTACH:
 		sModule = hModule;
 		sCrashHandler = AddVectoredExceptionHandler(1, CrashHandler);
-		InstallPendingWorld();
+		CoopLaunch::Prepare();
+		sWorldInstalledAtStart = CoopLaunch::Active();
 		ModAPI::AddPostInitFunction(Initialize);
 		ModAPI::AddDisposeFunction(Dispose);
 

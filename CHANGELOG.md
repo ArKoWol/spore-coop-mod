@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **M1 of the join flow: the co-op launch, a friend's world never replaces your saves** (ArKoWol; `core/coop_launch.h`, `game/CoopLaunch.cpp`).
+  The world goes to `Games\Coop\<id>`; the next start swaps it in as `Game0` for one run (own save: `Game0.own`), every start puts it
+  back. Leave: plate in the creature stage, CO-OP window button, `coop leave`. Old installs get a one-time restore question.
+  Replaces `Game0.coopready`, `Game0.coopbackupN`, `CoopAutoJoin.txt`. Folder logic tested by `tests\run_core_tests.bat` (63 checks);
+  the game side is `not tested` on 2 PCs; `no protocol change`. Players run `update.bat`; watch the `launch:` lines in `CoopMod.log`.
 - **The puppet steps back and sideways and keeps up with the player** (exxecute; `game/PuppetMotion.cpp`, STATUS 3b). A walking
   puppet keeps the friend's facing and gets its velocity set directly (`coop facing`: `always` / `steps` / `off`); turning it every
   frame or turn rate 0 froze it (`FACTS.md` section 7). Stuck 1.5 s: teleported. Standing creatures (also mirrors) stop within 1 m

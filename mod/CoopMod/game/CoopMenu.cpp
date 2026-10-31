@@ -8,6 +8,7 @@
 #include "CoopMenu.h"
 #include "MenuWorlds.h"
 #include "CoopNet.h"
+#include "CoopLaunch.h"
 #include "../Log.h"
 #include "../Models.h"
 #include "../RecentHosts.h"
@@ -33,7 +34,7 @@ namespace
 	const DWORD kWorldTimeoutMs = 30000;   // the host answered but no world arrives
 	const float kPlanetGap = 16;  // from the planet's centre window to ours (the planet overlaps our window a little: intended)
 
-	enum class State { List, Connecting, Downloading, Restarting, Ready, Error };
+	enum class State { List, Connecting, Downloading, Restarting, Ready, Leaving, Error };
 
 	struct Friend
 	{
@@ -47,7 +48,7 @@ namespace
 		Gdiplus::RectF rect;
 		int action = 0;  // kCancel, kBack, kPlay, or kJoin + friend index
 	};
-	const int kCancel = 2, kBack = 3, kPlay = 4, kById = 5, kJoin = 100;
+	const int kCancel = 2, kBack = 3, kPlay = 4, kById = 5, kLeave = 6, kJoin = 100;
 
 	// heap objects, freed in Shutdown (no static destructors: ModAPI routes new/delete to the game's heap)
 	struct Ui
@@ -67,6 +68,7 @@ namespace
 	int sProgressShown = -1;   // percent drawn last
 	int sHover = -1;  // action of the button under the mouse (drawn lighter)
 	bool sPlayRequested = false;  // our Play button: the load starts from Update, outside the UI message
+	bool sLeaveRequested = false; // our Leave button (co-op launch): the restart is asked from Update
 	DWORD sPressedAt = 0;         // when our Play pressed the card's Play (to try a second way if nothing happened)
 	bool sLoadSeen = false;       // the game started the load (HoldPlay saw LoadGame while ready)
 
@@ -256,7 +258,17 @@ namespace
 			g.FillPolygon(&arrowBrush, arrow, 3);
 			Text(g, L"Press Play to enter", 19, true, C(255, 255, 255, 255), Gdiplus::RectF(left + 26, y + 76, 230, 32),
 				Align::Left, 1.8f, C(255, 25, 80, 10));
-			AddButton(g, Gdiplus::RectF(right - 200, y + 74, 200, 36), L"Choose another friend", kBack, false);
+			if (CoopNet::State().installedAtStart) {
+				// a co-op launch: the friend's world is Game0 for this run, the way out is Leave (restart in the own world)
+				AddButton(g, Gdiplus::RectF(right - 110, y + 74, 110, 36), L"Leave", kLeave, false);
+			}
+			else {
+				AddButton(g, Gdiplus::RectF(right - 200, y + 74, 200, 36), L"Choose another friend", kBack, false);
+			}
+		}
+		else if (sState == State::Leaving) {
+			Text(g, Wide("Leaving " + ui.worldOf + "'s world"), 20, true, ink, Gdiplus::RectF(left, y, width, 30));
+			Text(g, L"The game restarts and opens your own worlds.", 13, false, soft, Gdiplus::RectF(left, y + 36, width, 22));
 		}
 		else {
 			Text(g, L"Could not join", 21, true, C(255, 200, 50, 40), Gdiplus::RectF(left, y, width, 30));
@@ -330,24 +342,6 @@ namespace
 		ui.friends.insert(ui.friends.begin(), f);
 		Logf("menu: join by Steam ID %s", digits.c_str());
 		StartJoin(0);
-	}
-
-	// the name of a host: remembered name, Steam name, or the id
-	std::string HostName(uint64_t id)
-	{
-		for (size_t i = 0; i < 10; ++i) {
-			uint64_t known = 0;
-			long long when = 0;
-			char name[128] = {};
-			if (!RecentHosts::Get(i, known, name, sizeof(name), when)) {
-				break;
-			}
-			if (known == id && name[0]) {
-				return name;
-			}
-		}
-		std::string steam = CoopNet::Name(id);
-		return steam.empty() || steam == "[unknown]" ? std::to_string(id) : steam;
 	}
 
 	// follows a running join: answer, world download, restart; errors when nothing happens
@@ -434,6 +428,9 @@ namespace
 				if (b.action == kPlay) {
 					sPlayRequested = true;
 				}
+				else if (b.action == kLeave) {
+					sLeaveRequested = true;
+				}
 				else if (b.action == kCancel || b.action == kBack) {
 					if (b.action == kCancel) {
 						CoopNet::Cancel();
@@ -507,7 +504,7 @@ namespace
 
 	void Show()
 	{
-		if (sState != State::Ready && sState != State::Downloading) {
+		if (sState != State::Ready && sState != State::Downloading && sState != State::Leaving) {
 			sState = State::List;
 			LoadFriends();
 		}
@@ -739,7 +736,7 @@ namespace CoopMenu
 				else if (s.installedAtStart && s.host && sState != State::Ready) {
 					// the host's world was installed at this start (and the mod joins the host again): the CO-OP star is a
 					// copy of the host's newest creature save, so Play enters the host's world
-					U().worldOf = HostName(s.host);
+					U().worldOf = CoopLaunch::HostName(s.host);
 					MenuWorlds::RenameWorld(star, ("CO-OP: " + U().worldOf).c_str());
 					sState = State::Ready;
 					sDirty = true;
@@ -832,6 +829,13 @@ namespace CoopMenu
 				if (UTFWin::IWindow* play = FindCardPlay()) {
 					SendButtonClick(play);
 				}
+			}
+		}
+		if (sLeaveRequested) {
+			sLeaveRequested = false;
+			if (CoopNet::Leave()) {
+				sState = State::Leaving;
+				sDirty = true;
 			}
 		}
 		if (sPlayRequested) {

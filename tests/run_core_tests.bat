@@ -11,5 +11,8 @@ call "%VS%\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0"
 if not exist out mkdir out
 cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\core_tests.exe core_tests.cpp || exit /b 1
-out\core_tests.exe
+out\core_tests.exe || exit /b 1
+rem the co-op launch folder logic (core\coop_launch.h) on temporary folders
+cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\launch_tests.exe launch_tests.cpp || exit /b 1
+out\launch_tests.exe
 exit /b %errorlevel%
