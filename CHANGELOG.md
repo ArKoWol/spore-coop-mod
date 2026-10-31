@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **M1 of the join flow: the co-op launch, a friend's world never replaces your saves** (ArKoWol; `core/coop_launch.h`, `game/CoopLaunch.cpp`).
+  The world goes to `Games\Coop\<id>`; the next start swaps it in as `Game0` for one run (own save: `Game0.own`), every start puts it
+  back. Leave: plate in the creature stage, CO-OP window button, `coop leave`. Old installs get a one-time restore question.
+  Replaces `Game0.coopready`, `Game0.coopbackupN`, `CoopAutoJoin.txt`. Folder logic tested by `tests\run_core_tests.bat` (63 checks);
+  the game side is `not tested` on 2 PCs; `no protocol change`. Players run `update.bat`; watch the `launch:` lines in `CoopMod.log`.
+
 - **Join flow re-planned, now ArKoWol's area** (docs only; owner's decisions D19-D22). **exxecute:** `features/JOIN_FLOW.md` was
   rewritten from your draft: a friend's world is played in a "co-op launch" (swapped in for one launch from `Games\Coop\<id>`, own
   `Game0` restored at every start), a CO-OP button replaces the star, Rich Presence and manifests come later (M1-M5). Path C is

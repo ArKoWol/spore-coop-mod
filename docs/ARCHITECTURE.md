@@ -12,7 +12,7 @@ SporeApp.exe
     SporeModLoader\ModLibs\CoopMod.dll          -> OUR MOD (source: mod\CoopMod)
       steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar)
 ```
-`InstallPendingWorld()` runs from `DllMain`, before the game opens its save (section 5). The mod hooks `GetCommandLineA/W`
+`CoopLaunch::Prepare()` runs from `DllMain`, before the game opens its save (section 5). The mod hooks `GetCommandLineA/W`
 to append ` -w`, so the game always starts windowed (`COOP_FULLSCREEN` keeps the game's own mode). The game window title
 shows the co-op state. `Initialize` attaches the detours,
 the console commands and the update functions; `Dispose` removes all of them (see `FACTS.md` section 3 for why).
@@ -30,14 +30,16 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/Log.cpp/.h` | `CoopMod.log` |
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
 | `mod/CoopMod/game/MenuWorlds.cpp/.h` | save stars in the open galaxy (`AddWorld`, `RemoveWorld`, `SelectedStar`; dev commands `coop slots/addworld/addcenter/delworld/menureload/ggefind`); detours on `cGameModeManager::SetActiveMode/At/ByName` (logging; `ByName("LoadGame")` asks `CoopMenu::HoldPlay`) and the main menu mode's `OnEnter` |
-| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready (`coop menu/carddump`) |
+| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready, a Leave button in a co-op launch (`coop menu/carddump`) |
 | `mod/CoopMod/game/SaveIds.cpp/.h` | research: RefPack and DBPF read/write; moves a save or a planet record to another star (used only with `COOP_MOVE_SAVE=1`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
-| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host`, `Cancel`, `State` (answer, version, download share, staged, installed at start), `Hosting` (hosting, guest here, own Steam ID), `Name` |
+| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
-| `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here |
+| `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here; for a guest in a co-op launch the plate `In <host>'s world` with Leave |
+| `mod/CoopMod/game/CoopLaunch.cpp/.h` | the co-op launch in the game: `Prepare()` from `DllMain` (calls `core/coop_launch.h`, logs `launch:` lines), `Active/Host/Notice`, `HostName`; in the main menu a plate with the notice of a failed folder move and the one-time restore question of an old install |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
+| `core/coop_launch.h` | the folder logic of the co-op launch (Win32 file calls only, no game headers): restore, launch, migration; tests in `tests/launch_tests.cpp` |
 
 ## 3. Each frame
 `App::AddUpdateFunction(NetUpdate)`: pump Steam callbacks, receive packets, send our avatar's position and orientation (30 Hz,
@@ -74,25 +76,49 @@ the console commands and the update functions; `Dispose` removes all of them (se
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, 60 KB chunks, a
-few per frame because Steam's send buffer is small). The client stores them as `Game0.coopready`; the game is then
-**restarted by the mod itself** 3 s later: a hidden PowerShell `%TEMP%\coop_restart.ps1` waits for the process to end and
-starts `SporeApp.exe -w` again; the game is closed with `WM_CLOSE`, so it saves (`COOP_NO_RESTART` turns this off; `coop
-restart` tests it without a world). The new game opens its own console window (`OpenConsoleWindow`: `scripts\console.ps1` from `COOP_CONSOLE_PS1`, else searched
-up to 5 folders above the game folder; `COOP_NO_CONSOLE` turns it off). A received world carries `coop_host.txt` (the host's
-Steam ID), so the mod can tell the host's world from the player's own. `InstallPendingWorld()` swaps it in as `Game0` (the old one is kept as `Game0.coopbackup`,
-never deleted; later installs use `coopbackup2`, `coopbackup3`, ...). The host id is left in `Games\CoopAutoJoin.txt` (read
-once and deleted), so the restarted game **joins the host again by itself**; the world the host sends again is ignored in
-that run; the player presses Continue. Both sides then share the planet, so absolute positions (`sAbsolute`, default) line up.
-The host treats a client that was silent for 10 s (`kReconnectMs`) or a different Steam ID as a new connection and sends the
-world again; the client ignores a world that arrives during a game and prints "connected to the host" when the host's first
-packet arrives. The planned replacement is `features/JOIN_FLOW.md`.
+few per frame because Steam's send buffer is small). The client writes them to `Games\Coop\<host id>.incoming\` (plus
+`coop_host.txt`, the host's Steam ID) and renames that to `Games\Coop\<host id>\` only when the last file is complete (an
+older copy of the same host is replaced: it is a cache, the host's save is the real one). It then writes `Games\CoopLaunch.txt`
+(the host id) and the game is **restarted by the mod itself** 3 s later: a hidden PowerShell `%TEMP%\coop_restart.ps1` waits
+for the process to end and starts `SporeApp.exe -w` again; the game is closed with `WM_CLOSE` (`COOP_NO_RESTART` turns the
+restart off; `coop restart` tests it without a world). The new game opens its own console window (`OpenConsoleWindow`:
+`scripts\console.ps1` from `COOP_CONSOLE_PS1`, else searched up to 5 folders above the game folder; `COOP_NO_CONSOLE` turns it off).
+
+**Start-up folders** (`CoopLaunch::Prepare()` in `DllMain`, before the game opens `Game0`; logic in `core/coop_launch.h`, log lines
+`launch:`). The player's own `Game0` never goes away for good and nothing is ever deleted:
+1. *Migration*, only when `Games\CoopMigrate.txt` exists (the answer Restore of an old install's question, deleted when read):
+   `Game0` (a host's world) goes to `Coop\<id>` and the oldest `Game0.coopbackup*` without `coop_host.txt` becomes `Game0`; the
+   other backups stay (named in the log).
+2. *Restore*, when `Game0.own` exists (the last run was a co-op launch, also after a crash or kill): `Game0` goes to
+   `Coop\<id>` (id from its `coop_host.txt`; unreadable: `Coop\unknown-<time>`; a taken name gets `.old2`, `.old3`, ...) and
+   `Game0.own` becomes `Game0`. A co-op launch of a player without a `Game0` leaves `Games\CoopNoOwn.txt` instead of `Game0.own`:
+   restore then only moves the host's world away and invents no `Game0`.
+3. *Co-op launch*, when `CoopLaunch.txt` names a host whose `Coop\<id>` exists (the file is deleted when read): `Game0` goes to
+   `Game0.own`, `Coop\<id>` becomes `Game0`. This run is a co-op launch (`CoopLaunch::Active()`, `CoopNet::State().installedAtStart`):
+   `Initialize` joins the host by itself, a world sent again is ignored, `coop host` is refused. The player presses Continue (the
+   CO-OP star is a copy of the newest creature save of `Game0`, i.e. the host's world).
+A failed move (a process holds the folder) is retried twice, then undone as far as it went, logged and told to the player: in the
+console at start and in a plate in the main menu; the co-op launch does not start (`CoopLaunch.txt` is still consumed) and a failed
+restore keeps `Game0.own` for the next start.
+
+**Leave** (`CoopNet::Leave()`, from the Leave plate of `HostPanel`, the Leave button of the CO-OP window or `coop leave`) plans the
+same restart without `CoopLaunch.txt`; the new start restores (step 2). Closing the game or killing it has the same result at the
+next start. **Restore question** (`CoopLaunch::Update`, first time the main menu opens, only when `Game0` has `coop_host.txt`, no
+`Game0.own` exists, an own backup is left and `Games\CoopMigrateAsked.txt` is missing): Restore writes `CoopMigrate.txt`, marks the
+question as asked and restarts; Not now only marks it.
+
+Both sides then share the planet, so absolute positions (`sAbsolute`, default) line up. The host treats a client that was silent
+for 10 s (`kReconnectMs`) or a different Steam ID as a new connection and sends the world again; the client ignores a world that
+arrives during a game or a co-op launch and prints "connected to the host" when the host's first packet arrives. The rest of the
+plan is `features/JOIN_FLOW.md`.
 
 ## 6. Remote console
 The mod listens on `127.0.0.1:27780` (local only); `scripts/console.ps1` sends lines that run as console commands and gets
 the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread; commands are queued and run
 on the main thread in `ConsoleUpdate`. One client at a time; a new one replaces the old.
 
-Console commands (Ctrl+Shift+C in the game, or `console.bat`): `coop host`, `coopjoin <steamid | last | number | name>`,
+Console commands (Ctrl+Shift+C in the game, or `console.bat`): `coop host`, `coop leave` (in a co-op launch: restart in your own
+world), `coopjoin <steamid | last | number | name>`,
 `coop friends`, `coop udphost`, `coopudpjoin <ip>`, `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport`
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
@@ -165,4 +191,4 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
 | `mod/CoopMod/build.bat` | builds (output in `%TEMP%\coopmod_build.log`, shown by the launcher when the build fails) `staging\CoopMod.dll` and, through `make_assets.ps1`, `staging\CoopMod.package` from `assets/` (installed as `<game>\Data\CoopMod.package`) |
 | `scripts/make_package.ps1`, `scripts/publish.ps1` | build `coop_package.zip`; publish a release (needs `gh auth login`) |
 | `scripts/worlddiff.ps1` | compares two `CoopDump.txt` files from `coop dump` on two machines |
-| `tests/run_core_tests.bat`, `tests/focus_test.ps1` | core tests (no game), focus test |
+| `tests/run_core_tests.bat`, `tests/focus_test.ps1` | core tests and co-op launch folder tests (no game), focus test |

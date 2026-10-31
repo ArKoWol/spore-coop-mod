@@ -96,6 +96,7 @@ $null = $ps.BeginInvoke()
 $commands = @(
     @('coop host', 'host a session over Steam, prints your Steam ID'),
     @('coopjoin ', '<steamid> | last | <number> | <name>: join a host'),
+    @('coop leave', 'co-op launch: leave the friend''s world, the game restarts in your own world'),
     @('coop friends', 'the hosts you joined before (for coopjoin last / <number> / <name>)'),
     @('coop status', 'connection, packets, puppet, shared world'),
     @('coop off', 'leave the session'),

@@ -81,7 +81,8 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 The host's save is the world. The guest's personal data (species and creature file, DNA, brain level, parts, relation table,
 and later his tribe/civ identity) is written by the host into a sidecar `Game0\coop_players.json` next to the save, on every
 save and when the guest's progress changes. A returning guest (same Steam ID) gets it back. The guest's own `Game0` is never
-overwritten (today it is kept as `Game0.coopbackupN`; `features/JOIN_FLOW.md` M1 replaces that with a swap for one launch).
+overwritten: the friend's world is swapped in for one launch and the own `Game0` comes back at the next start
+(`features/JOIN_FLOW.md` M1, built, not yet verified on 2 PCs).
 
 ## 9. Least certain parts and their fallbacks
 

@@ -17,8 +17,8 @@ namespace CoopNet
 		bool receiving = false;        // the host's world is arriving
 		float progress = 0;            // 0..1 of the world
 		bool staged = false;           // the world is complete; the game restarts by itself to open it
-		bool installedAtStart = false; // this run started with a received world installed
-		uint64_t host = 0;             // the host we join / whose world is installed
+		bool installedAtStart = false; // this run is a co-op launch: Game0 is the host's world (game/CoopLaunch.cpp)
+		uint64_t host = 0;             // the host we join / whose world Game0 holds
 	};
 
 	struct HostState
@@ -39,6 +39,11 @@ namespace CoopNet
 	// stops the session (Cancel in the window, Stop hosting)
 	void Cancel();
 	JoinState State();
+	// Leave: in a co-op launch, closes the game and starts it again without CoopLaunch.txt, so the next run is the player's
+	// own world; false (nothing done) outside a co-op launch
+	bool Leave();
+	// closes the game and starts it again (the restore question of an old install)
+	void RestartGame();
 	// the other player of the session (host: the guest, guest: the host), 0 if none
 	uint64_t PeerId();
 	// the other player's creature in this game (the puppet), null if there is none yet

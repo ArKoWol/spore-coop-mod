@@ -6,8 +6,9 @@
 // chosen opens the window instead of loading.
 //
 // Join: a real Steam join (CoopNet, the same as `coopjoin`). The host sends its whole Game0; the game restarts by itself
-// and installs it (the player's own Game0 is kept as a backup); after the restart the CO-OP star is a copy of the host's
-// newest creature save, marked ready, and the card's Play enters it while the mod joins the host again.
+// and opens it as a co-op launch (the world is Game0 for that run, the player's own Game0 waits as Game0.own: game/
+// CoopLaunch.h); after the restart the CO-OP star is a copy of the host's newest creature save, marked ready, and the card's
+// Play enters it while the mod joins the host again. In a co-op launch the ready window has a Leave button.
 #pragma once
 
 namespace CoopMenu
