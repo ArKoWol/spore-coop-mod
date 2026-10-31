@@ -8,6 +8,7 @@
 #include "game/Actions.h"
 #include "game/Respawn.h"
 #include "game/OwnCreature.h"
+#include "game/Kills.h"
 #include "../../core/coop_core.h"
 
 #include <algorithm>
@@ -35,7 +36,10 @@ namespace
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
 	const uint8_t kMsgAvatarSpecies = 115;  // both ways: [115][instance][type][group] of the sender's avatar species (changes in the editor)
 	const uint8_t kMsgEaten = 114;      // guest -> host: [114][netId]: the guest ate this animal's corpse
-	const uint8_t kMsgCorpse = 116;     // host -> guest, once per dead animal: [116][netId][food value f32][general flags u32] (why can the guest not eat a mirror's corpse?)
+	const uint8_t kMsgCorpse = 116;     // host -> guest, per dead animal when its food value changed: [116][netId][food value f32][general flags u32]
+	const uint8_t kMsgCorpseFood = 119; // guest -> host: [119][netId][food value f32]: the guest is eating this corpse, this much is left
+	const DWORD kCorpseFoodEveryMs = 500;  // the guest reports the food left in a corpse it eats at most this often
+	const DWORD kOwnEventMs = 3000;      // relation events on a mirror this long after our own bite on it are ours (they reach the game)
 	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x 56 bytes (x y z f32, species instance/type/group, qx qy qz qw f32, model instance/type/group, scale f32)
 	const DWORD kNestsEveryMs = 20000;
 	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
@@ -68,6 +72,11 @@ namespace
 		bool deathLogged = false;  // the log line that tells which way the death came was written
 		bool pinned = false;       // the corpse was placed once after the death (afterwards only when it drifts)
 		bool foodApplied = false;  // the host's food value was written into the corpse
+		bool foodFromHost = false; // the host's value was applied once (later ones only lower the food: both sides eat it)
+		bool ownKill = false;      // our own avatar's bite killed it here, natively (PLAN rule 3; the game paid the DNA)
+		DWORD ownHitAt = 0;        // our avatar's last bite on it (its relation events are ours, see AllowRelationEvent)
+		float foodReported = -1.0f;  // the food left that we last told the host (we are eating it)
+		DWORD foodReportAt = 0;
 	};
 
 	// Everything lives in one heap object that Shutdown() frees: no static destructor may run at process exit.
@@ -85,7 +94,7 @@ namespace
 		DWORD lastTick = 0, lastFull = 0;
 		bool fullNow = false;
 		int hostAnimals = 0;
-		std::set<uint32_t> corpseSent;  // netIds whose corpse info went to the guest (cleared when a guest connects)
+		std::map<uint32_t, float> corpseSent;  // netId -> the food value last sent to the guest for that corpse (cleared when a guest connects)
 
 		// guest
 		GuestWorld* guest = nullptr;
@@ -443,10 +452,16 @@ namespace
 				continue;
 			}
 			auto id = s.ids.find(c.first);
-			if (id == s.ids.end() || !s.corpseSent.insert(id->second).second) {
+			if (id == s.ids.end()) {
 				continue;
 			}
 			auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(c.first));
+			// sent once, and again whenever somebody ate from it (the host here, or the guest: kMsgCorpseFood), so both see what is left
+			auto sent = s.corpseSent.find(id->second);
+			if (sent != s.corpseSent.end() && fabsf(sent->second - animal->mFoodValue) < 1.0f) {
+				continue;
+			}
+			s.corpseSent[id->second] = animal->mFoodValue;
 			Writer w;
 			w.U8(kMsgCorpse); w.U32(id->second); w.F32(animal->mFoodValue); w.U32((uint32_t)animal->mGeneralFlags);
 			QueueReliable(s, w.buf);
@@ -686,8 +701,25 @@ namespace
 				continue;  // eaten here: the host removes the real animal, until then no new mirror
 			}
 			Mirror& m = s.mirrors[e.first];
-			// The actor decides his own action (PLAN rule 3): the guest ate this animal's corpse here, natively. Tell the host.
-			if (m.animal && (m.animal->mbHasBeenEaten || m.animal->mbMarkedForDeletion)) {
+			// The actor decides his own action (PLAN rule 3): the guest eats this animal's corpse here, natively. The game sets
+			// mbHasBeenEaten when the eating STARTS and then takes the food out of the corpse bite by bite (0xD70FD0 / 0xD70A80):
+			// the corpse must stay until it is used up (removing it at once ended the meal after the first bite). While we eat,
+			// the food left goes to the host; when it is gone (or the game removes the corpse) the host removes the real one.
+			if (m.animal && m.dead && m.animal->mbHasBeenEaten && !m.animal->mbMarkedForDeletion && m.animal->mFoodValue > 0.0f) {
+				if (m.foodReported < 0.0f || (now - m.foodReportAt >= kCorpseFoodEveryMs && m.foodReported - m.animal->mFoodValue >= 1.0f)) {
+					if (m.foodReported < 0.0f) {
+						Logf("eat: we eat mirror %u, food %.1f, enabled %d", e.first, m.animal->mFoodValue, m.animal->mbEnabled ? 1 : 0);
+					}
+					m.foodReported = m.animal->mFoodValue;
+					m.foodReportAt = now;
+					Writer w;
+					w.U8(kMsgCorpseFood); w.U32(e.first); w.F32(m.animal->mFoodValue);
+					QueueReliable(s, w.buf);
+				}
+			}
+			if (m.animal && (m.animal->mbMarkedForDeletion || (m.dead && m.animal->mbHasBeenEaten && m.animal->mFoodValue <= 0.0f))) {
+				Logf("eat: mirror %u eaten up here (food %.1f, marked for deletion %d): the host removes the real one", e.first,
+					m.animal->mFoodValue, m.animal->mbMarkedForDeletion ? 1 : 0);
 				Writer w;
 				w.U8(kMsgEaten); w.U32(e.first);
 				QueueReliable(s, w.buf);
@@ -726,7 +758,8 @@ namespace
 			if (fabsf(m.animal->GetScale() - st.scale) > 0.001f && st.scale > 0.0f) {
 				m.animal->SetScale(st.scale);
 			}
-			bool dead = (st.flags & kFlagDead) || (st.maxHealth > 0.0f && st.health <= 0.0f);
+			// our own lethal bite (FilterDamage) counts at once: the host's echo of the death comes a moment later
+			bool dead = (st.flags & kFlagDead) || (st.maxHealth > 0.0f && st.health <= 0.0f) || m.ownKill;
 			if (m.animal->mbDead) {
 				m.dead = true;  // killed here by our own bite (native death, native DNA), or by the replay below
 			}
@@ -765,15 +798,19 @@ namespace
 				if (info != s.corpses.end()) {
 					m.foodApplied = true;
 					float before = m.animal->mFoodValue;
-					if (before != info->second.food) {
+					// the first value is the host's (a mirror's own is not); later ones come because somebody ate: only ever less food
+					if (!m.foodFromHost || info->second.food < before) {
 						m.animal->mFoodValue = info->second.food;
 					}
+					m.foodFromHost = true;
 					static int foodLogged = 0;
 					if (foodLogged++ < 20) {
 						Logf("corpse: mirror %u food %.1f -> %.1f (host %.1f), dead %d, eaten %d, flags %x (host %x), field_E84 %s", e.first, before,
 							m.animal->mFoodValue, info->second.food, m.animal->mbDead ? 1 : 0, m.animal->mbHasBeenEaten ? 1 : 0,
 							(unsigned)m.animal->mGeneralFlags, (unsigned)info->second.flags,
 							m.animal->field_E84 == sBlankTuning ? "is the blank tuning" : "is a real tuning");
+						// the game's eat behaviour (0xD70FD0) wants the corpse dead AND enabled (cSpatialObject::mbEnabled, creature +0x135)
+						Logf("corpse: mirror %u enabled %d, own kill %d", e.first, m.animal->mbEnabled ? 1 : 0, m.ownKill ? 1 : 0);
 					}
 				}
 			}
@@ -1694,6 +1731,32 @@ namespace World
 			}
 			return;
 		}
+		if (host && data[0] == kMsgCorpseFood && size == 9) {
+			// the guest eats this corpse: the real one keeps only what is left (food only goes down, both sides may eat)
+			Reader r(data, size);
+			r.U8();
+			uint32_t netId = r.U32();
+			float food = r.F32();
+			if (!r.ok) {
+				return;
+			}
+			for (auto& id : s.ids) {
+				if (id.second == netId) {
+					auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(id.first));
+					static int logged = 0;
+					if (logged++ < 20) {
+						Logf("eat: the guest eats animal %u, food left %.1f (here %.1f, dead %d)", netId, food, animal->mFoodValue,
+							animal->mbDead ? 1 : 0);
+					}
+					if (animal->mbDead && food < animal->mFoodValue) {
+						animal->mFoodValue = food;
+						s.corpseSent[netId] = food;  // no echo of the guest's own value
+					}
+					break;
+				}
+			}
+			return;
+		}
 		if (!host && data[0] == kMsgCorpse && size == 13) {
 			Reader r(data, size);
 			r.U8();
@@ -1981,8 +2044,9 @@ namespace World
 			}
 			if (mirrorId) {
 				Simulator::cCreatureAnimal* a = s.mirrors[mirrorId].animal.get();
-				Logf("eat: our avatar eats mirror %u (dead %d, food %.1f, eaten %d, flags %x)", mirrorId, a->mbDead ? 1 : 0, a->mFoodValue,
-					a->mbHasBeenEaten ? 1 : 0, (unsigned)a->mGeneralFlags);
+				Logf("eat: our avatar eats mirror %u (dead %d, food %.1f, eaten %d, flags %x, enabled %d, own kill %d)", mirrorId,
+					a->mbDead ? 1 : 0, a->mFoodValue, a->mbHasBeenEaten ? 1 : 0, (unsigned)a->mGeneralFlags, a->mbEnabled ? 1 : 0,
+					s.mirrors[mirrorId].ownKill ? 1 : 0);
 			}
 			else {
 				Logf("eat: EatMeat target is not a mirror (noun %08x)", noun);
@@ -2090,36 +2154,46 @@ namespace World
 				return false;  // our own player: the game handles it, the host's NPCs reach us through kMsgDamage
 			}
 			uint32_t netId = 0;
+			Mirror* mirror = nullptr;
 			for (auto& m : s.mirrors) {
 				if (m.second.animal.get() == victim) {
 					netId = m.first;
+					mirror = &m.second;
 				}
 			}
 			bool hostPuppet = s.puppet && (void*)victim == s.puppet;
 			if (netId || hostPuppet) {
-				if (s.damageLogged < 40) {
-					++s.damageLogged;
-					Logf("damage: guest, hit on %s %u: %.1f (type %d) by %s", netId ? "mirror" : "the host's puppet", netId, damage, type,
-						byAvatar ? "our avatar -> request to the host" : "someone else -> ignored");
-				}
-				if (byAvatar && damage > 0.0f) {
-					Writer w;
-					w.U8(kMsgDamageReq); w.U32(netId); w.F32(damage); w.U8((uint8_t)type);
-					QueueReliable(s, w.buf);
-					++s.damageSent;
-				}
 				// PLAN rule 3: the actor decides the result of his own action. Our own bite on a mirror is applied here at once, by
 				// the game (health, death and the DNA reward are native); the host gets the same hit as a report and applies it
 				// to the real animal. Hits from anybody else are the host's business.
-				if (netId && byAvatar) {
-					// The LETHAL bite is not applied here: the game's native death of a mirror crashed the friend's game
-					// (SporeApp.exe+0x797779, reading 0x14, right after the third bite on a mirror; the mirror has no
-					// nest herd, no archetype tuning, nothing the death code may want). The host kills the real animal
-					// and the mirror dies by the replay (KillLocally) a moment later.
-					bool lethal = victim->mHealthPoints - damage <= 0.01f;
-					return lethal;
+				bool native = false, lethal = false;
+				if (mirror && byAvatar && !mirror->dead && !mirror->killAt) {
+					lethal = victim->mHealthPoints - damage <= 0.01f;
+					// The lethal bite once crashed the guest (SporeApp.exe+0x797779, reading 0x14): the kill reached the species'
+					// extinction threshold and the extinction reads the herd type of the mirror's herd, unknown to the game
+					// (game/Kills.cpp). With a known herd type the native death is safe; without one the host kills it (no DNA).
+					native = !lethal || Kills::EnsureHerdType(mirror->herd.get(), "our lethal bite");
+					mirror->ownHitAt = GetTickCount();
+					if (lethal && native) {
+						mirror->ownKill = true;
+						mirror->killAt = mirror->ownHitAt;  // the game's tick may now finish the death (ShouldSkipAI), as for a replayed one
+					}
 				}
-				return true;
+				if (s.damageLogged < 40 || lethal) {
+					++s.damageLogged;
+					Logf("damage: guest, hit on %s %u: %.1f (type %d) by %s%s", netId ? "mirror" : "the host's puppet", netId, damage, type,
+						byAvatar ? "our avatar -> request to the host" : "someone else -> ignored",
+						lethal ? (native ? ", LETHAL, applied here (native death)" : ", LETHAL, left to the host (herd type unknown)") : "");
+				}
+				if (byAvatar && damage > 0.0f) {
+					// our lethal bite decides: the host's animal must die too, even if its health there is a little higher
+					float sent = lethal && native ? (std::min)(1000.0f, (std::max)(damage, victim->mMaxHealthPoints + 100.0f)) : damage;
+					Writer w;
+					w.U8(kMsgDamageReq); w.U32(netId); w.F32(sent); w.U8((uint8_t)type);
+					QueueReliable(s, w.buf);
+					++s.damageSent;
+				}
+				return !native;
 			}
 			return false;
 		}
@@ -2177,6 +2251,44 @@ namespace World
 			// the normal path: through the TakeDamage detour (FilterDamage), as a real bite from our avatar would go
 			best->TakeDamage(1.0f, static_cast<Simulator::cGameData*>(avatar)->GetPoliticalID(), Simulator::kMelee, Vector3(0.0f, 0.0f, 0.0f), avatar);
 		}
+	}
+
+	bool AllowRelationEvent(void* creature, int event)
+	{
+		if (!sState || sState->isHost || !sState->haveWorld || !creature) {
+			return true;
+		}
+		State& s = *sState;
+		static int logged = 0;
+		if (creature == s.puppet) {
+			if (logged++ < 20) {
+				Logf("relation: event %d on the host's puppet dropped", event);
+			}
+			return false;
+		}
+		for (auto& m : s.mirrors) {
+			if ((void*)static_cast<Simulator::cCreatureBase*>(m.second.animal.get()) != creature) {
+				continue;
+			}
+			// PLAN section 3: the guest's relation table is his own; our own bites and kills count, replayed deaths never do
+			// (FACTS.md section 9: they would make species extinct on the guest)
+			if (m.second.ownHitAt && GetTickCount() - m.second.ownHitAt < kOwnEventMs) {
+				// a kill can reach the extinction threshold, and the extinction reads the herd type (game/Kills.cpp)
+				if (Kills::EnsureHerdType(m.second.herd.get(), "relation event")) {
+					if (logged++ < 20 || event == 0 || event == 5) {
+						Logf("relation: event %d on mirror %u (our own bite) reaches the game", event, m.first);
+					}
+					return true;
+				}
+				Logf("relation: event %d on mirror %u dropped: its herd type is unknown to the game", event, m.first);
+				return false;
+			}
+			if (logged++ < 20) {
+				Logf("relation: event %d on mirror %u dropped (not our own action)", event, m.first);
+			}
+			return false;
+		}
+		return true;
 	}
 
 	bool ShouldSkipAI(void* animal)

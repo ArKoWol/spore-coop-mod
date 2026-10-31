@@ -37,9 +37,10 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/InvitePanel.cpp/.h` | M3: the host's invite list under the host plate (friends in their main menu, each with Invite) and the toast of an invitation in the main menu (`Join`, `Not now`) |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
-| `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), presses keys 1-9 |
 | `mod/CoopMod/game/Respawn.cpp/.h` | death and respawn of both players: watches our avatar (`respawn:` lines), health 0 in `kMsgAvatar` while dead, puts us beside our own nest after a respawn far from it, removes the friend's puppet while he is dead; `coop die` (one-PC test) |
 | `mod/CoopMod/game/OwnCreature.cpp/.h` | the player's own creature: watches the editor (mode, new creature records in EditorSaves), the avatar's profile in memory, reads our body from every database (`ReadFresh`), writes `Games\CoopOwnCreature.txt` and switches the guest's avatar to it in a co-op launch (`own:` lines) |
+| `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: the herd type check of `Kills`, then plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), presses keys 1-9 |
+| `mod/CoopMod/game/Kills.cpp/.h` | the guest's native lethal bite: gives a mirror's herd a herd type the game knows (`EnsureHerdType`, the extinction reads it), the detour on the relation manager's `ApplyEvent` (0xBA4A00; `World::AllowRelationEvent` decides), `coop killcheck` |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here, Invite (opens the list of `InvitePanel`); for a guest in a co-op launch the plate `In <host>'s world` with Leave |
@@ -60,7 +61,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **16** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key). Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **17** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key; 17: corpse food both ways, `kMsgEaten` when a corpse is used up, the guest's lethal bite native). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -82,15 +83,16 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 101 `kMsgTelemetry` | guest -> host | table, mirror and stray counts |
 | 102 / 103 / 104 `kMsgModelReq` / `kMsgModel` / `kMsgModelNone` | both | a species the guest cannot build, its model records, "none here either" |
 | 106 `kMsgAvatar` | both, unreliable | health, max health, scale of the sender's avatar; health 0 = dead (until the respawn) |
-| 107 `kMsgDamageReq` | guest -> host | report of the guest's own hit on a mirror (netId, damage, type); netId 0 = the host's avatar |
+| 107 `kMsgDamageReq` | guest -> host | report of the guest's own hit on a mirror (netId, damage, type); netId 0 = the host's avatar; a hit lethal on the guest carries at least max health + 100 |
 | 108 `kMsgDamage` | host -> guest | apply this damage to your own avatar |
 | 109 / 110 `kMsgManifest` / `kMsgRemove` | both | object manifest and removals (`Objects.h`; applying them is switched off) |
 | 112 `kMsgAnim` | both | creature (0 = host avatar, 0xFFFFFFFF = guest avatar, else netId) started animation id |
 | 113 `kMsgNests` | host -> guest | the host's nests (position, species, orientation, model key, scale), every 20 s and on connect |
-| 114 `kMsgEaten` | guest -> host | the guest ate this animal's corpse (netId); the host removes the real one |
+| 114 `kMsgEaten` | guest -> host | the guest used up this animal's corpse (netId); the host removes the real one |
 | 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar and a hash of its body; the receiver builds the puppet from it (model requests go both ways) |
-| 116 `kMsgCorpse` | host -> guest | once per dead animal: netId, food value, flags (the guest writes the food value into the corpse) |
+| 116 `kMsgCorpse` | host -> guest | per dead animal, again whenever its food value changed by 1 or more: netId, food value, flags (the guest writes the first value into the corpse, later ones only when lower) |
 | 117 `kMsgAction` | both | creature (as in 112) played an ability (type), started or stopped a creature effect (effect id, pool id), or a voice (name) |
+| 119 `kMsgCorpseFood` | guest -> host | the guest eats this corpse (netId), this much food is left (f32), at most every 500 ms; the host lowers the real corpse's food |
 | 118 `Presence::kMsgInvite` | host -> any Steam friend | invitation: protocol u32, host Steam ID u64, planet name (length u8 + UTF-8). Channel 3 like the world events, but the pump in `dllmain.cpp` gives it to `Presence::OnMessage` first, also when no session runs (`SteamIdlePump`) |
 
 **Presence and invitations (M3, `game/Presence.cpp`).** Steam is started once when the main menu first opens (`Presence::Update`;
@@ -169,7 +171,8 @@ world), `coopjoin <steamid | last | number | name>`,
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
-death and respawn, section 7),
+death and respawn, section 7), `coop killcheck` (one PC: the herd
+type of a mirror-like herd and its repair, `game/Kills.cpp`),
 `coop menu` (opens the CO-OP window), plus `stage <name>` and `coophello`.
 Every command has at least one word (`FACTS.md` section 3). A new command is also added to the `$commands` list of
 `scripts/console.ps1` (Tab completion).
@@ -238,9 +241,16 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   (health, death, DNA are native) and reported as `kMsgDamageReq`; the host applies the same hit to the real animal with the
   guest's puppet as attacker (no reward). The mirror takes the host's health only when it changed (`lastHostHealth`), so the guest's
   hit is not undone before the echo arrives. Hits from anybody else on a mirror are swallowed. A host-side hit on the guest's
-  puppet is sent to the guest as `kMsgDamage`.
-- **Eating**: a mirror that the game marks eaten or deleted on the guest (`mbHasBeenEaten`, `mbMarkedForDeletion`) is reported as
-  `kMsgEaten`; the host destroys the real animal and the guest makes no new mirror for that netId.
+  puppet is sent to the guest as `kMsgDamage`. **The lethal bite** is native too once `Kills::EnsureHerdType` gave the mirror's herd
+  a herd type the game knows (copied from a herd of the game, of the same species if there is one; `FACTS.md` section 9); the mirror
+  is then `ownKill` (dead at once for the mod, the game's tick finishes the corpse as for a replayed death) and the report carries
+  at least max health + 100, so the host's animal dies too. Without a usable herd type the host kills it as before (no DNA).
+- **Relation events** (`ApplyEvent` detour, `World::AllowRelationEvent`): on the guest, events on the host's puppet and on mirrors
+  are dropped, except within 3 s of our own bite on that mirror (then the herd type is ensured first). The host's events pass.
+- **Eating**: the game marks a corpse `mbHasBeenEaten` when the guest starts eating it and then lowers its food; the guest sends the
+  food left (`kMsgCorpseFood`, the host lowers its real corpse) and, when the food is gone or the game deletes the corpse,
+  `kMsgEaten`: the host destroys the real animal and the guest makes no new mirror for that netId. The host resends `kMsgCorpse`
+  when its corpse's food changes (the host ate), the guest's mirror takes the lower value.
 
 ## 8. Rules the sync code keeps (do not break them without a plan change)
 1. **One authority per kind of thing**: world objects and animals = host; each avatar's movement = its owner; damage and

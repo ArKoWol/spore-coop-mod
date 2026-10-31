@@ -55,6 +55,7 @@
     <ClInclude Include="game\FollowFriend.h" />
     <ClInclude Include="game\SelfTest.h" />
     <ClInclude Include="game\Respawn.h" />
+    <ClInclude Include="game\Kills.h" />
     <ClInclude Include="game\MenuWorlds.h" />
     <ClInclude Include="game\CoopMenu.h" />
     <ClInclude Include="game\CoopNet.h" />
@@ -82,6 +83,7 @@
     <ClCompile Include="game\FollowFriend.cpp" />
     <ClCompile Include="game\SelfTest.cpp" />
     <ClCompile Include="game\Respawn.cpp" />
+    <ClCompile Include="game\Kills.cpp" />
     <ClCompile Include="game\MenuWorlds.cpp" />
     <ClCompile Include="game\CoopMenu.cpp" />
     <ClCompile Include="game\LoadTrace.cpp" />

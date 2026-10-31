@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "SelfTest.h"
 #include "Actions.h"
+#include "Kills.h"
 #include "../Log.h"
 
 #include <cstdarg>
@@ -142,6 +143,9 @@ namespace SelfTest
 		switch (sStep) {
 		case Step::WaitEcho:
 			if (echo) {
+				// game/Kills.cpp: a herd made like a mirror's must get a herd type the game knows (else a native lethal bite crashes)
+				char herdDetail[256];
+				Check(Kills::SelfCheck(herdDetail, sizeof(herdDetail)), "herd type of a mirror-like herd", herdDetail);
 				for (int i = 0; i < 32 && sAbilityCount < 32; ++i) {
 					int type = 0, category = 0;
 					if (Actions::AbilityInfo(avatar, i, &type, &category)) {

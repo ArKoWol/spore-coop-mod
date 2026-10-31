@@ -16,7 +16,7 @@ change), **partly**, **not done**.
 | 2c | Plants not flickering | to check (fixed 2026-10-25) |
 | 2d | Fruit at the same places and gone when eaten | not done (fruit is generated per machine, 6 of 74 match) |
 | 2e | Eggs and hatching | partly |
-| 2f | Corpses both players can eat | the guest cannot eat a corpse (2026-10-25); the host's food value sent, corpse placed once: still cannot eat (2-PC test 2026-10-31). A newborn from an egg has the right species (works, 2026-10-25) |
+| 2f | Corpses both players can eat | the guest cannot eat a corpse (2026-10-25); the host's food value sent, corpse placed once: still cannot eat (2-PC test 2026-10-31). Built 2026-10-31 (protocol 17), to check: the corpse stays while the guest eats (it was removed at the first bite), food left goes both ways. A newborn from an egg has the right species (works, 2026-10-25) |
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | works (2-PC test 2026-10-31) |
@@ -24,7 +24,7 @@ change), **partly**, **not done**.
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
 | 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
-| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite goes through the host (no crash since, owner 2026-10-31), no DNA yet |
+| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite went through the host (no crash, owner 2026-10-31), no DNA. Built 2026-10-31 (protocol 17), to check: the lethal bite native with a repaired herd type (crash cause, `FACTS.md` section 9), relation events of mirrors dropped |
 | 4b | Host damage and deaths | works |
 | 4c | PvP, death and respawn at the own nest, no reward | respawn built 2026-10-31 (`game/Respawn.cpp`, `coop die`), not run yet, to check on 2 PCs; PvP death goes through the same path (no reward), not seen |
 | 4d | Hit and get-hit animations of mirrors | not done |

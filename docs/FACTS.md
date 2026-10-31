@@ -172,6 +172,10 @@ seen in our tests.
   the one of the avatar's herd (`mHerd->mpNest`) *(guess)*. Whether the respawned avatar is the same object, how long the death
   lasts and whether its health goes to 0: not known yet, `respawn:` lines in `CoopMod.log` tell (`coop die`). The mod does not
   send that message itself (calls through `IMessageManager` are not trusted, section 6).
+- **How a creature eats a corpse** (state machine 0xD70FD0, bites 0xD70A80 in our exe): it needs the corpse's `mbDead` (+0xB5E)
+  **and** `cSpatialObject::mbEnabled` (creature +0x135); for the player's avatar it sets the corpse's `mbHasBeenEaten` (+0xB5F)
+  when the eating **starts** and then takes food out of `mFoodValue` bite by bite. So a corpse marked eaten is not used up yet
+  *(guess, from disassembly 2026-10-31)*.
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
   avatar 3 s after the load *(SporeCoop)*. We set `mpSpeciesProfile`, `mSpeciesKey`, `mProfileSeq` of the avatar and reload the
   model (`SetModelKey` when the model key is the species key, else `GrowUp`) instead *(guess, built 2026-10-31, not tried)*.
@@ -233,6 +237,13 @@ seen in our tests.
   kills** and can make a species extinct on the guest. Drop relation events on mirrors and puppets *(SporeCoop)*.
 - Extinction: every herd of the species is stopped; a species goal card pays its DNA only when it sees the change itself
   *(SporeCoop)*.
+- **The guest's crash on a native lethal bite of a mirror** (`SporeApp.exe+0x797779, reading 0x14`, 2026-10-25) is the extinction:
+  `ApplyEvent` events 0 and 5 raise `numKilled`; at the threshold it calls 0xBA4750 (sets `cHerd::mbExtinction` on every herd of the
+  species), which first looks up the dead animal's herd type: `cSpeciesManager` 0x4E00C0 with `cHerd::mArchetype` (+0x88) and
+  `mGeneration` (+0xF0), null for a type it does not know, then reads +0x14 of it. A mirror's herd (made by `CreateHerd`) has such a
+  type *(guess, from disassembly 2026-10-31; `coop killcheck` shows the type on one PC)*.
+- `TakeDamage` is 0xBFCF10 in our exe *(SDK)*: it stores the attacker, and on a lethal hit sets the combatant's state (+0x34) to 2
+  (dead, later hits return at once) and sends message `0x1622184` *(guess, from disassembly 2026-10-31)*.
 
 ## 10. Other stages (research, nothing verified by us)
 - **"The player's" is one political id per game**: every object has `cGameData::mPoliticalID` (+0x30) *(SDK)*;
