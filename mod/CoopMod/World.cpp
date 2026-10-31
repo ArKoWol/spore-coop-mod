@@ -31,7 +31,7 @@ namespace
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
 	const uint8_t kMsgAvatarSpecies = 115;  // both ways: [115][instance][type][group] of the sender's avatar species (changes in the editor)
 	const uint8_t kMsgEaten = 114;      // guest -> host: [114][netId]: the guest ate this animal's corpse
-	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x (x y z f32, species instance, type, group)
+	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x 56 bytes (x y z f32, species instance/type/group, qx qy qz qw f32, model instance/type/group, scale f32)
 	const DWORD kNestsEveryMs = 20000;
 	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
 	const DWORD kAnimRepeatMs = 400;     // the same animation of the same creature is sent at most this often
@@ -110,7 +110,7 @@ namespace
 		int animSent = 0, animPlayed = 0;
 
 		// nests (G2): the host's list, and the nests the guest made from it
-		struct NestInfo { Vector3 pos; ResourceKey key; };
+		struct NestInfo { Vector3 pos; ResourceKey key; float rot[4] = { 0, 0, 0, 1 }; ResourceKey model; float scale = 1.0f; };
 		struct NestMirror { cHerdPtr herd; cNestPtr nest; Vector3 pos; };
 		DWORD lastNests = 0;
 		bool nestsNow = false;
@@ -700,7 +700,10 @@ namespace
 	// Reads a nest's position and the species profile of its herd. The host crashed (CoopMod.dll+0x16ad8, "reading 00000a27") when
 	// the guest connected and the first nest list was built, so every raw read of a game object here is guarded: a nest or herd the
 	// game has half-destroyed gives false instead of a crash. (No C++ objects with destructors in a function with __try.)
-	bool ReadNest(Simulator::cNest* nest, Simulator::cSpeciesProfile** profile, float* pos, Simulator::cHerd** herd)
+	// It also reads the nest's look: orientation (x y z w), scale, model key (instance, type, group) and flags. The guest cannot
+	// know them (the planet generator chose them).
+	bool ReadNest(Simulator::cNest* nest, Simulator::cSpeciesProfile** profile, float* pos, Simulator::cHerd** herd,
+		float* rot, float* scale, uint32_t* model, int* flags)
 	{
 		__try {
 			Simulator::cHerd* h = nest->mpHerd.get();
@@ -711,6 +714,12 @@ namespace
 			*profile = h->mpSpeciesProfile;
 			const Vector3& p = nest->GetPosition();
 			pos[0] = p.x; pos[1] = p.y; pos[2] = p.z;
+			const Math::Quaternion& q = nest->GetOrientation();
+			rot[0] = q.x; rot[1] = q.y; rot[2] = q.z; rot[3] = q.w;
+			*scale = nest->GetScale();
+			const ResourceKey& mk = nest->GetModelKey();
+			model[0] = mk.instanceID; model[1] = mk.typeID; model[2] = mk.groupID;
+			*flags = nest->mFlags;
 			return true;
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
@@ -739,7 +748,11 @@ namespace
 			Simulator::cSpeciesProfile* profile = nullptr;
 			Simulator::cHerd* herd = nullptr;
 			float pos[3] = { 0, 0, 0 };
-			if (!ReadNest(nest, &profile, pos, &herd)) {
+			float rot[4] = { 0, 0, 0, 1 };
+			float scale = 1.0f;
+			uint32_t model[3] = { 0, 0, 0 };
+			int flags = 0;
+			if (!ReadNest(nest, &profile, pos, &herd, rot, &scale, model, &flags)) {
 				++unreadable;
 				continue;
 			}
@@ -750,6 +763,14 @@ namespace
 			State::NestInfo info;
 			info.pos = Vector3(pos[0], pos[1], pos[2]);
 			info.key = key;
+			for (int i = 0; i < 4; ++i) {
+				info.rot[i] = rot[i];
+			}
+			info.model.instanceID = model[0]; info.model.typeID = model[1]; info.model.groupID = model[2];
+			info.scale = scale;
+			if (list.size() < 5) {
+				Logf("nests: host nest %d model %08x!%08x!%08x scale %.2f flags %08x", (int)list.size(), model[2], model[1], model[0], scale, (unsigned)flags);
+			}
 			list.push_back(info);
 		}
 		Logf("nests: host list of %d nests built (%d unreadable)", (int)list.size(), unreadable);
@@ -765,6 +786,11 @@ namespace
 			for (size_t i = from; i < to; ++i) {
 				w.F32(list[i].pos.x); w.F32(list[i].pos.y); w.F32(list[i].pos.z);
 				w.U32(list[i].key.instanceID); w.U32(list[i].key.typeID); w.U32(list[i].key.groupID);
+				for (int k = 0; k < 4; ++k) {
+					w.F32(list[i].rot[k]);
+				}
+				w.U32(list[i].model.instanceID); w.U32(list[i].model.typeID); w.U32(list[i].model.groupID);
+				w.F32(list[i].scale);
 			}
 			QueueReliable(s, w.buf);
 		}
@@ -780,6 +806,43 @@ namespace
 		}
 		m.herd = nullptr;
 		m.nest = nullptr;
+	}
+
+	// A nest made at run time gets no look from the planet generator and the game puts it away from the asked place: put it
+	// exactly where the host's is, with its orientation, scale and model. The model key is set only if it differs; then the nest
+	// gets a model world (SDK: the graphical model is loaded in SetModelWorld), taken from the nest itself, else from the avatar.
+	void ShapeNestMirror(Simulator::cNest* nest, const State::NestInfo& info, bool log)
+	{
+		const Math::Quaternion rotation(info.rot[0], info.rot[1], info.rot[2], info.rot[3]);
+		nest->Teleport(info.pos, rotation);
+		if (info.scale > 0.0f) {
+			nest->SetScale(info.scale);
+		}
+		ResourceKey given = nest->GetModelKey();
+		bool changed = false;
+		if (info.model.instanceID && (given.instanceID != info.model.instanceID || given.typeID != info.model.typeID ||
+			given.groupID != info.model.groupID)) {
+			nest->SetModelKey(info.model);
+			changed = true;
+			if (!nest->HasModel()) {
+				Graphics::IModelWorld* world = nest->GetModelWorld();
+				if (!world) {
+					auto avatar = GameNounManager.GetAvatar();
+					world = avatar ? avatar->GetModelWorld() : nullptr;
+				}
+				if (world) {
+					nest->SetModelWorld(world);
+				}
+			}
+		}
+		if (log) {
+			ResourceKey after = nest->GetModelKey();
+			const Vector3& at = nest->GetPosition();
+			Logf("nests: made one: game gave model %08x!%08x!%08x, host has %08x!%08x!%08x%s, now %08x!%08x!%08x hasModel %d, scale %.2f (host %.2f), flags %08x, off by %.1f m",
+				given.groupID, given.typeID, given.instanceID, info.model.groupID, info.model.typeID, info.model.instanceID,
+				changed ? " (set)" : " (same)", after.groupID, after.typeID, after.instanceID, nest->HasModel() ? 1 : 0,
+				nest->GetScale(), info.scale, (unsigned)nest->mFlags, (at - info.pos).Length());
+		}
 	}
 
 	void GuestNests(State& s, DWORD now)
@@ -882,6 +945,9 @@ namespace
 			m.nest = m.herd->mpNest;
 			if (!m.nest) {
 				m.nest = GameNounManager.CreateNest(info.pos, m.herd.get());
+			}
+			if (m.nest) {
+				ShapeNestMirror(m.nest.get(), info, s.nestsCreated < 10);
 			}
 			existing.push_back(info.pos);
 			s.nestMirrors.push_back(m);
@@ -1033,7 +1099,7 @@ namespace World
 			Reader r(data, size);
 			r.U8();
 			uint32_t chunk = r.U32(), chunks = r.U32(), n = r.U32();
-			if (!r.ok || chunks == 0 || chunks > 100 || n > 200 || size != 13 + n * 24) {
+			if (!r.ok || chunks == 0 || chunks > 100 || n > 200 || size != 13 + n * 56) {
 				return;
 			}
 			if (chunk == 0) {
@@ -1045,6 +1111,11 @@ namespace World
 				State::NestInfo info;
 				info.pos = Vector3(r.F32(), r.F32(), r.F32());
 				info.key.instanceID = r.U32(); info.key.typeID = r.U32(); info.key.groupID = r.U32();
+				for (int k = 0; k < 4; ++k) {
+					info.rot[k] = r.F32();
+				}
+				info.model.instanceID = r.U32(); info.model.typeID = r.U32(); info.model.groupID = r.U32();
+				info.scale = r.F32();
 				s.nestIncoming.push_back(info);
 			}
 			if (r.ok && ++s.nestChunksGot >= s.nestChunks) {
