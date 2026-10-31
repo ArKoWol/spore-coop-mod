@@ -17,6 +17,8 @@ namespace CoopNet
 		bool receiving = false;        // the host's world is arriving
 		float progress = 0;            // 0..1 of the world
 		bool staged = false;           // the world is complete; the game restarts by itself to open it
+		bool upToDate = false;         // staged without a download: the cache already was the host's world (JOIN_FLOW M4)
+		std::string error;             // the download failed or was cut off (text for the player), "" = no error
 		bool installedAtStart = false; // this run is a co-op launch: Game0 is the host's world (game/CoopLaunch.cpp)
 		uint64_t host = 0;             // the host we join / whose world Game0 holds
 	};

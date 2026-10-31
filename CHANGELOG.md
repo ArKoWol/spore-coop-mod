@@ -11,6 +11,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
   menureload/ggefind/holdplay/playnow/carddump`) are gone, which closes the issue "CO-OP star vanishes after leaving a game without saving".
   In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`) and tries to select the host's star (spike J9,
   `menu: J9` lines). Not tested (2 PCs); no protocol change. Guests: click the CO-OP plate (bottom left; `COOP_BUTTON_CORNER` moves it).
+- **M4 of the join flow: a rejoin downloads only what differs, protocol 14** (ArKoWol; `core/coop_manifest.h`, `game/WorldTransfer.cpp`).
+  The host sends a manifest (name, size, CRC32); the guest asks only for changed or missing files, builds `Coop\<id>.incoming` from
+  cache + received files, checks every file, then replaces the cache; a failed check retries once, then `CoopNet::State().error`
+  (also `.upToDate`); a cancelled or cut-off download deletes `.incoming`. Logic: 85 checks in `tests\run_core_tests.bat`; not tested
+  on 2 PCs; **protocol 14, both must update**; watch the `world:` lines in `CoopMod.log`.
 
 - **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
   removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror

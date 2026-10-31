@@ -11,6 +11,7 @@
 #include "game/HostPanel.h"
 #include "game/NamePlates.h"
 #include "game/CoopLaunch.h"
+#include "game/WorldTransfer.h"
 #include "../../core/coop_launch.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
@@ -450,7 +451,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 13;
+static const uint32_t kProtocolVersion = 14;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -504,6 +505,8 @@ static bool sHaveLatest = false;
 static void NetStop()
 {
 	World::Reset();
+	WorldTransfer::GuestAbort(nullptr);  // a download in progress: Coop\<id>.incoming is deleted (JOIN_FLOW E9)
+	WorldTransfer::HostStop();
 	if (sTransport == Transport::Udp && sSocket != INVALID_SOCKET) {
 		closesocket(sSocket);
 		sSocket = INVALID_SOCKET;
@@ -640,31 +643,15 @@ static void HandlePacket(const StatePacket& p)
 
 // ---------------------------------------------------------------- world transfer (Steam only)
 
-// The host sends the files of its save game folder (Games\Game0, about 3 MB) so the client can load the
-// same world. Files travel as reliable messages on channel 1, a few chunks per frame because Steam's send
-// buffer is small. The client keeps the received world in Games\Coop\<host id>.
+// The host offers the files of its save game folder (Games\Game0, about 3 MB) as a manifest (names, sizes, CRC32). The client
+// compares it with its cache Games\Coop\<host id> and gets only the files that differ, then checks every file against the
+// manifest (game/WorldTransfer.cpp, core/coop_manifest.h). Reliable messages on channel 1, a few chunks per frame because
+// Steam's send buffer is small.
 // The running game keeps planetRecords.pkp/.pkt and PlanetScripts.pld open (read share only) from startup,
 // so Game0 cannot be replaced while it runs: the world waits in Games\Coop\<host id> and CoopLaunch::Prepare()
 // swaps it in for the next launch (the "co-op launch"), before the game opens its save. The client's own Game0
 // is never touched for good (core/coop_launch.h).
-static const uint32_t kFileMagic = 0x4C465053;  // 'SPFL'
-static const uint32_t kChunk = 60 * 1024;
 static const int kFileChannel = 1;
-
-#pragma pack(push, 1)
-struct FilePacket
-{
-	uint32_t magic;
-	uint32_t fileIndex;
-	uint32_t fileCount;
-	char name[64];
-	uint32_t offset;
-	uint32_t totalSize;
-	uint32_t dataLen;
-	unsigned char data[kChunk];
-};
-#pragma pack(pop)
-static const size_t kFileHeader = offsetof(FilePacket, data);
 
 // Written into a received world (Coop\<id>, in a co-op launch Game0): the host's Steam ID.
 static const char* kSaveHostFile = "coop_host.txt";
@@ -675,35 +662,10 @@ static std::string GamesDir()
 	return std::string(appdata ? appdata : "") + "\\Spore\\Games";
 }
 
-static void DeleteDir(const std::string& dir)
-{
-	WIN32_FIND_DATAA fd;
-	HANDLE h = FindFirstFileA((dir + "\\*").c_str(), &fd);
-	if (h != INVALID_HANDLE_VALUE) {
-		do {
-			std::string name = fd.cFileName;
-			if (name == "." || name == "..") {
-				continue;
-			}
-			std::string path = dir + "\\" + name;
-			if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-				DeleteDir(path);
-			}
-			else {
-				DeleteFileA(path.c_str());
-			}
-		} while (FindNextFileA(h, &fd));
-		FindClose(h);
-	}
-	RemoveDirectoryA(dir.c_str());
-}
-
-// Set when this run is a co-op launch (CoopLaunch::Prepare put the host's world in place of Game0): a world sent again
-// (the client joins again after the restart and the host sends on every first contact) is then ignored instead of
+// Set when this run is a co-op launch (CoopLaunch::Prepare put the host's world in place of Game0): a world offered again
+// (the client joins again after the restart and the host offers on every first contact) is then ignored instead of
 // asking for another restart.
 static bool sWorldInstalledAtStart = false;
-static float sWorldProgress = -1;  // client: share of the world received (0..1), -1 = none arriving (CoopNet::State)
-static bool sWorldStaged = false;
 static bool sWorldIgnoredNotice = false;
 
 // After a world is received the mod restarts the game by itself (the running game keeps Game0 locked, so the world is
@@ -713,177 +675,37 @@ static bool sWorldIgnoredNotice = false;
 static DWORD sRestartAt = 0;  // GetTickCount() deadline of the restart, 0 = none planned
 static bool sRestartDone = false;
 
-static struct WorldSend
-{
-	bool active = false;
-	std::vector<std::string> names;
-	size_t file = 0;
-	uint32_t offset = 0;
-	bool loaded = false;
-	std::vector<unsigned char> data;
-} sWorld;
-
 static void WorldSendStart()
 {
-	sWorld = WorldSend();
-	std::string dir = GamesDir() + "\\Game0";
-	WIN32_FIND_DATAA fd;
-	HANDLE h = FindFirstFileA((dir + "\\*").c_str(), &fd);
-	if (h == INVALID_HANDLE_VALUE) {
-		Logf("world: no save folder %s", dir.c_str());
-		return;
-	}
-	do {
-		if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && strlen(fd.cFileName) < sizeof(((FilePacket*)0)->name)
-			&& fd.nFileSizeLow <= 8u * 1024 * 1024) {
-			sWorld.names.push_back(fd.cFileName);
-		}
-	} while (FindNextFileA(h, &fd));
-	FindClose(h);
-	sWorld.active = !sWorld.names.empty();
-	Logf("world: sending %d files from %s", (int)sWorld.names.size(), dir.c_str());
-	if (sWorld.active) {
-		App::ConsolePrintF("coop: sending the world (%d files)...", (int)sWorld.names.size());
-	}
+	WorldTransfer::HostStart(GamesDir() + "\\Game0");
 }
 
-static void WorldSendPump()
+// Only take a world in the main menu of a run that has not just installed one; the host also offers it
+// when it thinks the client reconnected (see SteamReceive), which can happen in the middle of a game.
+static bool WorldAccepted()
 {
-	if (!sWorld.active || !sSteam.ready || !sPeerSteamId) {
-		return;
-	}
-	alignas(8) unsigned char identity[256] = {};
-	sSteam.SetSteamID64(identity, sPeerSteamId);
-	static FilePacket packet;
-
-	for (int budget = 0; budget < 3 && sWorld.active; ++budget) {
-		const std::string& name = sWorld.names[sWorld.file];
-		if (!sWorld.loaded) {
-			sWorld.data.clear();
-			if (FILE* f = fopen((GamesDir() + "\\Game0\\" + name).c_str(), "rb")) {
-				fseek(f, 0, SEEK_END);
-				long size = ftell(f);
-				fseek(f, 0, SEEK_SET);
-				sWorld.data.resize(size > 0 ? size : 0);
-				if (size > 0) {
-					fread(sWorld.data.data(), 1, size, f);
-				}
-				fclose(f);
-			}
-			sWorld.loaded = true;
-			sWorld.offset = 0;
-		}
-
-		uint32_t total = (uint32_t)sWorld.data.size();
-		uint32_t len = total - sWorld.offset;
-		if (len > kChunk) {
-			len = kChunk;
-		}
-		packet.magic = kFileMagic;
-		packet.fileIndex = (uint32_t)sWorld.file;
-		packet.fileCount = (uint32_t)sWorld.names.size();
-		memset(packet.name, 0, sizeof(packet.name));
-		strcpy(packet.name, name.c_str());
-		packet.offset = sWorld.offset;
-		packet.totalSize = total;
-		packet.dataLen = len;
-		if (len) {
-			memcpy(packet.data, sWorld.data.data() + sWorld.offset, len);
-		}
-		// 8 = k_nSteamNetworkingSend_Reliable; the result 1 is k_EResultOK. Anything else: try again next frame.
-		int result = sSteam.Send(sSteam.messages, identity, &packet, (uint32_t)(kFileHeader + len), 8, kFileChannel);
-		if (result != 1) {
-			return;
-		}
-		sWorld.offset += len;
-		if (sWorld.offset >= total) {
-			sWorld.loaded = false;
-			if (++sWorld.file >= sWorld.names.size()) {
-				sWorld.active = false;
-				Logf("world: all files sent");
-				App::ConsolePrintF("coop: world sent.");
-			}
-		}
-	}
-}
-
-static void WorldReceiveChunk(const unsigned char* bytes, int size)
-{
-	if (size < (int)kFileHeader) {
-		return;
-	}
-	const FilePacket& p = *(const FilePacket*)bytes;
-	if (p.magic != kFileMagic || p.dataLen > kChunk || (int)(kFileHeader + p.dataLen) > size || p.fileIndex >= p.fileCount) {
-		return;
-	}
-	char name[65];
-	memcpy(name, p.name, 64);
-	name[64] = 0;
-	if (!name[0] || strpbrk(name, "\\/:") || strstr(name, "..")) {
-		Logf("world: rejected file name");
-		return;
-	}
-
-	// Only take a world in the main menu of a run that has not just installed one; the host also sends it
-	// when it thinks the client reconnected (see SteamReceive), which can happen in the middle of a game.
 	if (sWorldInstalledAtStart || Simulator::IsCreatureGame()) {
 		if (!sWorldIgnoredNotice) {
 			sWorldIgnoredNotice = true;
 			Logf("world: ignoring the host's copy (%s)", sWorldInstalledAtStart ? "installed at start" : "in a game");
 		}
-		return;
+		return false;
 	}
+	return true;
+}
 
-	std::string games = GamesDir();
-	// Coop\<host id>.incoming while the download runs; renamed to Coop\<host id> only when it is complete
-	std::string coopDir = games + "\\Coop";
-	std::string worldDir = coopDir + "\\" + std::to_string((unsigned long long)sPeerSteamId);
-	std::string incoming = worldDir + ".incoming";
-	if (p.fileIndex == 0 && p.offset == 0) {
-		CreateDirectoryA(coopDir.c_str(), nullptr);
-		DeleteDir(incoming);
-		CreateDirectoryA(incoming.c_str(), nullptr);
-		App::ConsolePrintF("coop: receiving the world...");
-	}
-	std::string path = incoming + "\\" + name;
-	if (FILE* f = fopen(path.c_str(), p.offset == 0 ? "wb" : "r+b")) {
-		fseek(f, (long)p.offset, SEEK_SET);
-		if (p.dataLen) {
-			fwrite(p.data, 1, p.dataLen, f);
-		}
-		fclose(f);
+// The client's world is in Coop\<host id> and CoopLaunch.txt is written (game/WorldTransfer.cpp): restart into it.
+static void WorldStaged()
+{
+	bool upToDate = WorldTransfer::Guest().upToDate;
+	if (!getenv("COOP_NO_RESTART")) {
+		sRestartAt = GetTickCount() + 3000;
+		App::ConsolePrintF(upToDate ? "coop: your copy of the host's world is up to date. The game restarts by itself in 3 s and opens it (your own saves stay as they are)."
+			: "coop: world received. The game restarts by itself in 3 s and opens the host's world (your own saves stay as they are).");
 	}
 	else {
-		Logf("world: cannot write %s", path.c_str());
-		return;
-	}
-
-	if (p.fileCount && p.totalSize) {
-		sWorldProgress = (p.fileIndex + (float)(p.offset + p.dataLen) / p.totalSize) / p.fileCount;
-	}
-	bool last = p.fileIndex + 1 == p.fileCount && p.offset + p.dataLen >= p.totalSize;
-	if (last) {
-		// remember whose world this is, so the co-op indicator can tell the host's world from the player's own
-		if (FILE* f = fopen((incoming + "\\" + kSaveHostFile).c_str(), "w")) {
-			fprintf(f, "%llu\n", (unsigned long long)sPeerSteamId);
-			fclose(f);
-		}
-		// the older copy of this host's world is only a cache (the host's save is the real one): replaced by the new one
-		DeleteDir(worldDir);
-		bool staged = MoveFileA(incoming.c_str(), worldDir.c_str()) != 0 && coop::launch::WriteLaunch(games, sPeerSteamId);
-		sWorldStaged = staged;
-		Logf("world: received %d files, staged %d (error %lu)", (int)p.fileCount, staged ? 1 : 0, staged ? 0 : GetLastError());
-		if (staged && !getenv("COOP_NO_RESTART")) {
-			sRestartAt = GetTickCount() + 3000;
-			App::ConsolePrintF("coop: world received. The game restarts by itself in 3 s and opens the host's world (your own saves stay as they are).");
-		}
-		else if (staged) {
-			App::ConsolePrintF("coop: world received. Restart the game to open it (your own saves stay as they are); the new start joins the host again,");
-			App::ConsolePrintF("coop: then choose Continue.");
-		}
-		else {
-			App::ConsolePrintF("coop: could not store the received world (see CoopMod.log).");
-		}
+		App::ConsolePrintF("coop: world received. Restart the game to open it (your own saves stay as they are); the new start joins the host again,");
+		App::ConsolePrintF("coop: then choose Continue.");
 	}
 }
 
@@ -991,8 +813,11 @@ static void SteamReceiveFiles()
 			const unsigned char* msg = (const unsigned char*)messages[i];
 			const unsigned char* data = *(const unsigned char* const*)msg;
 			int size = *(const int*)(msg + sizeof(void*));
-			if (!sIsHost) {
-				WorldReceiveChunk(data, size);
+			if (sIsHost) {
+				WorldTransfer::HostMessage(data, size);
+			}
+			else if (WorldAccepted() && WorldTransfer::GuestMessage(data, size, GamesDir(), sPeerSteamId)) {
+				WorldStaged();
 			}
 			sSteam.Release(messages[i]);
 		}
@@ -1012,6 +837,7 @@ static bool WorldSendOn(const void* data, uint32_t size, int flags, int channel)
 
 static bool WorldSendUnreliable(const void* data, uint32_t size) { return WorldSendOn(data, size, 5, World::kChannelDelta); }
 static bool WorldSendReliable(const void* data, uint32_t size) { return WorldSendOn(data, size, 8, World::kChannelReliable); }
+static bool FileSend(const void* data, uint32_t size) { return WorldSendOn(data, size, 8, kFileChannel); }  // world transfer
 
 static void SteamReceiveWorld()
 {
@@ -1443,16 +1269,14 @@ namespace CoopNet
 	bool Join(uint64_t hostId)
 	{
 		sWarnedVersion = false;
-		sWorldProgress = -1;
-		sWorldStaged = false;
+		WorldTransfer::GuestReset();
 		sHostSeen = false;
 		return SteamJoinStart(hostId);
 	}
 
 	void Cancel()
 	{
-		NetStop();
-		sWorldProgress = -1;
+		NetStop();  // also deletes a half-finished download (Coop\<id>.incoming)
 	}
 
 	bool Leave()
@@ -1504,9 +1328,12 @@ namespace CoopNet
 		s.joining = sTransport == Transport::Steam && !sIsHost;
 		s.hostSeen = sHostSeen;
 		s.versionMismatch = sWarnedVersion;
-		s.receiving = sWorldProgress >= 0;
-		s.progress = sWorldProgress < 0 ? 0 : sWorldProgress;
-		s.staged = sWorldStaged;
+		WorldTransfer::GuestState world = WorldTransfer::Guest();
+		s.receiving = world.receiving;
+		s.progress = world.progress;
+		s.staged = world.staged;
+		s.upToDate = world.upToDate;
+		s.error = world.error;
 		s.installedAtStart = sWorldInstalledAtStart;
 		s.host = s.joining ? sPeerSteamId : SaveHostId();
 		return s;
@@ -1560,7 +1387,12 @@ static void NetUpdate()
 		SteamReceive();
 		SteamReceiveFiles();
 		SteamReceiveWorld();
-		WorldSendPump();
+		WorldTransfer::SetSender(FileSend);
+		WorldTransfer::HostPump();
+		if (!sIsHost) {
+			// the host's state packets arrive at 30 Hz; silent for kReconnectMs = gone (before its first packet: the stall timer)
+			WorldTransfer::GuestUpdate(!sHostSeen || GetTickCount() - sLastReceive < kReconnectMs);
+		}
 		if (sHavePeer) {
 			World::SetTransport(WorldSendUnreliable, WorldSendReliable);
 			World::Update(sIsHost, inGame, sPuppetRaw);
@@ -2103,7 +1935,7 @@ void Dispose()
 	// the game still lives; if they ever ran at process exit instead (DLL pinned or not unloaded), a static
 	// std::string/std::vector still holding memory would crash in the game's free. Free them now to be safe.
 	sDisposed = true;
-	sWorld = WorldSend();
+	WorldTransfer::Shutdown();
 	std::string().swap(sIndicator);
 	std::wstring().swap(sBaseTitle);
 	EnterCriticalSection(&sConsoleLock);

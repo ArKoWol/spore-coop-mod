@@ -14,5 +14,8 @@ cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\core_tests.exe core_tests.cpp |
 out\core_tests.exe || exit /b 1
 rem the co-op launch folder logic (core\coop_launch.h) on temporary folders
 cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\launch_tests.exe launch_tests.cpp || exit /b 1
-out\launch_tests.exe
+out\launch_tests.exe || exit /b 1
+rem the world-transfer manifest (core\coop_manifest.h): diff, build, verify on temporary folders
+cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\manifest_tests.exe manifest_tests.cpp || exit /b 1
+out\manifest_tests.exe
 exit /b %errorlevel%

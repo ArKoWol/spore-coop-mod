@@ -60,6 +60,7 @@ namespace
 		std::string worldOf;  // name of the friend whose world is (being) installed / played
 		std::string planet;   // co-op launch: the planet the host plays ("" = unknown)
 		std::string error;
+		bool upToDate = false;  // the staged world needed no download (JOIN_FLOW M4)
 	};
 	Ui* sUi = nullptr;
 
@@ -208,7 +209,8 @@ namespace
 			AddButton(g, Gdiplus::RectF(right - 110, plate.Y + plate.Height - 52, 110, 36), L"Cancel", kCancel, false);
 		}
 		else if (sState == State::Restarting) {
-			Text(g, Wide(ui.worldOf + "'s world is here"), 20, true, green, Gdiplus::RectF(left, y, width, 30));
+			Text(g, Wide(ui.upToDate ? "Your copy of " + ui.worldOf + "'s world is up to date" : ui.worldOf + "'s world is here"), 20, true, green,
+				Gdiplus::RectF(left, y, width, 30));
 			Text(g, L"The game restarts by itself to open it. Your own worlds are kept.", 13, false, ink, Gdiplus::RectF(left, y + 36, width, 22));
 		}
 		else if (sState == State::Downloading) {
@@ -342,6 +344,9 @@ namespace
 		if (s.versionMismatch) {
 			ui.error = ui.worldOf + " runs another version of the mod. Both run update.bat, then try again.";
 		}
+		else if (!s.error.empty()) {
+			ui.error = s.error;  // the download failed twice or was cut off (game/WorldTransfer.cpp)
+		}
 		else if (!s.hostSeen && now - sJoinStart > kAnswerTimeoutMs) {
 			ui.error = ui.worldOf + " does not answer. Is " + ui.worldOf + " hosting (creature stage, coop host)?";
 		}
@@ -359,7 +364,8 @@ namespace
 			sHostSeenAt = now;
 		}
 		if (s.staged) {
-			Logf("menu: world of %s received, the game restarts", ui.worldOf.c_str());
+			Logf("menu: world of %s %s, the game restarts", ui.worldOf.c_str(), s.upToDate ? "already up to date here" : "received");
+			ui.upToDate = s.upToDate;
 			sState = State::Restarting;
 			sDirty = true;
 		}
@@ -606,7 +612,8 @@ namespace
 					Logf("menu: the host's world: planet '%s' on star %08x (newest creature-stage save of Game0)", planet.c_str(), sHostStar);
 				}
 			}
-			if (sStarFound && MenuWorlds::SelectStar(sHostStar)) {
+			// COOP_NO_SELECT turns the spike off (the text alone guides the player) if the raw write ever misbehaves
+			if (sStarFound && !getenv("COOP_NO_SELECT") && MenuWorlds::SelectStar(sHostStar)) {
 				sStarWritten = true;
 				sStarWrittenAt = now;
 			}
