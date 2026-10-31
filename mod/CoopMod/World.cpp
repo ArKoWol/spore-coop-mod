@@ -7,6 +7,7 @@
 #include "game/PuppetMotion.h"
 #include "../../core/coop_core.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <set>
@@ -147,7 +148,9 @@ namespace
 		std::vector<NestInfo> nestList;          // guest: the last complete list
 		bool nestWiped = false;                  // guest: its own nests were removed
 		std::vector<NestMirror> nestMirrors;
-		int nestsCreated = 0, nestsRemoved = 0, nestsFailed = 0;
+		int nestsCreated = 0, nestsRemoved = 0, nestsFailed = 0, nestsMoved = 0;
+		bool nestAvatarCovers = false;           // guest: the avatar's own nest stands at (within 30 m of) a host entry
+		Vector3 nestAvatarCoverPos;              // guest: that host entry's position
 
 		void OnCreate(const EntityState&) override {}
 		void OnUpdate(const EntityState&) override {}
@@ -903,8 +906,11 @@ namespace
 				}
 				for (auto& n : s.nestMirrors) {
 					if (n.herd == herd) {
-						shared = true;  // the herd of a nest we made: only the animal goes, not the nest
+						shared = true;  // the herd of a nest we made or moved: only the animal goes, not the nest
 					}
+				}
+				if (!s.nestWiped && herd->mpNest) {
+					shared = true;  // the guest's own nests are moved to the host's places once the list is here: keep them until then
 				}
 			}
 			if (herd && !shared) {
@@ -1085,13 +1091,43 @@ namespace
 				}
 			}
 		}
+		// the nest effects (the visible nest) are built by the planet generator; ask the game to build them again at this place
+		nest->mbResetNestEffects = true;
 		if (log) {
 			ResourceKey after = nest->GetModelKey();
 			const Vector3& at = nest->GetPosition();
-			Logf("nests: made one: game gave model %08x!%08x!%08x, host has %08x!%08x!%08x%s, now %08x!%08x!%08x hasModel %d, scale %.2f (host %.2f), flags %08x, off by %.1f m",
+			Logf("nests: made one: game gave model %08x!%08x!%08x, host has %08x!%08x!%08x%s, now %08x!%08x!%08x hasModel %d, scale %.2f (host %.2f), flags %08x, resetEffects %d, off by %.1f m",
 				given.groupID, given.typeID, given.instanceID, info.model.groupID, info.model.typeID, info.model.instanceID,
 				changed ? " (set)" : " (same)", after.groupID, after.typeID, after.instanceID, nest->HasModel() ? 1 : 0,
-				nest->GetScale(), info.scale, (unsigned)nest->mFlags, (at - info.pos).Length());
+				nest->GetScale(), info.scale, (unsigned)nest->mFlags, nest->mbResetNestEffects ? 1 : 0, (at - info.pos).Length());
+		}
+	}
+
+	// Moves one of the guest's own nests (drawn by the game, effects and all) to the host's place: position, orientation and scale
+	// of the host's; the nest keeps its own model key and herd. The herd is made quiet; it stays enabled (a disabled herd was
+	// suspected to hide its nest).
+	void MoveOwnNest(Simulator::cNest* nest, const State::NestInfo& info)
+	{
+		const Math::Quaternion rotation(info.rot[0], info.rot[1], info.rot[2], info.rot[3]);
+		nest->Teleport(info.pos, rotation);
+		if (info.scale > 0.0f) {
+			nest->SetScale(info.scale);
+		}
+		nest->mbResetNestEffects = true;
+		if (Simulator::cHerd* herd = nest->mpHerd.get()) {
+			herd->mTargetHerdSize = 0;
+			herd->mInitialPosition = info.pos;
+		}
+	}
+
+	// Raw read of a species key of a nest's herd for the log (guarded like ReadNest).
+	uint32_t HerdSpeciesOf(Simulator::cHerd* herd)
+	{
+		__try {
+			return herd && herd->mpSpeciesProfile ? herd->mpSpeciesProfile->mCreatureKey.instanceID : 0;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return 0;
 		}
 	}
 
@@ -1110,19 +1146,76 @@ namespace
 
 		if (!s.nestWiped) {
 			s.nestWiped = true;
-			// the guest's own nests (made by its game at stage start) differ from the host's: remove them, with their herds,
-			// except the avatar's own nest
-			std::vector<Simulator::cHerd*> herds;
+			// The guest's own nests (made by its game at stage start) differ from the host's, but they ARE drawn (nests made at run
+			// time were not, though placed exactly): move them to the host's places instead of removing them. The avatar's own
+			// nest stays where it is and covers the host entry closest to it (within 30 m). Own nests are matched to host entries
+			// nearest pair first; own nests left over (the host has fewer) are removed with their herds; host entries left
+			// without a nest are made below.
+			std::vector<cNestPtr> own;
 			for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 				Simulator::cGameData* object = &*it;
 				if (object->GetNounID() != Simulator::kNest) {
 					continue;
 				}
 				auto nest = object_cast<Simulator::cNest>(object);
-				if (nest && nest->mpHerd && nest->mpHerd.get() != avatarHerd) {
-					herds.push_back(nest->mpHerd.get());
+				if (nest && nest->mpHerd) {
+					if (nest->mpHerd.get() == avatarHerd) {
+						// the avatar's nest: find the host entry it stands at
+						float best = 30.0f;
+						for (auto& info : s.nestList) {
+							float d = (nest->GetPosition() - info.pos).Length();
+							if (d < best) {
+								best = d;
+								s.nestAvatarCovers = true;
+								s.nestAvatarCoverPos = info.pos;
+							}
+						}
+					}
+					else {
+						own.push_back(cNestPtr(nest));
+					}
 				}
 			}
+			struct Pair { float d; int own; int host; };
+			std::vector<Pair> pairs;
+			for (size_t h = 0; h < s.nestList.size(); ++h) {
+				if (s.nestAvatarCovers && (s.nestList[h].pos - s.nestAvatarCoverPos).Length() < 2.0f) {
+					continue;
+				}
+				for (size_t o = 0; o < own.size(); ++o) {
+					pairs.push_back({ (own[o]->GetPosition() - s.nestList[h].pos).Length(), (int)o, (int)h });
+				}
+			}
+			std::sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) { return a.d < b.d; });
+			std::vector<char> ownUsed(own.size(), 0), hostUsed(s.nestList.size(), 0);
+			for (auto& p : pairs) {
+				if (ownUsed[p.own] || hostUsed[p.host]) {
+					continue;
+				}
+				ownUsed[p.own] = 1;
+				hostUsed[p.host] = 1;
+				Simulator::cNest* nest = own[p.own].get();
+				const State::NestInfo& info = s.nestList[p.host];
+				Simulator::cHerd* herd = nest->mpHerd.get();
+				if (s.nestsMoved < 10) {
+					Logf("nests: moved own nest %d to the host's place (was %.1f m away), species ours %08x host %08x", s.nestsMoved, p.d,
+						HerdSpeciesOf(herd), info.key.instanceID);
+				}
+				MoveOwnNest(nest, info);
+				State::NestMirror m;
+				m.herd = nest->mpHerd;
+				m.nest = own[p.own];
+				m.pos = info.pos;
+				s.nestMirrors.push_back(m);
+				++s.nestsMoved;
+			}
+			std::vector<Simulator::cHerd*> herds;
+			for (size_t o = 0; o < own.size(); ++o) {
+				if (!ownUsed[o] && own[o]->mpHerd) {
+					herds.push_back(own[o]->mpHerd.get());
+				}
+			}
+			own.clear();
 			for (auto herd : herds) {
 				GameNounManager.DestroyInstance(herd);
 				++s.nestsRemoved;
@@ -1133,7 +1226,13 @@ namespace
 				Simulator::cGameData* object = &*it;
 				if (object->GetNounID() == Simulator::kNest) {
 					auto nest = object_cast<Simulator::cNest>(object);
-					if (nest && (!nest->mpHerd || nest->mpHerd.get() != avatarHerd)) {
+					bool ours = false;  // a nest we just moved is not a leftover
+					for (auto& n : s.nestMirrors) {
+						if (n.nest.get() == nest) {
+							ours = true;
+						}
+					}
+					if (nest && !ours && (!nest->mpHerd || nest->mpHerd.get() != avatarHerd)) {
 						rest.push_back(object);
 					}
 				}
@@ -1142,7 +1241,8 @@ namespace
 				GameNounManager.DestroyInstance(object);
 				++s.nestsRemoved;
 			}
-			Logf("nests: removed the guest's own %d herds and %d leftover nests", (int)herds.size(), (int)rest.size());
+			Logf("nests: own nests: moved %d to the host's places, removed %d unused herds and %d leftover nests, the avatar's nest covers a host entry: %d",
+				s.nestsMoved, (int)herds.size(), (int)rest.size(), s.nestAvatarCovers ? 1 : 0);
 		}
 
 		// Where are the nests? Only our own record counts (the nests we made) plus the kept nest of the avatar. The first version
@@ -1152,6 +1252,9 @@ namespace
 		std::vector<Vector3> existing;
 		for (auto& n : s.nestMirrors) {
 			existing.push_back(n.pos);
+		}
+		if (s.nestAvatarCovers) {
+			existing.push_back(s.nestAvatarCoverPos);  // the avatar's nest stands for this host entry
 		}
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
@@ -2029,7 +2132,7 @@ namespace World
 		State& s = *sState;
 		Objects::PrintStatus();
 		App::ConsolePrintF("coop world: animations sent %d, played %d", s.animSent, s.animPlayed);
-		App::ConsolePrintF("coop world: nests in the host's list %d, made here %d, own removed %d, failed %d", (int)s.nestList.size(), s.nestsCreated, s.nestsRemoved, s.nestsFailed);
+		App::ConsolePrintF("coop world: nests in the host's list %d, made here %d, own moved %d, own removed %d, failed %d", (int)s.nestList.size(), s.nestsCreated, s.nestsMoved, s.nestsRemoved, s.nestsFailed);
 		App::ConsolePrintF("coop world: damage requests sent %d, hits applied %d", s.damageSent, s.damageApplied);
 		App::ConsolePrintF("coop world: host animals %d | guest table %d, mirrors %d, strays %d (removed %d), stand-in models %d | reported by guest: table %d, mirrors %d, strays %d",
 			s.hostAnimals, (int)s.guest->entities().size(), (int)s.mirrors.size(), s.strays, s.removedStrays, s.standIns,
