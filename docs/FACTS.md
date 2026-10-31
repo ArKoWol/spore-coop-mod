@@ -157,11 +157,13 @@ seen in our tests.
   later: never look a nest up again by position, keep your own record of what you made (else: 295 nests in minutes).
 - `SetSpecies` on a creature during world load crashes: wait about 3 s after the load *(SporeCoop)*.
 - A dead mirror flies away unless it is pinned to the corpse position every frame *(SporeCoop)*.
-- An edit in the creature editor probably keeps the avatar's species key and changes only the body (`bem`): the host's edit changed
-  the look of everything of his species on his machine, the guest saw nothing new *(guess, owner's two-PC test 2026-10-25)*. The
-  game caches species profiles by key, so a new body for a known key is registered under another key (alias) *(guess)*.
-- A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*; a mirror (blank tuning) may have none, which may be why
-  the guest could not eat a mirror's corpse *(guess)*.
+- **After an edit in the creature editor `avatar->mSpeciesKey`, `mProfileSeq` and the `bem` record under that key stay the same**,
+  while every creature of the species changes look on the editing machine *(verified 2026-10-31, both logs)*. So the edit changes
+  the shared species profile; it probably points to a new creature key (`profile->mCreatureKey`) *(guess)*.
+- **`TakeDamage` with no attacker on a mirror brings its health to 0 but never sets `mbDead`** (`kill: ... dead 0 -> 0, health 0.0`):
+  no corpse, so the guest cannot eat it *(verified 2026-10-31)*. Probably the death is processed in the creature's tick, which is
+  skipped for mirrors *(guess)*. A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*: 100 on the host's corpses,
+  200 on a fresh mirror *(verified 2026-10-31)*.
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
   avatar 3 s after the load *(SporeCoop)*.
 
@@ -186,8 +188,12 @@ seen in our tests.
   nest or a mating call spawns later; they are not roaming animals. Mirroring them gave 65 stacked copies on the guest that flew out of
   the ground when a call used them. The host does not announce an animal closer than 100 m to the centre *(verified 2026-10-25, both dumps)*.
   A zero species key is the player's own species (key 0 = the default key), so most animals correctly share the avatar's species.
-- The guest's dump holds 102 `Nest` objects at the host's places, yet no nest was visible: a nest made by `CreateHerd(..., createNest)`
-  of a disabled herd is probably not drawn *(guess; the herds of nests are enabled now)*.
+  The pool animals have no species profile, no tuning (`field_E84` null) and food 50. **Destroying them breaks the game**: it keeps
+  references to them, refills the pool, and a mating call then places the destroyed ones' models in a ring around the nest
+  (hundreds of "pictures" without selection or collision; the guest removed 400) *(verified 2026-10-31, guest's log and screenshot)*.
+- **A nest made at run time is not drawn**, even with an enabled herd, the host's exact place and the host's model key set
+  (`hasModel 1`); the nests the game makes at stage start are drawn. Nest model keys have type and group 0 (`87b2acc2`), so a nest
+  is probably drawn by effects (`cNest::mbResetNestEffects`) *(verified 2026-10-31; the effects part is a guess)*.
 - Creature-mode actions go through `cCreatureModeStrategy::ExecuteAction(actionId, data)` *(SDK)*: EatFruit `D335362B`,
   EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638` *(verified 2026-10-25, `action:` log lines)*. EatFruit's target is
   a `Fruit` noun (`02c9cc91`) at the fruit's position; Mate (`D335362C`) targets a creature; an unknown action `045ab96e` fires

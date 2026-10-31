@@ -140,7 +140,10 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   puppet that should walk but stands for 1.5 s while more than 1.5 m behind is teleported. A creature that stands more than
   1.5 m off a standing target for 600 ms is teleported there ("settle snap": blocked by a body or a hit reaction). Removed with `GameNounManager.DestroyInstance(herd)`.
 - **The other player's creature**: each side sends its avatar's species key and a hash of its body (`kMsgAvatarSpecies`,
-  on change and every 10 s, the hash read again each time). The puppet is built from that key. When the receiver holds
+  on change and every 10 s, the hash read again each time). The key is the creature key inside the avatar's species profile
+  (`mCreatureKey`, which an edit may change) when a body can be read under it, else `avatar->mSpeciesKey`; the host announces
+  the animals sharing that profile with the same key, and re-reads every profile's key instead of caching it forever.
+  The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);
   the puppet and, on the guest, the mirrors of the host's species are built from the alias. A failed alias is logged and
@@ -152,14 +155,17 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
 - **Mirrors** (the host's animals on the guest): each in its own empty, disabled herd of one, no nest (`World.cpp`
   `MakeMirror`), built with the host's age (rebuilt when age or species change), with scale, health and alpha applied on
   every update; AI skipped (`World::ShouldSkipAI`); within 150 m walked by `PuppetMotion::Follower`, farther ones
-  teleported. A dead one is killed locally once (`KillLocally`), placed at the corpse position once and again only
-  when it drifts more than 0.3 m; the host's food value (`kMsgCorpse`) is written into it. The host does not announce
-  animals within 100 m of the planet's centre (the game's spawn pool, `FACTS.md` section 8). The guest's own
+  teleported. A dead one is killed locally once (`KillLocally`: health 0); the game's own tick then runs on it for up to 2 s
+  to make the corpse, else the mod sets `mbDead` itself. The corpse is placed once and again only when it drifts more than
+  0.3 m; the host's food value (`kMsgCorpse`) is written into it. Animals within 100 m of the planet's centre (the game's
+  spawn pool, `FACTS.md` section 8) are neither announced by the host nor removed by the guest. The guest's other own
   animals are removed as strays every 0.5 s. A species the guest cannot build waits up to 20 s for its model, then becomes a
   counted stand-in. The guest reports its counts every 2 s (`kMsgTelemetry`).
-- **Nests**: the guest removes its own nests once (except its avatar's) and makes the host's ones as enabled herds of target
-  size 0 with a nest (`CreateHerd(..., createNest = true)`), a few per half second, trusting only its own record of what it
-  made; each nest is teleported to the host's place and gets the host's orientation, scale and model key.
+- **Nests**: when the host's list arrives the guest moves its own nests (drawn by the game) to the host's places, nearest
+  pairs first: teleported with the host's orientation and scale, `mbResetNestEffects` set, the herd kept enabled with target
+  size 0. The avatar's own nest stays and stands for the host entry within 30 m of it. Own nests left over are removed; host
+  entries left without a nest are made with `CreateHerd(..., createNest = true)`, a few per half second. Only the guest's own
+  record of what it moved or made counts.
 - **Animations**: the same animation of the same creature is sent at most every 400 ms; a creature within 1 m of its target
   gets no stop/turn orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
 - **Avatars**: both sides send their own avatar's health, max health and size 5 times a second (`kMsgAvatar`) and show them

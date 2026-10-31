@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
+  removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror
+  gets the game's tick for 2 s, else `mbDead` is set (it never became a corpse); the guest moves its own drawn nests to the host's
+  places; the avatar's key comes from its species profile (`world: avatar profile ...` logs what the editor changes). Not tested;
+  no protocol change; both need the new build.
 - **M1 of the join flow: the co-op launch, a friend's world never replaces your saves** (ArKoWol; `core/coop_launch.h`, `game/CoopLaunch.cpp`).
   The world goes to `Games\Coop\<id>`; the next start swaps it in as `Game0` for one run (own save: `Game0.own`), every start puts it
   back. Leave: plate in the creature stage, CO-OP window button, `coop leave`. Old installs get a one-time restore question.
