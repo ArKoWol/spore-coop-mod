@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **A dead player respawns at his own nest; the friend's creature goes away meanwhile** (exxecute; `game/Respawn.cpp`, STATUS 4c).
+  The game's own death and respawn run; health 0 in `kMsgAvatar` means dead, the puppet goes 1.5 s later and comes back at
+  the respawn place; hits on a dead player are dropped; an avatar respawned >60 m from its herd's nest is put beside it (the
+  guest's nest is his copy of the save's player nest, at the host's nest). Not tested; no protocol change (old builds ignore
+  it). One PC: `coop die` (`respawn-test: RESULT`). Watch `respawn:` lines on both PCs (`ARCHITECTURE.md` section 7).
+
 - **Creature-stage priorities (MoSCoW) and a new split of the work, agreed (D23)** (exxecute; docs only, `PLAN.md` 7.1,
   `STATUS.md` 3). Seven Musts for playable co-op; exxecute takes the guest's own creature, corpses, the guest's DNA for a kill
   and respawn; join flow M5 waits. Proposed by exxecute, agreed by ArKoWol on 2026-10-31. Not tested (no code); no protocol change.

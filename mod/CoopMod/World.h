@@ -53,6 +53,8 @@ namespace World
 	// The species of the OTHER player's avatar, for building his puppet: 2 = known and buildable here (key = instance, type, group),
 	// 1 = known, its model is on the way (wait), 0 = unknown or not coming (use the local species).
 	int RemoteSpecies(uint32_t* key);
+	// The other player's avatar from his kMsgAvatar: 1 = alive, 0 = dead (health 0, game/Respawn.cpp), -1 = not heard yet.
+	int RemoteAlive();
 
 	// Who a creature is for the other side: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else the host's netId of
 	// an animal. False for creatures the other side does not know (the guest's mirrors, the puppet, strangers).
