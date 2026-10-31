@@ -28,6 +28,7 @@ small example.
 - **Buttons**: glossy pills with a dark rim and white bold label with an outline. Primary (do it) green
   (150,230,80 to 60,160,30), secondary (back, cancel, other) blue (140,175,215 to 70,105,150). **Hover is lighter**
   (green 200,255,140 to 90,200,50; blue 190,220,250 to 100,140,190).
+- **Disabled button** (`UiDraw::ButtonDisabled`): grey pill, no hover, not clickable; the reason stands on its row in red.
 - **Progress**: dark groove, blue glossy fill (130,220,255 to 30,130,215).
 - **Success** text green (60,150,30); **error** title red (200,50,40).
 - No Close buttons on windows tied to a button plate or a game element: the plate's button opens and closes the window (the CO-OP

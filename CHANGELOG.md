@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **M3 of the join flow: friends who host, and invitations, protocol 16** (ArKoWol; `game/Presence.cpp`, `game/InvitePanel.cpp`,
+  `core/coop_presence.h`). Steam now starts when the main menu opens and publishes Rich Presence `sporecoop`; the CO-OP window lists
+  invitations, friends hosting (Join, grey with the reason), friends with the mod, recent sessions; the host plate has Invite (new
+  message `kMsgInvite` 118). Not tested on 2 PCs (55 core checks pass); **protocol 16, both must update**; spike J3: `presence:` / `invite:` lines.
+
 - **Protocol 15**: M4 (manifest) and exxecute's abilities/effects/voices both changed the packets as protocol 14 at the same time;
   the two kinds of 14 build do not fit together, so the merged build is 15 and refuses both. Both must update. Built, not tested.
 - **M2 of the join flow: a CO-OP button in the main menu replaces the CO-OP star** (ArKoWol; `game/CoopMenu.cpp`, `game/MenuWorlds.cpp`).

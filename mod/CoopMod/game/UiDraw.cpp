@@ -127,6 +127,17 @@ namespace UiDraw
 		Text(g, label, textSize, true, C(255, 255, 255, 255), r, Align::Center, 1.6f, primary ? C(255, 25, 80, 10) : C(255, 25, 45, 75));
 	}
 
+	void ButtonDisabled(Gdiplus::Graphics& g, const Gdiplus::RectF& r, const wchar_t* label, float textSize)
+	{
+		float radius = r.Height / 2;
+		FillRound(g, Gdiplus::RectF(r.X, r.Y + 3, r.Width, r.Height), radius, C(40, 0, 0, 0), C(40, 0, 0, 0));
+		FillRound(g, r, radius, C(255, 128, 136, 148), C(255, 110, 118, 130));
+		Gdiplus::RectF body(r.X + 2, r.Y + 2, r.Width - 4, r.Height - 4);
+		FillRound(g, body, radius - 2, C(255, 214, 220, 228), C(255, 178, 186, 198));
+		Gloss(g, body, radius - 2, 90);
+		Text(g, label, textSize, true, C(255, 245, 247, 250), r, Align::Center, 1.4f, C(255, 120, 128, 142));
+	}
+
 	bool EncodePng(Gdiplus::Bitmap& bitmap, std::vector<uint8_t>& png)
 	{
 		IStream* stream = nullptr;

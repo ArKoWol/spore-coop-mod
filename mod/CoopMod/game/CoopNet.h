@@ -53,4 +53,22 @@ namespace CoopNet
 
 	// Steam name of a friend ("" if unknown)
 	std::string Name(uint64_t steamId);
+
+	// ---- Steam outside a session: the friends list, Rich Presence and invitations (JOIN_FLOW M3, game/Presence.cpp).
+	// Steam is started once, when the main menu first opens, and stays up; host and join reuse it. The friends functions come
+	// from optional exports of steam_api_coop.dll: without them FriendsApi() is false and they return nothing.
+	bool StartSteam();     // starts Steam if it is not up (false: Steam is not running or not logged in)
+	bool SteamUp();
+	bool FriendsApi();     // the friends list and Rich Presence can be used
+	unsigned ProtocolVersion();
+	uint64_t MyId();
+	bool SetRichPresence(const char* key, const char* value);  // value null = clear all keys
+	int FriendCount();                                          // immediate friends
+	uint64_t FriendAt(int index);
+	uint32_t FriendAppId(uint64_t steamId);                     // the AppID the friend plays, 0 = none
+	int FriendPersona(uint64_t steamId);                        // 0 offline, 1 online, ...
+	void RequestFriendPresence(uint64_t steamId);
+	std::string FriendPresence(uint64_t steamId, const char* key);
+	// one reliable message on channel 3 to any Steam user (the invitation); false if Steam is down or its buffer is full
+	bool SendTo(uint64_t steamId, const void* data, uint32_t size);
 }

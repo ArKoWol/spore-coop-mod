@@ -89,15 +89,26 @@ an old install with backups is restored by the question.
   window says `Click its star in the galaxy, then press Play on the card.` (the text is the fallback). No synthetic clicks and no
   `SetActiveModeByName("LoadGame")`.
 
-## 5. M3: who is hosting (Steam Rich Presence)
+## 5. M3: who is hosting (Steam Rich Presence) - built, protocol 16, not tested on 2 PCs
+How it works: `../ARCHITECTURE.md` section 4 (presence and invitations), code `game/Presence.cpp`, `game/InvitePanel.cpp`,
+`core/coop_presence.h` (tested). Where it differs from the first plan:
+- Steam starts when the main menu first opens (not at `coop host`); host and join reuse it.
 - Every running mod sets the key `sporecoop` = `<protocol>|<state>|<planet>|<players>/<slots>`; state: `menu`, `hosting`,
-  `guest`, `editor`, `busy` (minimized, loading). Exports, loaded as optional like the names (`../FACTS.md` section 5):
-  `SetRichPresence`, `GetFriendCount`, `GetFriendByIndex`, `GetFriendGamePlayed`, `RequestFriendRichPresence`,
-  `GetFriendRichPresence`. **Spike J3**: the key of one PC shows up on the other within seconds (both run AppID 480).
-- The window lists: invitations, friends hosting, friends running the mod, recent sessions (offline). Join is disabled with the
-  reason when the protocol differs (`ask Artyom to run update.bat`), the world is full, or the host is not in the creature stage.
-- Invite: our own message over Steam networking (Steam's "Invite to game" opens Spacewar); the friend gets a toast in the menu.
-  Protocol bump.
+  `guest`, `editor`, `busy` (loading, another stage) and **`playing`** (own game, no session; added so the window does not call it
+  busy). A **minimized** game runs no frames and cannot publish `busy`; its key stays as it was. Exports, loaded as optional like
+  the names (`../FACTS.md` section 5): `SetRichPresence`, `ClearRichPresence`, `GetFriendCount`, `GetFriendByIndex`,
+  `GetFriendGamePlayed`, `GetFriendPersonaState`, `RequestFriendRichPresence`, `GetFriendRichPresence`. **Spike J3** (to check on
+  2 PCs): `presence: set` on one PC, `presence: N friends ... K run the mod: <name> <key>` on the other within seconds.
+- The window lists, in this order: invitations, friends with a world (`Artyom  hosting Leian 1/2  [Join]`; a host in the editor,
+  menu or loading keeps its row with a grey Join), friends running the mod without a world (state text, no Join), recent sessions
+  that are not online with the mod, then Join by Steam ID. Join is grey with the reason on the row when the protocol differs (`Artyom
+  runs another mod version: both run update.bat`), the world is full (`2/2`) or the host is not in the creature stage (E3, E5, E7).
+  At most 8 players (fewer on a small screen); the rest is counted (`+N more not shown`) and logged. Refresh scans at once; Steam
+  down shows `Start Steam and log in, then press Refresh` (E1).
+- Invite: the host plate's **Invite** opens a list of friends in their main menu (same version, no world of their own). Invite sends
+  `kMsgInvite` (our own message over Steam networking; Steam's "Invite to game" opens Spacewar). The friend gets a toast in the menu
+  (`Artyom invites you to Leian  [Join] [Not now]`; Not now keeps it in the window's list). In a game, a co-op launch or a join it is
+  logged and ignored; the newest invitation wins (E20). Only Steam friends can invite.
 
 ## 6. M4: rejoin without downloading again
 Built (protocol 14, not yet seen on 2 PCs); how it works: `../ARCHITECTURE.md` section 5, code `core/coop_manifest.h` and

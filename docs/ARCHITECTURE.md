@@ -10,7 +10,7 @@ SporeApp.exe
   loads dinput8.dll (SporeModLoader)            -> injects DLLs before the game starts
     SporeModLoader\CoreLibs\SporeModAPI*.dll    -> Spore ModAPI core: knows game function addresses
     SporeModLoader\ModLibs\CoopMod.dll          -> OUR MOD (source: mod\CoopMod)
-      steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar)
+      steam_api_coop.dll (loaded by hand)       -> Steam networking, AppID 480 (Spacewar); started when the main menu first opens
 ```
 `CoopLaunch::Prepare()` runs from `DllMain`, before the game opens its save (section 5). The mod hooks `GetCommandLineA/W`
 to append ` -w`, so the game always starts windowed (`COOP_FULLSCREEN` keeps the game's own mode). The game window title
@@ -30,22 +30,26 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/Log.cpp/.h` | `CoopMod.log` |
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
 | `mod/CoopMod/game/MenuWorlds.cpp/.h` | the main menu's galaxy, read-only: `SelectedStar` and `SelectStar` (spike J9: writes the StarID at `[GlobalGGEUI + 0xFC] + 0x7C`), `HostPlanet` (the star and planet of the newest creature-stage save of `Game0`), the `select:` log; detours on `cGameModeManager::SetActiveMode/At/ByName` (logging, `ByName("LoadGame")` starts `LoadTrace`). The galaxy is never changed (no star, no save is added) |
-| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP button plate (bottom left of the main menu, `COOP_BUTTON_CORNER=tl\|tr\|bl\|br`) and the CO-OP window anchored to it: GDI+ pictures shown by UTFWin windows (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart). In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`, a Leave button) and the host's star is selected once (J9) (`coop menu`) |
+| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP button plate (bottom left of the main menu, `COOP_BUTTON_CORNER=tl\|tr\|bl\|br`) and the CO-OP window anchored to it: GDI+ pictures shown by UTFWin windows (look: `features/UI_STYLE.md`), the list (invitations, friends hosting, friends running the mod, recent sessions; rules in `core/coop_presence.h`, data from `game/Presence.cpp`), Join through `CoopNet` (connect, download, restart), `JoinHost` for the invitation toast. In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`, a Leave button) and the host's star is selected once (J9) (`coop menu`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
-| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, `upToDate`, `error`, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
+| `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, `upToDate`, `error`, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name`; for M3 `StartSteam`, `FriendsApi`, `SetRichPresence`, the friends list calls and `SendTo` (one reliable message to any Steam user) |
+| `mod/CoopMod/game/Presence.cpp/.h` | M3: starts Steam when the main menu first opens, publishes the Rich Presence key `sporecoop` (section 4), reads the key of the Steam friends every 5 s while a window watches (`presence:` lines), keeps the received invitations, sends and parses `kMsgInvite` (`invite:` lines) |
+| `mod/CoopMod/game/InvitePanel.cpp/.h` | M3: the host's invite list under the host plate (friends in their main menu, each with Invite) and the toast of an invitation in the main menu (`Join`, `Not now`) |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
-| `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here; for a guest in a co-op launch the plate `In <host>'s world` with Leave |
+| `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here, Invite (opens the list of `InvitePanel`); for a guest in a co-op launch the plate `In <host>'s world` with Leave |
 | `mod/CoopMod/game/CoopLaunch.cpp/.h` | the co-op launch in the game: `Prepare()` from `DllMain` (calls `core/coop_launch.h`, logs `launch:` lines), `Active/Host/Notice`, `HostName`; in the main menu a plate with the notice of a failed folder move and the one-time restore question of an old install |
 | `mod/CoopMod/game/WorldTransfer.cpp/.h` | the world transfer on channel 1: the host's snapshot, manifest and chunk pump; the guest's state (download, retry, staged, error, abort); calls `core/coop_manifest.h` |
 | `core/coop_manifest.h` | the manifest logic (plain C++, Win32 file calls only): CRC32, wire formats, snapshot of a folder, diff against the cache, the `Download` (chunks in, build, verify), `Commit`, `RemoveIncoming`; tests in `tests/manifest_tests.cpp` |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 | `core/coop_launch.h` | the folder logic of the co-op launch (Win32 file calls only, no game headers): restore, launch, migration; tests in `tests/launch_tests.cpp` |
+| `core/coop_presence.h` | the Rich Presence string (format, parse), who may be joined or invited and why not, the text of a row, the order of the friends (plain C++); tests in `tests/presence_tests.cpp` |
 
 ## 3. Each frame
-`App::AddUpdateFunction(NetUpdate)`: pump Steam callbacks, receive packets, send our avatar's position and orientation (30 Hz,
+`App::AddUpdateFunction(NetUpdate)`: `Presence::Update` and `InvitePanel::Update` (also with no session; without a Steam session
+`SteamIdlePump` runs the callbacks and reads the invitations), pump Steam callbacks, receive packets, send our avatar's position and orientation (30 Hz,
 `StatePacket`), drive the puppet from the newest received state, run `World` and `Objects` updates, run queued console lines
 (`ConsoleUpdate`).
 
@@ -53,7 +57,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **15** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged). Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **16** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -84,6 +88,19 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar and a hash of its body; the receiver builds the puppet from it (model requests go both ways) |
 | 116 `kMsgCorpse` | host -> guest | once per dead animal: netId, food value, flags (the guest writes the food value into the corpse) |
 | 117 `kMsgAction` | both | creature (as in 112) played an ability (type), started or stopped a creature effect (effect id, pool id), or a voice (name) |
+| 118 `Presence::kMsgInvite` | host -> any Steam friend | invitation: protocol u32, host Steam ID u64, planet name (length u8 + UTF-8). Channel 3 like the world events, but the pump in `dllmain.cpp` gives it to `Presence::OnMessage` first, also when no session runs (`SteamIdlePump`) |
+
+**Presence and invitations (M3, `game/Presence.cpp`).** Steam is started once when the main menu first opens (`Presence::Update`;
+the init writes the harmless CSERHelper line, `FACTS.md` section 4) and stays up; host and join reuse it. If it fails (Steam not running)
+the window says so and Refresh tries again. Every frame the mod builds the key `sporecoop` = `<protocol>|<state>|<planet>|<players>/<slots>`
+(`core/coop_presence.h`) and writes it with `SetRichPresence` when it changed, at most every 2 s (`presence: set` line). State from the
+game mode: main menu `menu`, creature stage `hosting` / `guest` / `playing` (no session), editors `editor`, anything else `busy`; a guest
+in the menu is `guest`. A running host counts `1/2`, `2/2` with a guest, in any state (a host in the editor is a grey Join with the reason); others publish `0/0`. While the CO-OP window or the invite list is open,
+every 5 s: immediate friends, only those playing AppID 480, `RequestFriendRichPresence` and `GetFriendRichPresence`; a friend without the
+key is plain Spacewar and not listed (`presence: N friends, M on AppID 480, K run the mod` when the result changed). Dispose clears the key.
+An invitation is accepted only from a Steam friend, with our protocol, while we are in the main menu with no join, no co-op launch and no
+hosting; otherwise it is logged and ignored. The newest one wins (one per host, 4 at most, they fade after 10 minutes). Missing friends
+exports turn M3 off with one log line (`steam: missing export ...`); joining by Steam ID still works.
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host takes a snapshot of the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, held in
@@ -231,4 +248,4 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
 | `mod/CoopMod/build.bat` | builds (output in `%TEMP%\coopmod_build.log`, shown by the launcher when the build fails) `staging\CoopMod.dll` and, through `make_assets.ps1`, `staging\CoopMod.package` from `assets/` (installed as `<game>\Data\CoopMod.package`) |
 | `scripts/make_package.ps1`, `scripts/publish.ps1` | build `coop_package.zip`; publish a release (needs `gh auth login`) |
 | `scripts/worlddiff.ps1` | compares two `CoopDump.txt` files from `coop dump` on two machines |
-| `tests/run_core_tests.bat`, `tests/focus_test.ps1` | core tests and co-op launch folder tests (no game), focus test |
+| `tests/run_core_tests.bat`, `tests/focus_test.ps1` | core, co-op launch folder, manifest and presence tests (no game), focus test |

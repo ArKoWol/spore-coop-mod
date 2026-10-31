@@ -14,6 +14,8 @@
 #include "game/FollowFriend.h"
 #include "game/CoopLaunch.h"
 #include "game/WorldTransfer.h"
+#include "game/Presence.h"
+#include "game/InvitePanel.h"
 #include "../../core/coop_launch.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
@@ -320,6 +322,15 @@ typedef void(__cdecl* SteamMessageRelease_t)(void* message);
 typedef void(__cdecl* SteamSessionRequestCallback_t)(void* request);
 typedef void(__cdecl* SteamSetSessionRequestCallback_t)(void* utils, SteamSessionRequestCallback_t callback);
 typedef void(__cdecl* SteamInitRelay_t)(void* utils);
+// Rich Presence and the friends list (JOIN_FLOW M3), all optional
+typedef bool(__cdecl* SteamSetRichPresence_t)(void* self, const char* key, const char* value);
+typedef void(__cdecl* SteamClearRichPresence_t)(void* self);
+typedef int(__cdecl* SteamGetFriendCount_t)(void* self, int flags);
+typedef uint64_t(__cdecl* SteamGetFriendByIndex_t)(void* self, int index, int flags);
+typedef bool(__cdecl* SteamGetFriendGamePlayed_t)(void* self, uint64_t steamId, void* info);
+typedef int(__cdecl* SteamGetFriendPersonaState_t)(void* self, uint64_t steamId);
+typedef void(__cdecl* SteamRequestFriendRichPresence_t)(void* self, uint64_t steamId);
+typedef const char*(__cdecl* SteamGetFriendRichPresence_t)(void* self, uint64_t steamId, const char* key);
 
 static struct SteamApi
 {
@@ -342,6 +353,14 @@ static struct SteamApi
 	void* friends = nullptr;
 	SteamGetPersonaName_t GetPersonaName = nullptr;
 	SteamRequestUserInfo_t RequestUserInfo = nullptr;
+	SteamSetRichPresence_t SetRichPresence = nullptr;
+	SteamClearRichPresence_t ClearRichPresence = nullptr;
+	SteamGetFriendCount_t GetFriendCount = nullptr;
+	SteamGetFriendByIndex_t GetFriendByIndex = nullptr;
+	SteamGetFriendGamePlayed_t GetFriendGamePlayed = nullptr;
+	SteamGetFriendPersonaState_t GetFriendPersonaState = nullptr;
+	SteamRequestFriendRichPresence_t RequestFriendRichPresence = nullptr;
+	SteamGetFriendRichPresence_t GetFriendRichPresence = nullptr;
 } sSteam;
 
 static SteamVoid_t sSteamShutdown = nullptr;
@@ -426,6 +445,23 @@ static bool SteamStart()
 	sSteam.GetPersonaName = (SteamGetPersonaName_t)GetProcAddress(sSteam.dll, "SteamAPI_ISteamFriends_GetFriendPersonaName");
 	sSteam.RequestUserInfo = (SteamRequestUserInfo_t)GetProcAddress(sSteam.dll, "SteamAPI_ISteamFriends_RequestUserInformation");
 	sSteam.friends = getFriends ? getFriends() : nullptr;
+	// the friends list and Rich Presence: an older steam_api_coop.dll without them still connects, M3 is then off
+	const struct { void* target; const char* name; } presenceProcs[] = {
+		{ &sSteam.SetRichPresence, "SteamAPI_ISteamFriends_SetRichPresence" },
+		{ &sSteam.ClearRichPresence, "SteamAPI_ISteamFriends_ClearRichPresence" },
+		{ &sSteam.GetFriendCount, "SteamAPI_ISteamFriends_GetFriendCount" },
+		{ &sSteam.GetFriendByIndex, "SteamAPI_ISteamFriends_GetFriendByIndex" },
+		{ &sSteam.GetFriendGamePlayed, "SteamAPI_ISteamFriends_GetFriendGamePlayed" },
+		{ &sSteam.GetFriendPersonaState, "SteamAPI_ISteamFriends_GetFriendPersonaState" },
+		{ &sSteam.RequestFriendRichPresence, "SteamAPI_ISteamFriends_RequestFriendRichPresence" },
+		{ &sSteam.GetFriendRichPresence, "SteamAPI_ISteamFriends_GetFriendRichPresence" },
+	};
+	for (const auto& proc : presenceProcs) {
+		*(FARPROC*)proc.target = GetProcAddress(sSteam.dll, proc.name);
+		if (!*(FARPROC*)proc.target) {
+			Logf("steam: missing export %s (friends list and presence are off)", proc.name);
+		}
+	}
 	sSteam.ready = true;
 	Logf("steam: ready, my Steam ID %llu", (unsigned long long)sSteam.myId);
 	return true;
@@ -439,6 +475,9 @@ static void SteamStop()
 	if (!sSteam.ready) {
 		return;
 	}
+	if (sSteam.friends && sSteam.ClearRichPresence) {
+		sSteam.ClearRichPresence(sSteam.friends);  // the friends must not see a host that is gone
+	}
 	sSteam.ready = false;
 	if (sSteamSetRequestCallback) {
 		sSteamSetRequestCallback(sSteam.utils, nullptr);
@@ -446,14 +485,14 @@ static void SteamStop()
 	if (sSteamShutdown) {
 		sSteamShutdown();
 	}
-	sSteam.messages = sSteam.sockets = sSteam.utils = nullptr;
+	sSteam.messages = sSteam.sockets = sSteam.utils = sSteam.friends = nullptr;
 	Logf("steam: shut down");
 }
 
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 15;
+static const uint32_t kProtocolVersion = 16;  // 16: kMsgInvite and the Rich Presence key (game/Presence.cpp)
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -854,8 +893,37 @@ static void SteamReceiveWorld()
 				const unsigned char* msg = (const unsigned char*)messages[i];
 				const unsigned char* data = *(const unsigned char* const*)msg;
 				int size = *(const int*)(msg + sizeof(void*));
-				if (size > 0) {
+				if (size > 0 && channel == World::kChannelReliable && data[0] == Presence::kMsgInvite) {
+					Presence::OnMessage(data, (uint32_t)size);  // an invitation from a friend, not part of the shared world
+				}
+				else if (size > 0) {
 					World::OnMessage(channel, data, (uint32_t)size, sIsHost);
+				}
+				sSteam.Release(messages[i]);
+			}
+		}
+	}
+}
+
+// No Steam session (main menu, own game): keeps Steam's callbacks running and reads what arrives, so an invitation reaches us.
+// Everything else a stranger might send is dropped (it would otherwise queue up until the next session).
+static void SteamIdlePump()
+{
+	sSteam.RunCallbacks();
+	sSteam.SocketsRunCallbacks(sSteam.sockets);
+	void* messages[16];
+	for (int channel = 0; channel <= World::kChannelReliable; ++channel) {
+		for (;;) {
+			int n = sSteam.Receive(sSteam.messages, channel, messages, 16);
+			if (n <= 0) {
+				break;
+			}
+			for (int i = 0; i < n; ++i) {
+				const unsigned char* msg = (const unsigned char*)messages[i];
+				const unsigned char* data = *(const unsigned char* const*)msg;
+				int size = *(const int*)(msg + sizeof(void*));
+				if (size > 0 && channel == World::kChannelReliable && data[0] == Presence::kMsgInvite) {
+					Presence::OnMessage(data, (uint32_t)size);
 				}
 				sSteam.Release(messages[i]);
 			}
@@ -1359,6 +1427,99 @@ namespace CoopNet
 	{
 		return sPuppet.get();
 	}
+
+	// ---- Steam in the menu, the friends list, Rich Presence and invitations (JOIN_FLOW M3; game/Presence.cpp)
+	bool StartSteam()
+	{
+		return SteamStart();
+	}
+
+	bool SteamUp()
+	{
+		return sSteam.ready;
+	}
+
+	bool FriendsApi()
+	{
+		return sSteam.ready && sSteam.friends && sSteam.SetRichPresence && sSteam.GetFriendCount && sSteam.GetFriendByIndex
+			&& sSteam.GetFriendGamePlayed && sSteam.RequestFriendRichPresence && sSteam.GetFriendRichPresence;
+	}
+
+	unsigned ProtocolVersion()
+	{
+		return kProtocolVersion;
+	}
+
+	uint64_t MyId()
+	{
+		return sSteam.myId;
+	}
+
+	bool SetRichPresence(const char* key, const char* value)
+	{
+		if (!FriendsApi()) {
+			return false;
+		}
+		if (!value && sSteam.ClearRichPresence) {
+			sSteam.ClearRichPresence(sSteam.friends);
+			return true;
+		}
+		return sSteam.SetRichPresence(sSteam.friends, key, value ? value : "");
+	}
+
+	int FriendCount()
+	{
+		return FriendsApi() ? sSteam.GetFriendCount(sSteam.friends, 4) : 0;  // 4 = k_EFriendFlagImmediate
+	}
+
+	uint64_t FriendAt(int index)
+	{
+		return FriendsApi() ? sSteam.GetFriendByIndex(sSteam.friends, index, 4) : 0;
+	}
+
+	uint32_t FriendAppId(uint64_t steamId)
+	{
+		if (!FriendsApi()) {
+			return 0;
+		}
+		// FriendGameInfo_t: CGameID (u64), game ip, ports, lobby id: 24 bytes. The AppID is the low 24 bits of the CGameID.
+		alignas(8) unsigned char info[64] = {};
+		if (!sSteam.GetFriendGamePlayed(sSteam.friends, steamId, info)) {
+			return 0;
+		}
+		return (uint32_t)(*(const uint64_t*)info & 0xFFFFFF);
+	}
+
+	int FriendPersona(uint64_t steamId)
+	{
+		return sSteam.ready && sSteam.friends && sSteam.GetFriendPersonaState ? sSteam.GetFriendPersonaState(sSteam.friends, steamId) : 0;
+	}
+
+	void RequestFriendPresence(uint64_t steamId)
+	{
+		if (FriendsApi()) {
+			sSteam.RequestFriendRichPresence(sSteam.friends, steamId);
+		}
+	}
+
+	std::string FriendPresence(uint64_t steamId, const char* key)
+	{
+		if (!FriendsApi()) {
+			return "";
+		}
+		const char* value = sSteam.GetFriendRichPresence(sSteam.friends, steamId, key);
+		return value ? value : "";
+	}
+
+	bool SendTo(uint64_t steamId, const void* data, uint32_t size)
+	{
+		if (!sSteam.ready || !steamId) {
+			return false;
+		}
+		alignas(8) unsigned char identity[256] = {};
+		sSteam.SetSteamID64(identity, steamId);
+		return sSteam.Send(sSteam.messages, identity, data, size, 8, World::kChannelReliable) == 1;  // 8 = reliable
+	}
 }
 
 static void NetUpdate()
@@ -1376,6 +1537,11 @@ static void NetUpdate()
 	CoopLaunch::Update();
 	HostPanel::Update();
 	NamePlates::Update();
+	Presence::Update();     // starts Steam in the main menu, publishes our state, scans the friends while the window is open
+	InvitePanel::Update();  // the host's invite list, the toast of an invitation in the main menu
+	if (sSteam.ready && sTransport != Transport::Steam) {
+		SteamIdlePump();
+	}
 	if (sEcho) {
 		if (inGame) {
 			EchoFeed(GetTickCount());
@@ -1915,6 +2081,8 @@ void Dispose()
 	CoopLaunch::Shutdown();
 	HostPanel::Shutdown();
 	NamePlates::Shutdown();
+	InvitePanel::Shutdown();
+	Presence::Shutdown();
 	SteamStop();
 	ConsoleStop();
 	App::RemoveUpdateFunction(sNetListener);

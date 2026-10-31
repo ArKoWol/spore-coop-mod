@@ -8,6 +8,9 @@
 
 namespace HostPanel
 {
+	// Where the plate is on screen (right edge and bottom edge of its visible part), for the invite list under it; false if hidden
+	bool Anchor(float& right, float& bottom);
+
 	// every frame
 	void Update();
 	// Dispose
