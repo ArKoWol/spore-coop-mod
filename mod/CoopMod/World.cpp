@@ -31,6 +31,7 @@ namespace
 	const uint8_t kMsgDamage = 108;     // host -> guest: [108][damage f32][type u8]: apply to your own avatar
 	const uint8_t kMsgAvatarSpecies = 115;  // both ways: [115][instance][type][group] of the sender's avatar species (changes in the editor)
 	const uint8_t kMsgEaten = 114;      // guest -> host: [114][netId]: the guest ate this animal's corpse
+	const uint8_t kMsgCorpse = 116;     // host -> guest, once per dead animal: [116][netId][food value f32][general flags u32] (why can the guest not eat a mirror's corpse?)
 	const uint8_t kMsgNests = 113;      // host -> guest: [113][chunk][chunks][n] then n x 56 bytes (x y z f32, species instance/type/group, qx qy qz qw f32, model instance/type/group, scale f32)
 	const DWORD kNestsEveryMs = 20000;
 	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
@@ -55,6 +56,8 @@ namespace
 		uint32_t species = 0;  // the species the body was made for (a hatchling's species becomes known a moment after it appears)
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
 		bool dead = false;
+		bool pinned = false;       // the corpse was placed once after the death (afterwards only when it drifts)
+		bool foodApplied = false;  // the host's food value was written into the corpse
 	};
 
 	// Everything lives in one heap object that Shutdown() frees: no static destructor may run at process exit.
@@ -71,6 +74,7 @@ namespace
 		DWORD lastTick = 0, lastFull = 0;
 		bool fullNow = false;
 		int hostAnimals = 0;
+		std::set<uint32_t> corpseSent;  // netIds whose corpse info went to the guest (cleared when a guest connects)
 
 		// guest
 		GuestWorld* guest = nullptr;
@@ -86,6 +90,9 @@ namespace
 		int standIns = 0;                      // mirrors that had to use the stand-in species
 		std::map<uint32_t, Mirror> mirrors;
 		std::set<uint32_t> consumed;   // netIds of animals eaten on this machine (the host removes the real ones)
+		struct CorpseInfo { float food = 0; uint32_t flags = 0; };
+		std::map<uint32_t, CorpseInfo> corpses;  // what the host told about its dead animals (kMsgCorpse), by netId
+		bool strayTuningLogged = false;          // the research log of the strays' tuning objects was written
 		bool haveWorld = false;  // a snapshot arrived: the guest's own animals are strays now
 		DWORD lastNeuter = 0, lastTelemetry = 0, lastLog = 0;
 		int strays = 0, removedStrays = 0;
@@ -341,6 +348,7 @@ namespace
 		for (auto it = s.ids.begin(); it != s.ids.end();) {
 			if (!current.count(it->first)) {
 				s.host.Destroy(it->second);
+				s.corpseSent.erase(it->second);
 				it = s.ids.erase(it);
 			}
 			else {
@@ -372,6 +380,26 @@ namespace
 				QueueReliable(s, w.buf);
 			}
 			QueueReliable(s, s.host.MakeFull());
+		}
+		// Research + fix attempt (the guest cannot eat a mirror's corpse): the food value of a dead animal is filled from its tuning, which
+		// a mirror lacks. Each dead animal's value goes to the guest once. After the Full snapshot, so the guest knows the animal.
+		for (auto& c : current) {
+			if (!(c.second.flags & kFlagDead)) {
+				continue;
+			}
+			auto id = s.ids.find(c.first);
+			if (id == s.ids.end() || !s.corpseSent.insert(id->second).second) {
+				continue;
+			}
+			auto animal = static_cast<Simulator::cCreatureAnimal*>(static_cast<Simulator::cGameData*>(c.first));
+			Writer w;
+			w.U8(kMsgCorpse); w.U32(id->second); w.F32(animal->mFoodValue); w.U32((uint32_t)animal->mGeneralFlags);
+			QueueReliable(s, w.buf);
+			static int corpseLogged = 0;
+			if (corpseLogged++ < 20) {
+				Logf("corpse: host animal %u dead, food %.1f, flags %x, eaten %d", id->second, animal->mFoodValue, (unsigned)animal->mGeneralFlags,
+					animal->mbHasBeenEaten ? 1 : 0);
+			}
 		}
 		if (sSendUnreliable) {
 			for (auto& m : s.host.MakeDeltas(kDeltaPerMessage)) {
@@ -468,6 +496,9 @@ namespace
 				++it;
 			}
 		}
+		for (auto it = s.corpses.begin(); it != s.corpses.end();) {
+			it = table.count(it->first) ? std::next(it) : s.corpses.erase(it);
+		}
 		int created = 0;
 		for (auto& e : table) {
 			const EntityState& st = e.second;
@@ -530,6 +561,24 @@ namespace
 					m.lastHostHealth = st.health;
 				}
 			}
+			// Hypothesis 1 (the guest cannot eat a corpse): a mirror's food value is not the host's (the game fills it from a tuning the mirror lacks).
+			if (m.dead && !m.foodApplied) {
+				auto info = s.corpses.find(e.first);
+				if (info != s.corpses.end()) {
+					m.foodApplied = true;
+					float before = m.animal->mFoodValue;
+					if (before != info->second.food) {
+						m.animal->mFoodValue = info->second.food;
+					}
+					static int foodLogged = 0;
+					if (foodLogged++ < 20) {
+						Logf("corpse: mirror %u food %.1f -> %.1f (host %.1f), dead %d, eaten %d, flags %x (host %x), field_E84 %s", e.first, before,
+							m.animal->mFoodValue, info->second.food, m.animal->mbDead ? 1 : 0, m.animal->mbHasBeenEaten ? 1 : 0,
+							(unsigned)m.animal->mGeneralFlags, (unsigned)info->second.flags,
+							m.animal->field_E84 == sBlankTuning ? "is the blank tuning" : "is a real tuning");
+					}
+				}
+			}
 			if (st.flags & kFlagAlpha) {
 				m.animal->mGeneralFlags |= Simulator::kCreatureFlagIsAlpha;
 			}
@@ -569,8 +618,22 @@ namespace
 			const Math::Quaternion rotation(m.rot[0], m.rot[1], m.rot[2], m.rot[3]);
 			auto avatar = GameNounManager.GetAvatar();
 			bool closeBy = avatar && (m.pos - avatar->GetPosition()).Length() < kFollowRadius;
-			if (m.dead || !closeBy) {
-				// a corpse must not fly away (SporeCoop found it does), far animals are not worth the locomotion calls
+			if (m.dead) {
+				// A corpse must not fly away (SporeCoop found it does), but a Teleport every frame (it sets mbTeleport and resets the
+				// placement) may disturb the eat interaction: place it once after the death and again only when it drifted.
+				float drift = (m.animal->GetPosition() - m.pos).Length();
+				if (!m.pinned || drift > 0.3f) {
+					static int driftLogged = 0;
+					if (m.pinned && driftLogged++ < 20) {
+						Logf("corpse: mirror %u drifted %.2f m, placed again", e.first, drift);
+					}
+					m.pinned = true;
+					m.animal->Teleport(m.pos, rotation);
+				}
+				m.follower = PuppetMotion::Follower();
+			}
+			else if (!closeBy) {
+				// far animals are not worth the locomotion calls
 				m.animal->Teleport(m.pos, rotation);
 				m.follower = PuppetMotion::Follower();
 			}
@@ -641,6 +704,15 @@ namespace
 			lastCensus = now;
 			Logf("world: census: %d animals (%d mirrors, %d strays about to go), %d herds, %d nest herds of ours", animalsTotal,
 				(int)s.mirrors.size(), (int)strays.size(), herdsTotal, (int)s.nestMirrors.size());
+		}
+		if (!s.strayTuningLogged && !strays.empty()) {
+			// Research: do all animals of a species share one tuning object (could be lent to mirrors later)? Nothing is changed.
+			s.strayTuningLogged = true;
+			for (size_t i = 0; i < strays.size() && i < 10; ++i) {
+				Simulator::cCreatureAnimal* stray = strays[i];
+				Logf("stray: animal %p species %08x profile %p field_E84 %p food %.1f", (void*)stray, SpeciesKeyOf(s, stray).instanceID,
+					(void*)stray->mpSpeciesProfile, stray->field_E84, stray->mFoodValue);
+			}
 		}
 		for (auto animal : strays) {
 			auto herd = animal->mHerd;
@@ -1017,6 +1089,8 @@ namespace World
 		s.reliableQueue.clear();
 		// species definitions have to reach the new guest again
 		s.speciesSent.clear();
+		// and the corpse info of the dead animals
+		s.corpseSent.clear();
 	}
 
 	void Update(bool host, bool inGame, void* puppet)
@@ -1223,6 +1297,22 @@ namespace World
 					GameNounManager.DestroyInstance(object);
 					Logf("eaten: the guest ate animal %u, removed here", netId);
 					break;
+				}
+			}
+			return;
+		}
+		if (!host && data[0] == kMsgCorpse && size == 13) {
+			Reader r(data, size);
+			r.U8();
+			uint32_t netId = r.U32();
+			State::CorpseInfo info;
+			info.food = r.F32();
+			info.flags = r.U32();
+			if (r.ok) {
+				s.corpses[netId] = info;
+				auto m = s.mirrors.find(netId);
+				if (m != s.mirrors.end()) {
+					m->second.foodApplied = false;  // a mirror that already died here takes the (late) value too
 				}
 			}
 			return;
@@ -1452,8 +1542,29 @@ namespace World
 			return;
 		}
 		auto avatar = GameNounManager.GetAvatar();
+		const bool ours = creature == (void*)static_cast<Simulator::cCreatureBase*>(avatar);
 		Logf("action: %08x %s by %s, target noun %08x at %.1f %.1f %.1f, seen %d times", actionId, name,
-			creature == (void*)static_cast<Simulator::cCreatureBase*>(avatar) ? "our avatar" : "someone else", noun, pos[0], pos[1], pos[2], count);
+			ours ? "our avatar" : "someone else", noun, pos[0], pos[1], pos[2], count);
+		// Research (the guest cannot eat a mirror's corpse): is the target of EatMeat a mirror, and what state is it in?
+		if (actionId == 0xD335362D && ours && sState && !sState->isHost && sState->haveWorld) {
+			State& s = *sState;
+			uint32_t mirrorId = 0;
+			for (auto& m : s.mirrors) {
+				Simulator::cCreatureAnimal* a = m.second.animal.get();
+				if (a && target && (target == (void*)static_cast<Simulator::cGameData*>(a) || target == (void*)a)) {
+					mirrorId = m.first;
+					break;
+				}
+			}
+			if (mirrorId) {
+				Simulator::cCreatureAnimal* a = s.mirrors[mirrorId].animal.get();
+				Logf("eat: our avatar eats mirror %u (dead %d, food %.1f, eaten %d, flags %x)", mirrorId, a->mbDead ? 1 : 0, a->mFoodValue,
+					a->mbHasBeenEaten ? 1 : 0, (unsigned)a->mGeneralFlags);
+			}
+			else {
+				Logf("eat: EatMeat target is not a mirror (noun %08x)", noun);
+			}
+		}
 	}
 
 	void OnAnimation(void* creaturePtr, uint32_t animationId)
