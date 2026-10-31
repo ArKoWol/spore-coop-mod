@@ -1,34 +1,24 @@
-// CoopMenu.h : the CO-OP star in the main menu and its window (docs/JOIN_FLOW.md, path C).
+// CoopMenu.h : the CO-OP button and window in the main menu (docs/features/JOIN_FLOW.md section 4, owner's decision D21).
 //
-// At every start the galaxy gets a star "CO-OP" near its centre (game/MenuWorlds.cpp). Selecting it opens our window:
-// friends to join (remembered hosts plus a test entry), then "downloading the friend's world", then "press Play". The
-// world is stored as the CO-OP star's save, so the game's own Play loads it. Play on the CO-OP star before a world is
-// chosen opens the window instead of loading.
+// In the main menu (GGE mode) a small plate with a CO-OP button sits in a corner of the screen (bottom left; the environment
+// variable COOP_BUTTON_CORNER = tl|tr|bl|br moves it). Clicking it opens or closes the CO-OP window, anchored to the plate:
+// friends to join (remembered hosts), Join by Steam ID, then connecting and downloading the friend's world. The game restarts
+// by itself and opens the world as a co-op launch (the world is Game0 for that run, the player's own Game0 waits as
+// Game0.own: game/CoopLaunch.h). The galaxy of the player is never touched: no star, no save is added to it.
 //
-// Join: a real Steam join (CoopNet, the same as `coopjoin`). The host sends its whole Game0; the game restarts by itself
-// and opens it as a co-op launch (the world is Game0 for that run, the player's own Game0 waits as Game0.own: game/
-// CoopLaunch.h); after the restart the CO-OP star is a copy of the host's newest creature save, marked ready, and the card's
-// Play enters it while the mod joins the host again. In a co-op launch the ready window has a Leave button.
+// In a co-op launch the window opens by itself and says "<host>'s world: press Play on <planet>"; the star of that planet
+// (the newest creature-stage save of Game0) is selected from the mod once (spike J9, MenuWorlds::SelectStar). The window then
+// has a Leave button (the game restarts in the own world).
 #pragma once
 
 namespace CoopMenu
 {
-	// every frame: makes the CO-OP star in the main menu, opens the window when it is selected, runs the window
+	// every frame: the button plate in the main menu, the window, the join and the co-op launch's start
 	void Update();
-
-	// makes sure the CO-OP star is in the galaxy's saved-game list (also called just before the game enters the main
-	// menu, so the menu is built with it: leaving a game without saving reloads the galaxy from disk)
-	void EnsureStar();
-
-	// Play pressed in the main menu: true = do not load (the window opens instead)
-	bool HoldPlay();
 
 	// coop menu: opens the window (also outside the main menu, for testing)
 	void Open();
 
-	// coop carddump: logs the window tree around the CO-OP star's card (looking for its Play button)
-	void DumpCard();
-
-	// Dispose: removes the window, the star and its save, frees GDI+
+	// Dispose: removes the plates, frees GDI+
 	void Shutdown();
 }

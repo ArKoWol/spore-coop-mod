@@ -129,7 +129,7 @@ namespace
 			wchar_t line[96];
 			swprintf(line, 96, L"Your Steam ID: %llu", (unsigned long long)s.myId);
 			Text(g, line, 12, false, soft, Gdiplus::RectF(left, plate.Y + 42, textWidth, 18));
-			Text(g, L"Your friend: CO-OP star, Join by Steam ID", 11.5f, false, soft, Gdiplus::RectF(left, plate.Y + 60, textWidth, 18));
+			Text(g, L"Your friend: CO-OP button, Join by Steam ID", 11.5f, false, soft, Gdiplus::RectF(left, plate.Y + 60, textWidth, 18));
 			Gdiplus::RectF copy(left - 2, plate.Y + plate.Height - 42, 160, 30);
 			Button(g, copy, copied ? L"Copied!" : L"Copy my Steam ID", true, sHover == kCopy, 13);
 			AddHit(copy, kCopy);

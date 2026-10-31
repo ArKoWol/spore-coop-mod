@@ -80,7 +80,7 @@ seen in our tests.
 - **The main menu (GGE mode `0x2CCD1D2`, the galaxy) lists saved games live from `StarManager.mSavedGameStarRecords`** (stars
   with `kStarFlagSaveGame`; the slot's `.spo` is named after the star's played planet). A star pushed into that list while
   the menu is open appears at once with its card (name, stage, date, creature): no restart, no UI rebuild
-  *(verified 2026-10-25, `coop addcenter`)*. A star far from the centre is off screen.
+  *(verified 2026-10-25, with a test command that is gone; git has it)*. A star far from the centre is off screen.
 - **Do not call `GlobalGGEUI::InitializeUI` / `Initialize` a second time**: it changes nothing visible and the game crashes at
   exit (eip 0 / 0x28 / 0x2a0 after `CoopMod disposed`).
 - Closing the game from the menu does not save `stars.db`.

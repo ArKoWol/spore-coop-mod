@@ -29,9 +29,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/RecentHosts.cpp/.h` | remembered hosts in `%APPDATA%\Spore\Games\CoopHosts.txt` (`steamid<TAB>unixtime<TAB>name`, newest first, 10 at most) |
 | `mod/CoopMod/Log.cpp/.h` | `CoopMod.log` |
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
-| `mod/CoopMod/game/MenuWorlds.cpp/.h` | save stars in the open galaxy (`AddWorld`, `RemoveWorld`, `SelectedStar`; dev commands `coop slots/addworld/addcenter/delworld/menureload/ggefind`); detours on `cGameModeManager::SetActiveMode/At/ByName` (logging; `ByName("LoadGame")` asks `CoopMenu::HoldPlay`) and the main menu mode's `OnEnter` |
-| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP star and window in the main menu: GDI+ pictures shown by a UTFWin window (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart, then the star is a copy of the host's newest creature save), hides the card's Play until a world is ready, a Leave button in a co-op launch (`coop menu/carddump`) |
-| `mod/CoopMod/game/SaveIds.cpp/.h` | research: RefPack and DBPF read/write; moves a save or a planet record to another star (used only with `COOP_MOVE_SAVE=1`) |
+| `mod/CoopMod/game/MenuWorlds.cpp/.h` | the main menu's galaxy, read-only: `SelectedStar` and `SelectStar` (spike J9: writes the StarID at `[GlobalGGEUI + 0xFC] + 0x7C`), `HostPlanet` (the star and planet of the newest creature-stage save of `Game0`), the `select:` log; detours on `cGameModeManager::SetActiveMode/At/ByName` (logging, `ByName("LoadGame")` starts `LoadTrace`). The galaxy is never changed (no star, no save is added) |
+| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP button plate (bottom left of the main menu, `COOP_BUTTON_CORNER=tl\|tr\|bl\|br`) and the CO-OP window anchored to it: GDI+ pictures shown by UTFWin windows (look: `features/UI_STYLE.md`), friends list, Join through `CoopNet` (connect, download, restart). In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`, a Leave button) and the host's star is selected once (J9) (`coop menu`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
 | `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name` |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
@@ -95,8 +94,9 @@ restart off; `coop restart` tests it without a world). The new game opens its ow
    restore then only moves the host's world away and invents no `Game0`.
 3. *Co-op launch*, when `CoopLaunch.txt` names a host whose `Coop\<id>` exists (the file is deleted when read): `Game0` goes to
    `Game0.own`, `Coop\<id>` becomes `Game0`. This run is a co-op launch (`CoopLaunch::Active()`, `CoopNet::State().installedAtStart`):
-   `Initialize` joins the host by itself, a world sent again is ignored, `coop host` is refused. The player presses Continue (the
-   CO-OP star is a copy of the newest creature save of `Game0`, i.e. the host's world).
+   `Initialize` joins the host by itself, a world sent again is ignored, `coop host` is refused. In the main menu the CO-OP window
+   opens by itself (`CoopMenu`), finds the star of the newest creature-stage save of `Game0` (the host's played planet, `MenuWorlds::
+   HostPlanet`) and writes its id into the menu's selection once (J9; `menu: J9` lines); the player presses Play on the card.
 A failed move (a process holds the folder) is retried twice, then undone as far as it went, logged and told to the player: in the
 console at start and in a plate in the main menu; the co-op launch does not start (`CoopLaunch.txt` is still consumed) and a failed
 restore keeps `Game0.own` for the next start.
@@ -123,8 +123,7 @@ world), `coopjoin <steamid | last | number | name>`,
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal),
-`coop slots`, `coop addworld`, `coop addcenter`, `coop delworld`, `coop menureload`, `coop holdplay`, `coop ggefind`, plus
-`stage <name>` and `coophello`.
+`coop menu` (opens the CO-OP window), plus `stage <name>` and `coophello`.
 Every command has at least one word (`FACTS.md` section 3). A new command is also added to the `$commands` list of
 `scripts/console.ps1` (Tab completion).
 

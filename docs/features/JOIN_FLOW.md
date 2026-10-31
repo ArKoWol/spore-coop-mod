@@ -14,8 +14,8 @@
 - The running game keeps files of `Game0` open from its start, even in the main menu: the world cannot be switched while it runs.
   **Entering a friend's world therefore costs one restart** (until M5).
 - A save from another universe does not load on a star of ours (spike J8 failed): the friend's world cannot be one more star in
-  your own galaxy. That path (C) is parked; its research tools (`game/SaveIds.cpp`, `game/LoadTrace.cpp`, `COOP_MOVE_SAVE`,
-  `COOP_LOAD_TRACE`) stay off by default.
+  your own galaxy. That path (C) is parked; its research tool `game/LoadTrace.cpp` (`COOP_LOAD_TRACE`) stays, off by default. The
+  star-making code (`AddWorld`, `SaveIds`, `COOP_MOVE_SAVE`) was removed with the CO-OP star in M2; git has it.
 - The game ignores synthetic clicks on the card's Play, and `SetActiveModeByName("LoadGame")` from the mod crashes: the player
   presses Play himself.
 - Our DLL runs before the game opens `Game0` (`InstallPendingWorld` works from `DllMain`): folders can be moved there.
@@ -30,7 +30,8 @@ hosting. Friends see him as hosting (M3).
 2. Join: `Connecting to Artyom...`, `Downloading Artyom's world 42%` (or `Your copy is up to date` with M4), then `Opening
    Artyom's world. The game restarts once.`
 3. **Co-op launch**: the game starts with Artyom's world in place of `Game0`; the mod joins Artyom again by itself. The menu
-   shows Artyom's galaxy; our window says `Artyom's world: press Play on Leian` and the host's star is selected (spike J9).
+   shows Artyom's galaxy; our window opens by itself and says `Artyom's world: press Play on Leian`, and the host's star is
+   selected (spike J9, to check).
 4. In the game: a small plate `In Artyom's world · Leave`.
 5. **Leave**, or simply closing the game: the next normal launch is always your own world. Your own `Game0` comes back at the
    start of the next launch, before the game opens it, so a crash or a killed process also brings it back.
@@ -70,14 +71,23 @@ is remembered (`CoopMigrateAsked.txt`); nothing is deleted. The question is not 
 Done when (two PCs): join, play, Leave -> own save is back; join, kill the game in the co-op launch -> next start is the own save;
 an old install with backups is restored by the question.
 
-## 4. M2: CO-OP button instead of the star (D21)
-- A plate in the main menu (GGE mode) opens the existing co-op window, anchored to the plate instead of a star card.
-- Removed with it: the CO-OP star and its `CO-OP.spo`, hiding the card's Play, following the card, `HoldPlay`. This closes the
-  GitHub issue "CO-OP star vanishes after leaving a game without saving". `MenuWorlds::SelectedStar` stays (needed below); the
-  star spike commands may go.
-- In a co-op launch the window opens by itself and names the planet to play. The host writes the star of the planet it plays
-  into `coop_host.txt`; the mod selects that star (**spike J9**: write the selected star at `[GlobalGGEUI + 0xFC] + 0x7C`, does the
-  galaxy show and Play use it?). If J9 fails: only the text `press Play on Leian`.
+## 4. M2: CO-OP button instead of the star (D21) - built, not tested on 2 PCs
+- A plate in the main menu (GGE mode, `game/CoopMenu.cpp`) with a CO-OP button, bottom left (`COOP_BUTTON_CORNER=tl|tr|bl|br`
+  moves it; the log line `menu: CO-OP button plate at ...` has its rectangle). Click: opens or closes the co-op window, which
+  sits above (or, in a top corner, below) the plate. A running join keeps going while the window is closed.
+- Removed: the CO-OP star and its `CO-OP.spo`, hiding the card's Play, following the card, `HoldPlay`, the "our Play presses the
+  card's Play" code, and the star spike commands (`coop slots/addworld/addcenter/delworld/menureload/ggefind/holdplay/playnow/
+  carddump`). The guest's galaxy is never changed. This closes the GitHub issue "CO-OP star vanishes after leaving a game without
+  saving". `MenuWorlds::SelectedStar` stays.
+- In a co-op launch the window opens by itself and says `<host>'s world: press Play on <planet>`. **The planet is found by the
+  guest, not written by the host** (differs from the first plan, no protocol change needed): Game0 is the host's world, so the
+  planet is the newest creature-stage save (newest `.spo`, named after its played planet) and its star is the saved-game star
+  that save belongs to (`MenuWorlds::HostPlanet`; `menu: the host's world: planet ... on star ...`).
+- **Spike J9** (to check on 2 PCs): once per co-op launch the mod writes that StarID at `[GlobalGGEUI + 0xFC] + 0x7C`
+  (`MenuWorlds::SelectStar`) and reads it back after 0.1 s, 1 s and 3 s (`menu: J9:` lines, verdict `menu: J9 verdict`). Look at
+  the screen too: is the card open, is the star marked, does Play use it? If the value is overwritten or nothing shows, the
+  window says `Click its star in the galaxy, then press Play on the card.` (the text is the fallback). No synthetic clicks and no
+  `SetActiveModeByName("LoadGame")`.
 
 ## 5. M3: who is hosting (Steam Rich Presence)
 - Every running mod sets the key `sporecoop` = `<protocol>|<state>|<planet>|<players>/<slots>`; state: `menu`, `hosting`,

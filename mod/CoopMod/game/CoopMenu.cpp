@@ -1,20 +1,17 @@
 // CoopMenu.cpp : see CoopMenu.h.
 //
-// UTFWin has no text window we can create from code, so the window is a picture: GDI+ draws the panel (text, rows,
+// UTFWin has no text window we can create from code, so a window is a picture: GDI+ draws the plate (text, rows,
 // buttons) into a PNG, the PNG goes into a small package in %TEMP%\CoopModUI that is registered like the creature model
 // packages (Models::WritePackage), and a UTFWin window shows it. Clicks are hit-tested against the rectangles we drew.
-// Every change of the panel is a new picture (a new resource key, so the game's image cache never shows an old one).
+// Every change of a plate is a new picture (a new resource key, so the game's image cache never shows an old one).
+// Two pictures: the small CO-OP button plate in a corner of the main menu and the CO-OP window anchored to it.
 #include "stdafx.h"
 #include "CoopMenu.h"
 #include "MenuWorlds.h"
 #include "CoopNet.h"
 #include "CoopLaunch.h"
 #include "../Log.h"
-#include "../Models.h"
 #include "../RecentHosts.h"
-
-#include <Spore\Simulator\cStarRecord.h>
-#include <Spore\Simulator\SubSystem\StarManager.h>
 
 #include "UiDraw.h"
 
@@ -23,16 +20,21 @@
 #include <string>
 #include <vector>
 
-using namespace Simulator;
 using namespace UiDraw;
 
 namespace
 {
-	const char* kStarName = "CO-OP";
 	const int kWidth = 560;
 	const DWORD kAnswerTimeoutMs = 20000;  // no answer from the host: it is not hosting, or Steam cannot reach it
 	const DWORD kWorldTimeoutMs = 30000;   // the host answered but no world arrives
-	const float kPlanetGap = 16;  // from the planet's centre window to ours (the planet overlaps our window a little: intended)
+
+	// the CO-OP button plate (a picture with a 8 px margin for the shadow around the plate)
+	const int kButtonW = 160, kButtonH = 64;
+	const float kPlateW = 144, kPlateH = 46;  // the visible plate inside the picture, at (8, 6)
+	const float kCornerGap = 16;              // from the screen edge to the visible plate
+
+	// spike J9: the host's star is written into the menu's selection once per co-op launch, then read back
+	const DWORD kStarWaitMs = 20000;  // gives up when the star or the menu object is not there after this long
 
 	enum class State { List, Connecting, Downloading, Restarting, Ready, Leaving, Error };
 
@@ -46,54 +48,58 @@ namespace
 	struct Button
 	{
 		Gdiplus::RectF rect;
-		int action = 0;  // kCancel, kBack, kPlay, or kJoin + friend index
+		int action = 0;  // kCancel, kBack, kById, kLeave, or kJoin + friend index
 	};
-	const int kCancel = 2, kBack = 3, kPlay = 4, kById = 5, kLeave = 6, kJoin = 100;
+	const int kCancel = 2, kBack = 3, kById = 5, kLeave = 6, kJoin = 100;
 
 	// heap objects, freed in Shutdown (no static destructors: ModAPI routes new/delete to the game's heap)
 	struct Ui
 	{
 		std::vector<Friend> friends;
 		std::vector<Button> buttons;
-		std::string worldOf;  // name of the friend whose world is (being) installed
+		std::string worldOf;  // name of the friend whose world is (being) installed / played
+		std::string planet;   // co-op launch: the planet the host plays ("" = unknown)
 		std::string error;
 	};
 	Ui* sUi = nullptr;
 
 	State sState = State::List;
-	bool sVisible = false;
+	bool sVisible = false;     // the window is wanted (it is hidden outside the main menu and comes back with it)
 	bool sDirty = false;
 	DWORD sJoinStart = 0;      // when the join was started
 	DWORD sHostSeenAt = 0;     // when the host answered
 	int sProgressShown = -1;   // percent drawn last
-	int sHover = -1;  // action of the button under the mouse (drawn lighter)
-	bool sPlayRequested = false;  // our Play button: the load starts from Update, outside the UI message
-	bool sLeaveRequested = false; // our Leave button (co-op launch): the restart is asked from Update
-	DWORD sPressedAt = 0;         // when our Play pressed the card's Play (to try a second way if nothing happened)
-	bool sLoadSeen = false;       // the game started the load (HoldPlay saw LoadGame while ready)
-
-	// the card's own Play button (found with coop carddump): hidden while the CO-OP star has no world yet; a direct
-	// SetActiveModeByName("LoadGame") crashed, so our Play presses this one
-	const uint32_t kCardPlayButton = 0x0375408c;
-	eastl::intrusive_ptr<UTFWin::IWindow>* sHiddenPlay = nullptr;
-	DWORD sPlayCheckedAt = 0;
-
-	cStarRecordPtr* sStar = nullptr;  // the CO-OP star (heap: intrusive_ptr has a destructor)
-	bool sStarFailed = false;
-	uint32_t sLastSelected = 0;
+	int sHover = -1;           // action of the button under the mouse (drawn lighter)
+	bool sLeaveRequested = false;  // our Leave button (co-op launch): the restart is asked from Update
 
 	bool PanelHandler(const UTFWin::Message& message);
-	PictureWindow* sPicture = nullptr;  // heap: freed in Shutdown
+	bool ButtonHandler(const UTFWin::Message& message);
+	PictureWindow* sPicture = nullptr;  // the window; heap: freed in Shutdown
+	PictureWindow* sButton = nullptr;   // the button plate
 	bool sGdi = false;
 
+	// the button plate
+	bool sButtonDirty = true;
+	bool sButtonHot = false;
+	bool sToggleRequested = false;  // the button was clicked: acted on in Update, outside the UI message
+	bool sCornerRead = false;
+	bool sTop = false, sRight = false;  // the corner: COOP_BUTTON_CORNER = tl, tr, bl (default), br
+	float sScreenW = 0, sScreenH = 0;
+	float sButtonX = 0, sButtonY = 0;   // top left of the button picture
+	bool sButtonLogged = false;
 
-	// the game's card of the selected star: found by its caption ("CO-OP..."), followed so our window sits next to it
-	// and closes with it
-	bool sCardSeen = false;
-	DWORD sCardLostAt = 0;
-	Math::Rectangle sCardArea;
-	DWORD sCardCheckedAt = 0;
-	bool sCardLogged = false;
+	// co-op launch: the window opens by itself, then the host's star is selected (J9)
+	bool sLaunchOpened = false;
+	DWORD sLaunchStart = 0;
+	DWORD sNameCheckedAt = 0;
+	DWORD sStarTriedAt = 0;
+	bool sStarFound = false;
+	uint32_t sHostStar = 0;
+	bool sStarWritten = false;
+	DWORD sStarWrittenAt = 0;
+	int sStarChecks = 0;       // read-back lines logged so far
+	bool sStarDone = false;    // the attempt is over (verdict logged or given up): never repeated
+	bool sStarSticks = false;  // the selection still held after the last read-back
 
 	Ui& U()
 	{
@@ -101,12 +107,6 @@ namespace
 			sUi = new Ui();
 		}
 		return *sUi;
-	}
-
-	std::string Game0Dir()
-	{
-		const char* appdata = getenv("APPDATA");
-		return std::string(appdata ? appdata : "") + "\\Spore\\Games\\";
 	}
 
 	void LoadFriends()
@@ -133,6 +133,11 @@ namespace
 		}
 	}
 
+	bool InMainMenu()
+	{
+		return GameModeManager.GetActiveModeID() == (uint32_t)GameModeIDs::kGGEMode;
+	}
+
 	// ------------------------------------------------------------------ drawing
 	// Styled after the game's own star card: a light glossy plate, an orange title with a dark outline, white button
 	// labels with an outline, glossy green pill buttons, a blue glossy progress bar.
@@ -146,34 +151,7 @@ namespace
 		U().buttons.push_back(b);
 	}
 
-	// the big round green Play button of the game's cards, with a white triangle, and a label next to it
-	void AddPlayButton(Gdiplus::Graphics& g, float cx, float cy, float radius, const std::wstring& label, float labelWidth)
-	{
-		Gdiplus::RectF circle(cx - radius, cy - radius, radius * 2, radius * 2);
-		Gdiplus::RectF pill(cx - radius, cy - radius, radius * 2 + labelWidth, radius * 2);
-		FillRound(g, Gdiplus::RectF(pill.X, pill.Y + 4, pill.Width, pill.Height), radius, C(80, 0, 0, 0), C(80, 0, 0, 0));
-		FillRound(g, pill, radius, C(255, 30, 90, 15), C(255, 20, 60, 8));
-		Gdiplus::RectF body(pill.X + 3, pill.Y + 3, pill.Width - 6, pill.Height - 6);
-		FillRound(g, body, radius - 3, C(255, 160, 240, 90), C(255, 50, 150, 25));
-		Gloss(g, body, radius - 3, 160);
-		// triangle
-		float s = radius * 0.55f;
-		Gdiplus::PointF tri[3] = { Gdiplus::PointF(cx - s * 0.55f, cy - s), Gdiplus::PointF(cx - s * 0.55f, cy + s),
-			Gdiplus::PointF(cx + s, cy) };
-		Gdiplus::Pen rim(C(255, 25, 80, 10), 3);
-		rim.SetLineJoin(Gdiplus::LineJoinRound);
-		g.DrawPolygon(&rim, tri, 3);
-		Gdiplus::SolidBrush white(C(255, 255, 255, 255));
-		g.FillPolygon(&white, tri, 3);
-		Text(g, label, 20, true, C(255, 255, 255, 255), Gdiplus::RectF(cx + radius * 0.9f, cy - radius, labelWidth, radius * 2),
-			Align::Left, 1.8f, C(255, 25, 80, 10));
-		Button b;
-		b.rect = pill;
-		b.action = kPlay;
-		U().buttons.push_back(b);
-	}
-
-	// draws the panel for the current state into PNG bytes
+	// draws the window for the current state into PNG bytes
 	bool Render(std::vector<uint8_t>& png, int& height)
 	{
 		Ui& ui = U();
@@ -200,7 +178,7 @@ namespace
 		FillRound(g, body, 23, C(255, 250, 251, 253), C(255, 196, 204, 214));
 		Gloss(g, body, 23, 120);
 
-		const C ink(255, 32, 48, 72), soft(255, 92, 106, 126), white(255, 255, 255, 255);
+		const C ink(255, 32, 48, 72), soft(255, 92, 106, 126);
 		const C orange(255, 255, 196, 64), brown(255, 92, 44, 0), green(255, 60, 150, 30);
 		float left = plate.X + 28, right = plate.X + plate.Width - 26, width = right - left;
 
@@ -249,22 +227,15 @@ namespace
 			AddButton(g, Gdiplus::RectF(right - 110, plate.Y + plate.Height - 52, 110, 36), L"Cancel", kCancel, false);
 		}
 		else if (sState == State::Ready) {
-			Text(g, Wide(ui.worldOf + "'s world is ready!"), 21, true, green, Gdiplus::RectF(left, y, width, 30));
-			Text(g, L"It is a copy: the host's game keeps the real world.", 12.5f, false, soft, Gdiplus::RectF(left, y + 30, width, 20));
-			// the card's own Play stands just left of this window now: point at it
-			Gdiplus::PointF arrow[3] = { Gdiplus::PointF(left - 6, y + 92), Gdiplus::PointF(left + 18, y + 76),
-				Gdiplus::PointF(left + 18, y + 108) };
-			Gdiplus::SolidBrush arrowBrush(green);
-			g.FillPolygon(&arrowBrush, arrow, 3);
-			Text(g, L"Press Play to enter", 19, true, C(255, 255, 255, 255), Gdiplus::RectF(left + 26, y + 76, 230, 32),
-				Align::Left, 1.8f, C(255, 25, 80, 10));
-			if (CoopNet::State().installedAtStart) {
-				// a co-op launch: the friend's world is Game0 for this run, the way out is Leave (restart in the own world)
-				AddButton(g, Gdiplus::RectF(right - 110, y + 74, 110, 36), L"Leave", kLeave, false);
-			}
-			else {
-				AddButton(g, Gdiplus::RectF(right - 200, y + 74, 200, 36), L"Choose another friend", kBack, false);
-			}
+			// a co-op launch: the friend's world is Game0 for this run; Play is pressed on the galaxy's own card
+			std::string line = (ui.worldOf.empty() ? std::string("Your friend") : ui.worldOf) + "'s world: press Play"
+				+ (ui.planet.empty() ? "" : " on " + ui.planet);
+			Text(g, Wide(line), line.size() > 38 ? 17.0f : 20.0f, true, green, Gdiplus::RectF(left, y, width, 30));
+			Text(g, sStarSticks ? L"Its star is selected for you. If no card shows, click the star." : L"Click its star in the galaxy, then press Play on the card.",
+				13, false, ink, Gdiplus::RectF(left, y + 36, width, 22));
+			Text(g, L"It is a copy: the host's game keeps the real world.", 12.5f, false, soft, Gdiplus::RectF(left, y + 62, width, 20));
+			// the way out is Leave (the game restarts in the own world)
+			AddButton(g, Gdiplus::RectF(right - 110, y + 92, 110, 36), L"Leave", kLeave, false);
 		}
 		else if (sState == State::Leaving) {
 			Text(g, Wide("Leaving " + ui.worldOf + "'s world"), 20, true, ink, Gdiplus::RectF(left, y, width, 30));
@@ -275,16 +246,31 @@ namespace
 			Text(g, Wide(ui.error), 14, false, ink, Gdiplus::RectF(left, y + 36, width, 40));
 			AddButton(g, Gdiplus::RectF(left - 4, plate.Y + plate.Height - 52, 110, 36), L"Back", kBack, false);
 		}
-		(void)white;
 
 		return EncodePng(bitmap, png);
 	}
 
-	// ------------------------------------------------------------------ the UTFWin window
+	// the CO-OP button inside its picture
+	Gdiplus::RectF ButtonRect()
+	{
+		return Gdiplus::RectF(18, 14, kPlateW - 20, 30);
+	}
 
-	void Show();
-	bool CardPlayScreenArea(Math::Rectangle& out);
+	bool RenderButton(std::vector<uint8_t>& png)
+	{
+		Gdiplus::Bitmap bitmap(kButtonW, kButtonH, PixelFormat32bppARGB);
+		Gdiplus::Graphics g(&bitmap);
+		g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+		g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+		g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+		g.Clear(C(0, 0, 0, 0));
+		Plate(g, Gdiplus::RectF(8, 6, kPlateW, kPlateH), 18);
+		// green = open the window, blue while it is open (the same button closes it)
+		UiDraw::Button(g, ButtonRect(), L"CO-OP", !sVisible, sButtonHot, 16);
+		return EncodePng(bitmap, png);
+	}
 
+	// ------------------------------------------------------------------ the join
 
 	void StartJoin(int index)
 	{
@@ -387,7 +373,7 @@ namespace
 		}
 	}
 
-	void StartJoin(int index);
+	// ------------------------------------------------------------------ the windows
 
 	void Hide()
 	{
@@ -395,12 +381,13 @@ namespace
 			sPicture->Hide();
 		}
 		sVisible = false;
+		sButtonDirty = true;  // the button's colour follows
 	}
 
 	bool PanelHandler(const UTFWin::Message& message)
 	{
 		if (message.IsType(UTFWin::kMsgMouseDown) || message.IsType(UTFWin::kMsgMouseWheel)) {
-			return true;  // keep clicks on the panel away from the galaxy
+			return true;  // keep clicks on the window away from the galaxy
 		}
 		if (message.IsType(UTFWin::kMsgMouseMove) || message.IsType(UTFWin::kMsgMouseLeave)) {
 			int hover = -1;
@@ -425,10 +412,7 @@ namespace
 		for (const Button& b : U().buttons) {
 			if (x >= b.rect.X && x <= b.rect.X + b.rect.Width && y >= b.rect.Y && y <= b.rect.Y + b.rect.Height) {
 				Logf("menu: button %d", b.action);
-				if (b.action == kPlay) {
-					sPlayRequested = true;
-				}
-				else if (b.action == kLeave) {
+				if (b.action == kLeave) {
 					sLeaveRequested = true;
 				}
 				else if (b.action == kCancel || b.action == kBack) {
@@ -452,6 +436,85 @@ namespace
 		return true;
 	}
 
+	bool ButtonHandler(const UTFWin::Message& message)
+	{
+		if (message.IsType(UTFWin::kMsgMouseDown) || message.IsType(UTFWin::kMsgMouseWheel)) {
+			return true;  // the click is ours, not the galaxy's
+		}
+		float x = message.Mouse.mouseX, y = message.Mouse.mouseY;
+		Gdiplus::RectF r = ButtonRect();
+		bool inside = x >= r.X && x <= r.X + r.Width && y >= r.Y && y <= r.Y + r.Height;
+		if (message.IsType(UTFWin::kMsgMouseMove) || message.IsType(UTFWin::kMsgMouseLeave)) {
+			bool hot = inside && message.IsType(UTFWin::kMsgMouseMove);
+			if (hot != sButtonHot) {
+				sButtonHot = hot;
+				sButtonDirty = true;
+			}
+			return false;
+		}
+		if (message.IsType(UTFWin::kMsgMouseUp)) {
+			if (inside) {
+				sToggleRequested = true;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	void ReadCorner()
+	{
+		if (sCornerRead) {
+			return;
+		}
+		sCornerRead = true;
+		const char* corner = getenv("COOP_BUTTON_CORNER");  // tl, tr, bl, br: a way to move the button without a new build
+		if (corner && strlen(corner) == 2) {
+			sTop = corner[0] == 't' || corner[0] == 'T';
+			sRight = corner[1] == 'r' || corner[1] == 'R';
+		}
+		else {
+			sTop = false;
+			sRight = false;
+		}
+	}
+
+	// the button picture's top left, and the screen rectangle of the visible plate
+	void ButtonOrigin(float screenW, float screenH)
+	{
+		sButtonX = sRight ? screenW - kButtonW - (kCornerGap - 8) : kCornerGap - 8;
+		sButtonY = sTop ? kCornerGap - 6 : screenH - kButtonH - (kCornerGap - 12);
+	}
+
+	void RedrawButton(UTFWin::IWindow* main)
+	{
+		if (!sGdi && !(sGdi = StartGdi())) {
+			return;
+		}
+		ReadCorner();
+		const Math::Rectangle& screen = main->GetArea();
+		sScreenW = screen.GetWidth();
+		sScreenH = screen.GetHeight();
+		ButtonOrigin(sScreenW, sScreenH);
+		std::vector<uint8_t> png;
+		if (!RenderButton(png)) {
+			Logf("menu: drawing the CO-OP button failed");
+			return;
+		}
+		if (!sButton) {
+			sButton = new PictureWindow(ButtonHandler);
+		}
+		if (!sButton->Show(png, sButtonX, sButtonY, kButtonW, kButtonH)) {
+			return;
+		}
+		sButtonDirty = false;
+		if (!sButtonLogged) {
+			sButtonLogged = true;
+			Logf("menu: CO-OP button plate at %.0f,%.0f-%.0f,%.0f (screen %.0fx%.0f, corner %c%c; COOP_BUTTON_CORNER=tl|tr|bl|br moves it)",
+				sButtonX + 8, sButtonY + 6, sButtonX + 8 + kPlateW, sButtonY + 6 + kPlateH, sScreenW, sScreenH,
+				sTop ? 't' : 'b', sRight ? 'r' : 'l');
+		}
+	}
+
 	void Redraw()
 	{
 		if (!sGdi && !(sGdi = StartGdi())) {
@@ -460,7 +523,7 @@ namespace
 		std::vector<uint8_t> png;
 		int height = 0;
 		if (!Render(png, height)) {
-			Logf("menu: drawing the panel failed");
+			Logf("menu: drawing the window failed");
 			return;
 		}
 		UTFWin::IWindow* main = WindowManager.GetMainWindow();
@@ -468,28 +531,13 @@ namespace
 			return;
 		}
 		const Math::Rectangle& screen = main->GetArea();
-		// next to the CO-OP star's card (the card's 3D planet is drawn over any UI, so the window must not cover it);
-		// without a card: right of the centre
-		float x, y;
-		Math::Rectangle playArea;
-		if (sState == State::Ready && CardPlayScreenArea(playArea)) {
-			x = playArea.x2 + 4;
-			y = (playArea.y1 + playArea.y2) / 2 - height / 2.0f;
-		}
-		else if (sCardSeen && sCardArea.GetWidth() > 0) {
-			// sCardArea is the small window at the planet's centre: the window starts just right of it, so the planet's
-			// 3D model (drawn over any UI) overlaps the window's left part a little; vertically centred on the planet
-			float cy = (sCardArea.y1 + sCardArea.y2) / 2;
-			x = sCardArea.x2 + kPlanetGap;
-			y = cy - height / 2.0f;
-			if (x + kWidth > screen.GetWidth() - 8) {
-				x = sCardArea.x1 - kPlanetGap - kWidth;  // no room on the right: left of the planet
-			}
-		}
-		else {
-			x = screen.GetWidth() / 2 + 300;
-			y = (screen.GetHeight() - height) / 2;
-		}
+		ReadCorner();
+		ButtonOrigin(screen.GetWidth(), screen.GetHeight());
+		// anchored to the button plate: the window's visible edge lines up with the plate's (the picture has a 10 px shadow
+		// margin), on the side of the plate that faces the screen's inside
+		float plateL = sButtonX + 8, plateT = sButtonY + 6, plateR = plateL + kPlateW, plateB = plateT + kPlateH;
+		float x = sRight ? plateR + 10 - kWidth : plateL - 10;
+		float y = sTop ? plateB + 8 - 10 : plateT - 8 - (height - 14);
 		x = std::max(8.0f, std::min(x, screen.GetWidth() - kWidth - 8.0f));
 		y = std::max(8.0f, std::min(y, screen.GetHeight() - height - 8.0f));
 		if (!sPicture) {
@@ -504,331 +552,115 @@ namespace
 
 	void Show()
 	{
-		if (sState != State::Ready && sState != State::Downloading && sState != State::Leaving) {
+		if (sState != State::Ready && sState != State::Downloading && sState != State::Leaving && sState != State::Connecting
+			&& sState != State::Restarting) {
 			sState = State::List;
 			LoadFriends();
 		}
 		sDirty = true;
 		sVisible = true;
+		sButtonDirty = true;
 	}
 
-	// takes stars named "CO-OP..." out of the saved-game list that an earlier run left in the galaxy (if the game saved it)
-	void RemoveStaleStars()
+	// ------------------------------------------------------------------ the co-op launch
+
+	// In a co-op launch (the host's world is Game0): opens the window by itself, names the host's planet and selects the
+	// host's star once (spike J9, docs/features/JOIN_FLOW.md section 4).
+	void FollowCoopLaunch()
 	{
-		cStarManager* stars = cStarManager::Get();
-		if (!stars) {
+		Ui& ui = U();
+		DWORD now = GetTickCount();
+		if (!sLaunchOpened) {
+			sLaunchOpened = true;
+			sLaunchStart = now;
+			sState = State::Ready;
+			sVisible = true;
+			sDirty = true;
+			Logf("menu: co-op launch: the window opens by itself");
+		}
+		if (ui.worldOf.empty() || now - sNameCheckedAt > 2000) {
+			sNameCheckedAt = now;  // the Steam name can arrive a few seconds after the join
+			std::string name = CoopLaunch::HostName(CoopLaunch::Host());
+			if (name != ui.worldOf) {
+				ui.worldOf = name;
+				sDirty = true;
+			}
+		}
+		if (sStarDone) {
 			return;
 		}
-		auto& list = stars->mSavedGameStarRecords;
-		for (size_t i = 0; i < list.size();) {
-			cStarRecord* s = list[i].get();
-			bool coop = s && s->mName.size() >= 5 && s->mName[0] == u'C' && s->mName[1] == u'O' && s->mName[2] == u'-'
-				&& s->mName[3] == u'O' && s->mName[4] == u'P';
-			if (coop && !(sStar && sStar->get() == s)) {
-				Logf("menu: removing a CO-OP star left from an earlier run (%08x)", s->mKey.internalValue);
-				s->mFlags &= ~(kStarFlagSaveGame | kStarFlagPotentialSaveGame);
-				list.erase(list.begin() + i);
-				continue;
-			}
-			++i;
-		}
-	}
-
-	bool IsCoopCaption(const char16_t* c)
-	{
-		return c && c[0] == u'C' && c[1] == u'O' && c[2] == u'-' && c[3] == u'O' && c[4] == u'P';
-	}
-
-	// a visible window (not ours) whose caption starts with "CO-OP"; invisible subtrees are skipped
-	UTFWin::IWindow* FindCoopCaption(UTFWin::IWindow* window, int depth)
-	{
-		if (!window || (sPicture && window == sPicture->Window()) || depth > 14 || !(window->GetFlags() & UTFWin::kWinFlagVisible)) {
-			return nullptr;
-		}
-		if (depth > 0 && IsCoopCaption(window->GetCaption())) {
-			return window;
-		}
-		for (UTFWin::IWindow* child : window->children()) {
-			if (UTFWin::IWindow* found = FindCoopCaption(child, depth + 1)) {
-				return found;
-			}
-		}
-		return nullptr;
-	}
-
-	// true while the card of the CO-OP star is on screen; sCardArea = its area (the caption's ancestors that are
-	// still card-sized)
-	bool CardVisible()
-	{
-		UTFWin::IWindow* main = WindowManager.GetMainWindow();
-		UTFWin::IWindow* caption = main ? FindCoopCaption(main, 0) : nullptr;
-		if (!caption) {
-			return false;
-		}
-		float screenW = main->GetArea().GetWidth();
-		UTFWin::IWindow* card = caption;
-		for (int up = 0; up < 6; ++up) {
-			UTFWin::IWindow* parent = card->GetParent();
-			if (!parent || parent == main || parent->GetRealArea().GetWidth() > screenW * 0.5f) {
-				break;
-			}
-			card = parent;
-		}
-		sCardArea = card->GetRealArea();
-		if (!sCardLogged) {
-			sCardLogged = true;
-			Logf("menu: star card found (caption window %08x, card %08x at %.0f,%.0f-%.0f,%.0f)", caption->GetControlID(),
-				card->GetControlID(), sCardArea.x1, sCardArea.y1, sCardArea.x2, sCardArea.y2);
-		}
-		return true;
-	}
-
-	void DumpTree(UTFWin::IWindow* w, int depth, int maxDepth)
-	{
-		if (!w || depth > maxDepth) {
-			return;
-		}
-		const Math::Rectangle& a = w->GetRealArea();
-		std::string caption;
-		if (const char16_t* c = w->GetCaption()) {
-			for (; *c && caption.size() < 40; ++c) {
-				caption += *c < 128 ? (char)*c : '?';
-			}
-		}
-		Logf("card: %*s%08x %s%s vis %d area %.0f,%.0f-%.0f,%.0f '%s'", depth * 2, "", w->GetControlID(),
-			w->Cast(UTFWin::IButton::TYPE) ? "BUTTON " : "", (sPicture && w == sPicture->Window()) ? "OURS " : "", (w->GetFlags() & UTFWin::kWinFlagVisible) ? 1 : 0,
-			a.x1, a.y1, a.x2, a.y2, caption.c_str());
-		for (UTFWin::IWindow* child : w->children()) {
-			DumpTree(child, depth + 1, maxDepth);
-		}
-	}
-
-	// the Play button of the card that shows the CO-OP star (its caption's container holds it)
-	UTFWin::IWindow* FindCardPlay()
-	{
-		UTFWin::IWindow* main = WindowManager.GetMainWindow();
-		UTFWin::IWindow* caption = main ? FindCoopCaption(main, 0) : nullptr;
-		UTFWin::IWindow* container = caption ? caption->GetParent() : nullptr;
-		if (!container) {
-			return nullptr;
-		}
-		for (UTFWin::IWindow* child : container->children()) {
-			if (child->GetControlID() == kCardPlayButton && child->Cast(UTFWin::IButton::TYPE)) {
-				return child;
-			}
-		}
-		return nullptr;
-	}
-
-	// the card's Play in screen coordinates (window areas are relative to their parent)
-	bool CardPlayScreenArea(Math::Rectangle& out)
-	{
-		UTFWin::IWindow* play = FindCardPlay();
-		if (!play) {
-			return false;
-		}
-		UTFWin::IWindow* main = WindowManager.GetMainWindow();
-		float ox = 0, oy = 0;
-		for (UTFWin::IWindow* w = play->GetParent(); w && w != main; w = w->GetParent()) {
-			ox += w->GetRealArea().x1;
-			oy += w->GetRealArea().y1;
-		}
-		const Math::Rectangle& a = play->GetRealArea();
-		out = Math::Rectangle(a.x1 + ox, a.y1 + oy, a.x2 + ox, a.y2 + oy);
-		return true;
-	}
-
-	void RestoreCardPlay()
-	{
-		if (sHiddenPlay) {
-			if (*sHiddenPlay) {
-				(*sHiddenPlay)->SetVisible(true);
-			}
-			delete sHiddenPlay;
-			sHiddenPlay = nullptr;
-			Logf("menu: the card's Play is shown again");
-		}
-	}
-
-	// sends a left click (down + up at its centre) through a window, as if the player clicked it
-	void ClickWindow(UTFWin::IWindow* window)
-	{
-		const Math::Rectangle& a = window->GetRealArea();
-		UTFWin::Message m;
-		memset(&m, 0, sizeof(m));
-		m.source = window;
-		m.eventType = UTFWin::kMsgMouseDown;
-		m.Mouse.mouseX = a.GetWidth() / 2;
-		m.Mouse.mouseY = a.GetHeight() / 2;
-		m.Mouse.mouseState = kMouseLeftButtonDown;
-		m.Mouse.mouseButton = kMouseButtonLeft;
-		bool down = window->SendMsg(m);
-		m.eventType = UTFWin::kMsgMouseUp;
-		m.Mouse.mouseState = 0;
-		bool up = window->SendMsg(m);
-		Logf("menu: clicked the card's Play (down %d, up %d)", down ? 1 : 0, up ? 1 : 0);
-	}
-
-	// second way: a button-click message with the button's command id, up through its parents
-	void SendButtonClick(UTFWin::IWindow* window)
-	{
-		UTFWin::Message m;
-		memset(&m, 0, sizeof(m));
-		m.source = window;
-		m.eventType = UTFWin::kMsgButtonClick;
-		m.ButtonClick.commandID = window->GetCommandID();
-		int level = 0;
-		for (UTFWin::IWindow* w = window; w; w = w->GetParent(), ++level) {
-			if (w->SendMsg(m)) {
-				Logf("menu: button-click message (command %08x) handled at level %d", m.ButtonClick.commandID, level);
+		if (!sStarWritten) {
+			if (now - sLaunchStart > kStarWaitMs) {
+				sStarDone = true;
+				Logf("menu: J9: gave up after %lu ms (host star found %d): the text names the planet only", (unsigned long)(now - sLaunchStart),
+					sStarFound ? 1 : 0);
 				return;
 			}
+			if (!sStarFound && now - sStarTriedAt > 500) {
+				sStarTriedAt = now;
+				std::string planet;
+				if (MenuWorlds::HostPlanet(sHostStar, planet)) {
+					sStarFound = true;
+					ui.planet = planet;
+					sDirty = true;
+					Logf("menu: the host's world: planet '%s' on star %08x (newest creature-stage save of Game0)", planet.c_str(), sHostStar);
+				}
+			}
+			if (sStarFound && MenuWorlds::SelectStar(sHostStar)) {
+				sStarWritten = true;
+				sStarWrittenAt = now;
+			}
+			return;
 		}
-		Logf("menu: button-click message (command %08x) not handled", m.ButtonClick.commandID);
-	}
-
-	bool InMainMenu()
-	{
-		return GameModeManager.GetActiveModeID() == (uint32_t)GameModeIDs::kGGEMode;
+		// read back: does the game's selection keep our value (and later: did the galaxy show its card)?
+		DWORD since = now - sStarWrittenAt;
+		const DWORD checkAt[3] = { 100, 1000, 3000 };
+		if (sStarChecks < 3 && since >= checkAt[sStarChecks]) {
+			uint32_t now_id = MenuWorlds::SelectedStar();
+			Logf("menu: J9: %lu ms after the write the selected star reads %08x (%s)", (unsigned long)since, now_id,
+				now_id == sHostStar ? "kept" : "CHANGED, the game does not follow");
+			++sStarChecks;
+			if (sStarChecks == 3) {
+				sStarSticks = now_id == sHostStar;
+				sStarDone = true;
+				sDirty = true;
+				Logf("menu: J9 verdict: %s", sStarSticks ? "the selection holds (check on screen: card, highlight, does Play use it?)"
+					: "the selection did not hold; the text is the fallback");
+			}
+		}
 	}
 }
 
 namespace CoopMenu
 {
-	void EnsureStar()
-	{
-		// leaving a game without saving reloads the galaxy from disk: our star is no longer in the saved-game list
-		if (sStar) {
-			bool listed = false;
-			if (cStarManager* stars = cStarManager::Get()) {
-				for (const cStarRecordPtr& s : stars->mSavedGameStarRecords) {
-					listed = listed || s.get() == sStar->get();
-				}
-			}
-			if (!listed) {
-				Logf("menu: the CO-OP star is gone from the galaxy (reloaded?), adding it again");
-				MenuWorlds::Forget(sStar->get());
-				delete sStar;
-				sStar = nullptr;
-				sLastSelected = 0;
-			}
-		}
-		if (!sStar && !sStarFailed) {
-			RemoveStaleStars();
-			// a friend's world already installed survives the new star (AddWorld copies the template over the save)
-			std::string keep = Game0Dir() + "Game0\\CO-OP.keep", save = Game0Dir() + "Game0\\CO-OP.spo";
-			bool kept = sState == State::Ready && MoveFileExA(save.c_str(), keep.c_str(), MOVEFILE_REPLACE_EXISTING);
-			cStarRecord* star = MenuWorlds::AddWorld(kStarName, true);
-			if (kept) {
-				MoveFileExA(keep.c_str(), save.c_str(), MOVEFILE_REPLACE_EXISTING);
-				if (star) {
-					MenuWorlds::RenameWorld(star, ("CO-OP: " + U().worldOf).c_str());
-				}
-			}
-			if (star) {
-				sStar = new cStarRecordPtr(star);
-				Logf("menu: CO-OP star %08x added", star->mKey.internalValue);
-				CoopNet::JoinState s = CoopNet::State();
-				if (getenv("COOP_MOVE_SAVE")) {
-					U().worldOf = "Moved save";  // research (COOP_MOVE_SAVE): play the moved copy of the own save at once
-					sState = State::Ready;
-				}
-				else if (s.installedAtStart && s.host && sState != State::Ready) {
-					// the host's world was installed at this start (and the mod joins the host again): the CO-OP star is a
-					// copy of the host's newest creature save, so Play enters the host's world
-					U().worldOf = CoopLaunch::HostName(s.host);
-					MenuWorlds::RenameWorld(star, ("CO-OP: " + U().worldOf).c_str());
-					sState = State::Ready;
-					sDirty = true;
-					Logf("menu: the host's world (%s) is installed: CO-OP star ready", U().worldOf.c_str());
-				}
-			}
-			else {
-				sStarFailed = true;  // e.g. a new universe without any save to copy from
-				Logf("menu: no CO-OP star (no saved game to use as the template)");
-			}
-		}
-	}
-
 	void Update()
 	{
-		// every frame in every mode: leaving a game without saving reloads the galaxy from disk, and the menu builds its
-		// star markers right then, before it is entered; re-adding later is not drawn
-		if (sStar) {
-			EnsureStar();
-		}
 		if (!InMainMenu()) {
-			if (sVisible && sPicture) {
-				sPicture->Hide();  // keep the state, show it again in the menu
+			// keep the state, show it again in the menu
+			if (sPicture && sPicture->Visible()) {
+				sPicture->Hide();
+			}
+			if (sButton && sButton->Visible()) {
+				sButton->Hide();
 			}
 			return;
 		}
-		EnsureStar();
-		uint32_t selected = MenuWorlds::SelectedStar();
-		bool coopSelected = sStar && selected == sStar->get()->mKey.internalValue;
-		if (selected != sLastSelected) {
-			sLastSelected = selected;
-			if (coopSelected) {
-				Show();
-			}
+		UTFWin::IWindow* main = WindowManager.GetMainWindow();
+		if (!main) {
+			return;
 		}
-		else if (coopSelected && !sVisible && GetTickCount() - sCardCheckedAt > 250) {
-			// CO-OP clicked again after its card was closed (the selection keeps its value): open with the card
-			sCardCheckedAt = GetTickCount();
-			if (CardVisible()) {
-				sCardSeen = true;
-				Show();
-			}
+		if (CoopLaunch::Active()) {
+			FollowCoopLaunch();
 		}
-		// the window lives with the star's card: placed next to it, closed when it closes (a download keeps running)
-		if (sVisible && GetTickCount() - sCardCheckedAt > 150) {
-			sCardCheckedAt = GetTickCount();
-			Math::Rectangle before = sCardArea;
-			if (CardVisible()) {
-				if (!sCardSeen || before.x1 != sCardArea.x1 || before.y1 != sCardArea.y1) {
-					sDirty = true;  // first seen or moved: place the window again
-				}
-				sCardSeen = true;
-				sCardLostAt = 0;
-			}
-			else if (sCardSeen) {
-				if (!sCardLostAt) {
-					sCardLostAt = GetTickCount();
-				}
-				else if (GetTickCount() - sCardLostAt > 300) {
-					Logf("menu: the star card closed, closing the window");
-					sCardSeen = false;
-					sCardLostAt = 0;
-					Hide();
-				}
-			}
-		}
-		if (selected != (sStar ? sStar->get()->mKey.internalValue : 0)) {
-			RestoreCardPlay();  // the card is shared by all stars: other stars keep their Play
+		if (sToggleRequested) {
+			sToggleRequested = false;
 			if (sVisible) {
+				Logf("menu: CO-OP button: window closed");
 				Hide();
 			}
-		}
-		else if (GetTickCount() - sPlayCheckedAt > 150) {
-			sPlayCheckedAt = GetTickCount();
-			bool ready = sState == State::Ready;
-			if (!ready && !sHiddenPlay) {
-				if (UTFWin::IWindow* play = FindCardPlay()) {
-					sHiddenPlay = new eastl::intrusive_ptr<UTFWin::IWindow>(play);
-					play->SetVisible(false);
-					Logf("menu: the card's Play is hidden until a friend's world is ready");
-				}
-			}
-			else if (ready && sHiddenPlay) {
-				RestoreCardPlay();
-			}
-		}
-		if (sPressedAt && GetTickCount() - sPressedAt > 700) {
-			sPressedAt = 0;
-			if (!sLoadSeen) {
-				if (UTFWin::IWindow* play = FindCardPlay()) {
-					SendButtonClick(play);
-				}
+			else {
+				Logf("menu: CO-OP button: window opened");
+				Show();
 			}
 		}
 		if (sLeaveRequested) {
@@ -838,67 +670,18 @@ namespace CoopMenu
 				sDirty = true;
 			}
 		}
-		if (sPlayRequested) {
-			sPlayRequested = false;
-			if (sState == State::Ready && selected == (sStar ? sStar->get()->mKey.internalValue : 0)) {
-				// SetActiveModeByName("LoadGame") straight from here crashed (SporeApp.exe+0x293df0): the card's own Play
-				// prepares the load first, so press that one
-				RestoreCardPlay();
-				if (UTFWin::IWindow* play = FindCardPlay()) {
-					play->SetVisible(true);
-					sLoadSeen = false;
-					sPressedAt = GetTickCount();
-					ClickWindow(play);
-				}
-				else {
-					Logf("menu: our Play: the card's Play button was not found");
-				}
-				return;
-			}
-			Logf("menu: our Play ignored (state %d, selected %08x)", (int)sState, selected);
-		}
 		FollowJoin();
+		const Math::Rectangle& screen = main->GetArea();
+		if (screen.GetWidth() != sScreenW || screen.GetHeight() != sScreenH) {
+			sButtonDirty = true;  // the screen changed size: place both plates again
+			sDirty = true;
+		}
+		if (sButtonDirty || !sButton || !sButton->Visible()) {
+			RedrawButton(main);
+		}
 		if (sVisible && (sDirty || (sPicture && !sPicture->Visible()))) {
 			Redraw();
 		}
-	}
-
-	bool HoldPlay()
-	{
-		if (!InMainMenu() || !sStar || MenuWorlds::SelectedStar() != sStar->get()->mKey.internalValue) {
-			return false;
-		}
-		if (sState == State::Ready) {
-			Logf("menu: Play on the CO-OP star: loading %s's world", U().worldOf.c_str());
-			sLoadSeen = true;
-			return false;
-		}
-		Logf("menu: Play on the CO-OP star without a world: window instead");
-		Show();
-		return true;
-	}
-
-	void DumpCard()
-	{
-		UTFWin::IWindow* main = WindowManager.GetMainWindow();
-		UTFWin::IWindow* caption = main ? FindCoopCaption(main, 0) : nullptr;
-		if (!caption) {
-			Logf("card: no CO-OP card on screen (select the CO-OP star first)");
-			return;
-		}
-		UTFWin::IWindow* w = caption;
-		int up = 0;
-		while (w->GetParent() && w->GetParent() != main) {
-			const Math::Rectangle& a = w->GetRealArea();
-			Logf("card: ancestor %d: %08x area %.0f,%.0f-%.0f,%.0f", up++, w->GetControlID(), a.x1, a.y1, a.x2, a.y2);
-			w = w->GetParent();
-		}
-		Logf("card: top under main: %08x", w->GetControlID());
-		UTFWin::IWindow* start = caption;
-		for (int i = 0; i < 3 && start->GetParent() && start->GetParent() != main; ++i) {
-			start = start->GetParent();
-		}
-		DumpTree(start, 0, 5);
 	}
 
 	void Open()
@@ -909,16 +692,15 @@ namespace CoopMenu
 
 	void Shutdown()
 	{
-		RestoreCardPlay();
 		if (sPicture) {
 			sPicture->Remove();
 			delete sPicture;
 			sPicture = nullptr;
 		}
-		if (sStar) {
-			MenuWorlds::RemoveWorld(sStar->get());
-			delete sStar;
-			sStar = nullptr;
+		if (sButton) {
+			sButton->Remove();
+			delete sButton;
+			sButton = nullptr;
 		}
 		delete sUi;
 		sUi = nullptr;

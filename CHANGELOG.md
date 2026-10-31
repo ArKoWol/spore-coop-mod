@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **M2 of the join flow: a CO-OP button in the main menu replaces the CO-OP star** (ArKoWol; `game/CoopMenu.cpp`, `game/MenuWorlds.cpp`).
+  The star, `CO-OP.spo`, the hidden card Play, `HoldPlay`, `SaveIds` and the star dev commands (`coop slots/addworld/addcenter/delworld/
+  menureload/ggefind/holdplay/playnow/carddump`) are gone, which closes the issue "CO-OP star vanishes after leaving a game without saving".
+  In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`) and tries to select the host's star (spike J9,
+  `menu: J9` lines). Not tested (2 PCs); no protocol change. Guests: click the CO-OP plate (bottom left; `COOP_BUTTON_CORNER` moves it).
+
 - **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
   removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror
   gets the game's tick for 2 s, else `mbDead` is set (it never became a corpse); the guest moves its own drawn nests to the host's

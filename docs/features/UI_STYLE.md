@@ -1,11 +1,10 @@
 # In-game UI style (rule for every window of the mod)
 
-> Status: agreed · Owner: exxecute · Updated: 2026-10-25
-> Read when: you make or change any window the mod shows in the game. Note: `game/CoopMenu.cpp` is not in the repo yet
-> (2026-10-25).
+> Status: agreed · Owner: exxecute · Updated: 2026-10-31
+> Read when: you make or change any window the mod shows in the game.
 
-Every window the mod shows in the game looks like the CO-OP window (`mod/CoopMod/game/CoopMenu.cpp`), which copies the
-game's own star card. A new window reuses the shared helpers of `mod/CoopMod/game/UiDraw.cpp` (`Plate`, `Button`, `Text`,
+Every window the mod shows in the game looks like the CO-OP window (`mod/CoopMod/game/CoopMenu.cpp`, opened by the CO-OP button
+plate in a corner of the main menu), which copies the game's own star card. A new window reuses the shared helpers of `mod/CoopMod/game/UiDraw.cpp` (`Plate`, `Button`, `Text`,
 `FillRound`, `Gloss`, `PictureWindow`) instead of drawing its own way; the in-game host button (`game/HostPanel.cpp`) is the
 small example.
 
@@ -16,8 +15,7 @@ small example.
   picture until the mouse touches it).
 - Clicks are hit-tested against the rectangles drawn; `kMsgMouseDown`/`Wheel` over the window are consumed so the galaxy
   does not get them; `kMsgMouseMove` drives the hover look.
-- The game's 3D models (the planet of a star card) are drawn over all UI: do not try to cover them; a window next to the
-  planet may let it overlap its left edge (intended look).
+- The game's 3D models (the planet of a star card) are drawn over all UI: do not try to cover them.
 - Never start game actions straight from a click handler; set a flag and act in the frame update. Do not press the game's
   own buttons with synthetic messages (it ignores them); let the player press them and point at them.
 
@@ -32,5 +30,6 @@ small example.
   (green 200,255,140 to 90,200,50; blue 190,220,250 to 100,140,190).
 - **Progress**: dark groove, blue glossy fill (130,220,255 to 30,130,215).
 - **Success** text green (60,150,30); **error** title red (200,50,40).
-- No Close buttons on windows tied to a game element: they close with it (the CO-OP window closes with the star card).
+- No Close buttons on windows tied to a button plate or a game element: the plate's button opens and closes the window (the CO-OP
+  button; it is green while the window is closed and blue while it is open).
 - Text is English for now; GDI+ draws any language, so Russian is possible later.

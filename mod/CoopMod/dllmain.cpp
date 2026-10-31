@@ -1538,7 +1538,6 @@ static void NetUpdate()
 	bool inGame = Simulator::IsCreatureGame() && GameNounManager.GetAvatar();
 	UpdateIndicator(IndicatorText(), inGame);
 	MenuWorlds::Update();
-	MenuWorlds::HookMenuEnter(sModule);
 	LoadTrace::HookDatabases(sModule);
 	CoopMenu::Update();
 	CoopLaunch::Update();
@@ -1870,32 +1869,8 @@ public:
 		else if (strcmp(sub, "friends") == 0) {
 			RecentHosts::Print();
 		}
-		else if (strcmp(sub, "slots") == 0) {
-			MenuWorlds::Dump();
-		}
-		else if (strcmp(sub, "addworld") == 0 || strcmp(sub, "addcenter") == 0) {
-			MenuWorlds::AddTestWorld(strcmp(sub, "addcenter") == 0);
-		}
-		else if (strcmp(sub, "delworld") == 0) {
-			MenuWorlds::RemoveTestWorlds();
-		}
-		else if (strcmp(sub, "holdplay") == 0) {
-			MenuWorlds::SetHoldPlay(sModule);
-		}
 		else if (strcmp(sub, "menu") == 0) {
 			CoopMenu::Open();
-		}
-		else if (strcmp(sub, "carddump") == 0) {
-			CoopMenu::DumpCard();
-		}
-		else if (strcmp(sub, "ggefind") == 0) {
-			MenuWorlds::FindSelected();
-		}
-		else if (strcmp(sub, "playnow") == 0) {
-			MenuWorlds::PlayNow();
-		}
-		else if (strcmp(sub, "menureload") == 0) {
-			MenuWorlds::ReloadMenu();
 		}
 		else if (strcmp(sub, "facing") == 0) {
 			// cycles always -> steps -> off -> always (game/PuppetMotion.h)
@@ -2095,7 +2070,6 @@ void Dispose()
 	CoopLaunch::Shutdown();
 	HostPanel::Shutdown();
 	NamePlates::Shutdown();
-	MenuWorlds::Shutdown();
 	SteamStop();
 	ConsoleStop();
 	App::RemoveUpdateFunction(sNetListener);

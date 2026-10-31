@@ -37,11 +37,12 @@ Every change is listed in [`CHANGELOG.md`](CHANGELOG.md).
    full-screen game in the background stops running, and so does the co-op.
 4. **Host**: load a game, go into the creature stage and press **Host co-op** (top right). Press **Copy my Steam ID** and
    send it to your friend. (Console way: Ctrl+Shift+C, `coop host`.)
-5. **Guest**: in the main menu click the **CO-OP** star in the middle of the galaxy, then **Join** next to a friend you joined
-   before, or copy the host's Steam ID and press **Join by Steam ID**. The host's world arrives and your game restarts
-   by itself as a **co-op launch**: the friend's world is played in place of your saves for this one run (yours are put
-   aside and come back at the next start, nothing is deleted) and the game reconnects by itself; press **Play** on the
-   CO-OP star. (Console way: `coopjoin <host's Steam ID>`.)
+5. **Guest**: in the main menu click the **CO-OP** button (small plate, bottom left), then **Join** next to a friend you
+   joined before, or copy the host's Steam ID and press **Join by Steam ID**. The host's world arrives and your game
+   restarts by itself as a **co-op launch**: the friend's world is played in place of your saves for this one run (yours
+   are put aside and come back at the next start, nothing is deleted) and the game reconnects by itself. The CO-OP window
+   opens and names the planet: press **Play** on it (its star is selected for you if the game lets the mod do that).
+   Your own galaxy gets no extra star. (Console way: `coopjoin <host's Steam ID>`.)
 6. **Leave**: press **Leave** (the small plate in the game, or in the CO-OP window), or type `coop leave`: the game
    restarts in your own world. Simply closing the game works too: the next start is always your own world.
 

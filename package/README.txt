@@ -32,15 +32,16 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
 
 1. HOST: load your game and go into the CREATURE stage. Press "Host co-op" (top right of the screen),
    then "Copy my Steam ID" and send that number to your friend. (Or type   coop host   in the console.)
-2. GUEST: stay in the MAIN MENU. Click the CO-OP star in the middle of the galaxy, copy the host's
-   Steam ID and press "Join by Steam ID" (or "Join" next to a friend you joined before).
+2. GUEST: stay in the MAIN MENU. Click the CO-OP button (small plate, bottom left of the screen), copy
+   the host's Steam ID and press "Join by Steam ID" (or "Join" next to a friend you joined before).
    (Or type   coopjoin 7656...   in the console.)
 3. GUEST: the host's world arrives ("coop: world received"). Your game closes and starts again
    by itself as a "co-op launch" and connects to the host again. You do not type anything.
    The friend's world is played IN PLACE of your saves for this one run: your own saves are put
    aside (%APPDATA%\Spore\Games\Game0.own) and come back at the next start. Nothing is deleted.
    The friend's world is kept in %APPDATA%\Spore\Games\Coop\<his Steam ID>.
-4. GUEST: press Play on the CO-OP star and enter the creature stage. The window title says
+4. GUEST: the CO-OP window opens by itself and says "<name>'s world: press Play on <planet>". Press
+   Play on that planet's star and enter the creature stage. The window title says
    "CO-OP: you are in the HOST's world", and a small plate shows "In <name>'s world - Leave".
 5. GUEST: to go back to your own world press Leave (the plate, or the CO-OP window in the main menu)
    or type   coop leave   : the game restarts in your own world. Closing the game works too:
