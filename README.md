@@ -69,7 +69,7 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 
 In the creature stage, **click on your friend's creature** and yours follows it; W/A/S/D, a click elsewhere or on the friend again
 stop it ("(following)" shows on your name plate meanwhile).
-| `coop dump`, `coop fps`, `coop motionlog`, `coop facing`, `coop run`, `coop actionlog`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
+| `coop dump`, `coop fps`, `coop motionlog`, `coop facing`, `coop run`, `coop actionlog`, `coop selftest`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
 
 The game accepts exactly one word after `coop`, so joining is the separate command `coopjoin`. In the remote console
 (`console.bat`) several commands go in one line separated by `;`: `coop dump; coop status`; **Tab** completes commands

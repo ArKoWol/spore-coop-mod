@@ -37,6 +37,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/InvitePanel.cpp/.h` | M3: the host's invite list under the host plate (friends in their main menu, each with Invite) and the toast of an invitation in the main menu (`Join`, `Not now`) |
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
+| `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), presses keys 1-9 |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here, Invite (opens the list of `InvitePanel`); for a guest in a co-op launch the plate `In <host>'s world` with Leave |
@@ -215,6 +216,7 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   is sent; an attack ability is not (bites stay `PlayAnimation` + damage); inside a sent ability its animations, effects and
   voices are not sent (the replayed ability makes them). Effects and voices only of the avatars. The receiver plays the ability
   by type (`GetAbilityIndexByType`), starts the effect under the same pool id and stops it on the sender's stop or after 8 s.
+  With `coop echo` the same message bytes are applied to the echo puppet, and our avatar's plain animations are replayed on it.
 - **Avatars**: both sides send their own avatar's health, max health and size 5 times a second (`kMsgAvatar`) and show them
   on their puppet of the other player.
 - **Damage** (PLAN rule 3, the actor decides): the guest's own bite on a mirror is applied by the game on his machine at once

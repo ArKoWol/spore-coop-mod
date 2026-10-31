@@ -22,7 +22,7 @@ change), **partly**, **not done**.
 | 3b | Walking backwards, sideways, running | works (2-PC test 2026-10-31) |
 | 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31: still not seen, the host's hash never changed (2-PC test 2026-10-31); the guest's own creature at start (`SetSpecies`) is not done |
 | 3d | Real health and size of the puppet | to check |
-| 3e | Action animations (eat, sing, bite) | partly: animations (`kMsgAnim`); abilities, effects, voices built 2026-10-31 (`kMsgAction`, protocol 14), to check |
+| 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
 | 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
 | 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite goes through the host (no crash since, owner 2026-10-31), no DNA yet |
 | 4b | Host damage and deaths | works |

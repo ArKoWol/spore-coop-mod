@@ -23,6 +23,7 @@ Never run the guest's game minimized or fullscreen in the background: a minimize
 | Telemetry (`kMsgTelemetry`) | the guest's counts in the host's log |
 | `coop echo` | one-PC puppet test: a copy of you 0.4 s later, 4 m to the side |
 | `coop motionlog`, `coop fps` | puppet motion and frame-rate diagnostics |
+| `coop selftest` + `tests\actions_test.ps1` | one PC, game in the creature stage: abilities, an animation and an effect of our avatar must be captured and replayed on the echo puppet (`selftest: RESULT: PASS`); keys 1-9 are pressed and what the game called is logged |
 | `coop actionlog` | log every ability, creature effect and voice that is sent and replayed (`action:` lines) |
 | `coop facing`, `coop run` | the puppet's steps back / sideways (`always`, `steps`, `off`) and its speed matching (on / off) |
 | `tests\run_core_tests.bat` | the replication core with a fake world, and the co-op launch folder logic (`core/coop_launch.h`) and the world-transfer manifest (`core/coop_manifest.h`: diff, build, verify, cleanup) on temporary folders; no game, seconds |
@@ -39,5 +40,5 @@ Never run the guest's game minimized or fullscreen in the background: a minimize
 
 ## 4. Planned, not built
 - A per-second side-by-side desync verdict of both machines in the host's log.
-- Scripted scenarios run through the remote console on both PCs that print `RESULT: PASS` / `FAIL`.
+- Scripted scenarios run through the remote console on both PCs that print `RESULT: PASS` / `FAIL` (one PC: `coop selftest`).
 - A flight recorder (time, netId, state hash) that finds the first divergence.

@@ -202,10 +202,11 @@ seen in our tests.
   them change on the guest, then it stops) *(verified 2026-10-25, owner's two-PC test)*.
 - **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well, but the carnivore's vomit after a fruit,
   and the waves and notes of the mating call (only the head-up frames played) are not shown on the other machine. These come
-  from the ability and effect system, not from `PlayAnimation` *(guess; `game/Actions.cpp` replays `PlayAbility`, the
-  effect pools and `PlayVoice` since 2026-10-31, not seen in the game yet)*. `PlayAbility` does not play skill abilities (glide,
-  jump, mating call, sprint, sneak) *(SDK)*. The player's abilities did not go through `cCreatureBase::PlayAbility` in the first
-  two-PC test; effects did (vomit `e55dc391` after a fruit) *(guess, 2026-10-31: no `action: ability` line)*.
+  from the ability and effect system, not from `PlayAnimation` *(guess; replaying `PlayAbility`, the effect pools
+  and `PlayVoice` (`game/Actions.cpp`, 2026-10-31) did not make them visible on 2 PCs either)*. `PlayAbility` does not play skill abilities (glide,
+  jump, mating call, sprint, sneak) *(SDK)*. The player's abilities never went through `cCreatureBase::PlayAbility` in two-PC tests,
+  while `PlayAbility` called by the mod is captured and replayed fine *(verified 2026-10-31, `coop selftest`)*; key messages posted
+  to the game window (1-9) start no ability *(verified 2026-10-31)*; the player's effects are captured (vomit `e55dc391` after a fruit) *(verified 2026-10-31, `action:` lines)*.
 
 ## 9. Combat, DNA and species relations
 - `TakeDamage`'s 4th argument is a push vector; pass `(0,0,0)` *(SporeCoop)*. The animal's `TakeDamage` is entered with `this` =

@@ -27,8 +27,30 @@ namespace Actions
 	// True while we replay something that came from the other side (nothing of it is sent back).
 	bool Replaying();
 
-	// `coop echo`: our avatar's actions are replayed on this creature at once (one-PC test); nullptr = off.
+	// cCreatureBase::PlayAnimation started `animationId` on `creature` (with its block index and blend flag): counted and logged when
+	// it is our avatar, and replayed on the echo puppet with the same arguments.
+	void OnAnimation(void* creature, uint32_t animationId, int block, bool disableBlendIn);
+
+	// The animation a creature (cCreatureAnimal*) plays now (AnimatedCreature::GetCurrentAnimation), 0 if unknown.
+	uint32_t CurrentAnimation(void* creature);
+
+	// `coop echo`: our avatar's actions are replayed on this creature (one-PC test), through the same message bytes as over the
+	// network; nullptr = off.
 	void SetEchoTarget(void* creature);
+	void* EchoTarget();
+
+	// The type and category of ability `index` of a creature (cCreatureAnimal*); false when it has none there.
+	bool AbilityInfo(void* creature, int index, int* type, int* category);
+
+	// What was captured from our own avatar and replayed here, since the start (for `coop selftest`, game/SelfTest.cpp).
+	struct Counters
+	{
+		int abilities = 0, effects = 0, stops = 0, voices = 0, anims = 0;  // captured
+		int replayed = 0;                                                 // played on a copy or the echo puppet and taken by the game
+		int modeActions = 0;                                              // creature-mode actions of our avatar
+		uint32_t lastModeAction = 0;
+	};
+	Counters GetCounters();
 
 	// Writes "action:" research lines (what is captured, what is replayed) to CoopMod.log; `coop actionlog`.
 	void SetLogging(bool on);

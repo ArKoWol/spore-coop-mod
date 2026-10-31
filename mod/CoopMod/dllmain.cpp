@@ -12,6 +12,7 @@
 #include "game/NamePlates.h"
 #include "game/Actions.h"
 #include "game/FollowFriend.h"
+#include "game/SelfTest.h"
 #include "game/CoopLaunch.h"
 #include "game/WorldTransfer.h"
 #include "game/Presence.h"
@@ -83,6 +84,7 @@ member_detour(PlayAnimation_detour, Simulator::cCreatureBase, int(uint32_t, int,
 	{
 		int result = original_function(this, animationId, block, disableBlendIn);
 		World::OnAnimation(reinterpret_cast<Simulator::cCreatureBase*>(this), animationId);
+		Actions::OnAnimation(reinterpret_cast<Simulator::cCreatureBase*>(this), animationId, block, disableBlendIn);
 		return result;
 	}
 };
@@ -1538,6 +1540,7 @@ static void NetUpdate()
 	CoopLaunch::Update();
 	HostPanel::Update();
 	NamePlates::Update();
+	SelfTest::Update();
 	Presence::Update();     // starts Steam in the main menu, publishes our state, scans the friends while the window is open
 	InvitePanel::Update();  // the host's invite list, the toast of an invitation in the main menu
 	if (sSteam.ready && sTransport != Transport::Steam) {
@@ -1779,7 +1782,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1897,6 +1900,14 @@ public:
 		else if (strcmp(sub, "motionlog") == 0) {
 			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());
 			App::ConsolePrintF("coop: motion log in CoopMod.log %s", PuppetMotion::GetLogging() ? "on" : "off");
+		}
+		else if (strcmp(sub, "selftest") == 0) {
+			// game/SelfTest.cpp: needs the echo puppet
+			if (!sEcho) {
+				sEcho = true;
+				sEchoStarted = false;
+			}
+			SelfTest::Start();
 		}
 		else if (strcmp(sub, "echo") == 0) {
 			sEcho = !sEcho;

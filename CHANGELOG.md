@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Automatic one-PC test of creature actions: `coop selftest` and `tests\actions_test.ps1`** (exxecute; `game/SelfTest.cpp`). With
+  the echo puppet (now fed through the network message bytes, plain animations too) it plays abilities, the vomit animation and
+  effect on our avatar and checks capture and replay, then presses keys 1-9. Run on 1 PC: all PASS except superpowers (excluded
+  since); keys reach nothing. Not yet run: the 1.5 s "still playing" check and the block-index log. STATUS 3e parked (FACTS 8).
+
 - **Fix: replayed animations were cut on the other player's creature; research for songs and dances** (exxecute). A standing
   puppet may stand up to 1.5 m off since the walking change, but an animation was only protected within 1 m (now 1.6 m). In the
   first test no ability went through `PlayAbility`: unknown creature-mode actions are logged with their data (`action: mode action`)

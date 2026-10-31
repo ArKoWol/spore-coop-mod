@@ -1,6 +1,7 @@
 // Actions.cpp : see Actions.h.
 #include "stdafx.h"
 #include "Actions.h"
+#include "PuppetMotion.h"
 #include "../World.h"
 #include "../Log.h"
 #include "../../../core/coop_core.h"
@@ -8,6 +9,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -18,14 +20,17 @@ namespace
 	enum Kind : uint8_t { kAbility = 1, kEffect1 = 2, kEffect2 = 3, kEffectStop = 4, kVoice = 5 };
 
 	const DWORD kRepeatMs = 300;        // the same thing of the same creature is sent at most this often
+	const DWORD kAnimRepeatMs = 400;    // the same for plain animations on the echo puppet (as World's kMsgAnim)
 	const DWORD kEffectMaxMs = 8000;    // a replayed effect the other side never stopped is stopped after this long
 	const DWORD kAbilityHoldMs = 3000;  // a creature that plays an ability is left standing this long (PuppetMotion::Hold)
+	const DWORD kAnimHoldMs = 2500;
 
 	int sDepth = 0;         // nesting of our capture detours: only the outermost call is captured
 	int sAbilityDepth = 0;  // inside a non-attack ability of a known creature
 	int sReplaying = 0;
 	bool sLogging = false;
 	Simulator::cCreatureBase* sEchoTarget = nullptr;
+	Actions::Counters sCounters;
 
 	struct Replayed { uint32_t who; uint32_t pool; DWORD since; };
 
@@ -63,140 +68,14 @@ namespace
 
 	bool IsAvatar(uint32_t who) { return who == 0 || who == 0xFFFFFFFFu; }
 
-	void Note(uint8_t kind, uint32_t who, uint32_t id, const char* text)
+	bool LogFirst(uint32_t kind, uint32_t id)
 	{
-		int& n = S().seen[Key(kind, id)];
-		if (sLogging || ++n <= 3) {
-			Logf("action: %s %08x %s by %s %u%s", KindName(kind), id, text ? text : "", IsAvatar(who) ? "avatar" : "animal", who,
-				sLogging ? "" : " (first times only)");
-		}
-	}
-
-	// Runs `apply` on our copy of `who`: the creature of the other side, or the echo puppet for our own avatar.
-	template <typename F>
-	void Replay(uint32_t who, Simulator::cCreatureBase* target, F apply)
-	{
-		if (!target) {
-			return;
-		}
-		++sReplaying;
-		apply(target);
-		--sReplaying;
+		return sLogging || ++S().seen[Key(kind, id)] <= 3;
 	}
 
 	Simulator::cCreatureBase* CopyOf(uint32_t who)
 	{
 		return static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(World::CreatureOf(who)));
-	}
-
-	void PlayAbilityOf(Simulator::cCreatureBase* target, uint32_t type, uint32_t who)
-	{
-		int index = target->GetAbilityIndexByType((int)type);
-		if (index < 0) {
-			Logf("action: ability type %u is not known to our copy of %u, not played", type, who);
-			return;
-		}
-		target->PlayAbility(index);
-	}
-
-	void StartEffectOf(Simulator::cCreatureBase* target, uint8_t kind, uint32_t effect, uint32_t pool, uint32_t who)
-	{
-		Swarm::IVisualEffect* fx = nullptr;
-		if (kind == kEffect1) {
-			fx = target->CreateAndStartEffectForPool1Renamed(effect, pool);
-		}
-		else {
-			fx = target->CreateEffectForPool2Renamed(effect, pool);
-			if (fx) {
-				fx->Start(0);
-			}
-		}
-		if (fx) {
-			S().replayed[Key(who, pool)] = { who, pool, GetTickCount() };
-		}
-	}
-
-	// Sends one captured thing (and plays it on the echo puppet). False when it is not sent (unknown creature, too soon).
-	bool Capture(Simulator::cCreatureBase* creature, uint8_t kind, uint32_t id, uint32_t pool, const char* voice, int p2, int p3)
-	{
-		if (sReplaying || !creature) {
-			return false;
-		}
-		uint32_t who = 0;
-		auto avatar = GameNounManager.GetAvatar();
-		bool ownAvatar = avatar && creature == static_cast<Simulator::cCreatureBase*>(avatar);
-		bool known = World::WhoOf(creature, &who);
-		Simulator::cCreatureBase* echo = ownAvatar ? sEchoTarget : nullptr;
-		if (!known && !echo) {
-			return false;
-		}
-		if (!known) {
-			who = 0;
-		}
-		// effects and voices of animals would flood the link (every step of every animal): only the avatars' are sent
-		if (kind != kAbility && !IsAvatar(who)) {
-			return false;
-		}
-		State& s = S();
-		DWORD now = GetTickCount();
-		if (kind != kEffectStop) {
-			DWORD& last = s.lastSent[Key(((uint32_t)kind << 24) ^ who, id)];
-			if (now - last < kRepeatMs) {
-				return false;
-			}
-			last = now;
-		}
-		else if (!s.startedPools.erase(Key(who, id))) {
-			return false;  // a stop of something we never sent
-		}
-		if (kind == kEffect1 || kind == kEffect2) {
-			s.startedPools.insert(Key(who, pool));
-		}
-		Note(kind, who, id, voice);
-
-		if (known) {
-			coop::Writer w;
-			w.U8(kMsgAction); w.U8(kind); w.U32(who);
-			if (kind == kVoice) {
-				size_t len = voice ? strlen(voice) : 0;
-				len = len > 255 ? 255 : len;
-				w.U32((uint32_t)p2); w.U32((uint32_t)p3); w.U8((uint8_t)len);
-				for (size_t i = 0; i < len; ++i) {
-					w.U8((uint8_t)voice[i]);
-				}
-			}
-			else {
-				w.U32(id);
-				if (kind == kEffect1 || kind == kEffect2) {
-					w.U32(pool);
-				}
-			}
-			World::SendReliable(w.buf.data(), w.buf.size());
-		}
-		if (echo) {
-			Replay(who, echo, [&](Simulator::cCreatureBase* t) {
-				switch (kind) {
-				case kAbility: PlayAbilityOf(t, id, who); break;
-				case kEffect1: case kEffect2: StartEffectOf(t, kind, id, pool, who); break;
-				case kEffectStop: t->StopEffectFromPools(id, 0); S().replayed.erase(Key(who, id)); break;
-				case kVoice: t->PlayVoice(voice, p2, p3); break;
-				}
-			});
-		}
-		return true;
-	}
-
-	bool ReadWords(const void* data, uint32_t* out, int n)
-	{
-		__try {
-			for (int i = 0; i < n; ++i) {
-				out[i] = ((const uint32_t*)data)[i];
-			}
-			return true;
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			return false;
-		}
 	}
 
 	// The type and category of ability `index` of `creature`; false when there is none (an index past the list may read garbage).
@@ -216,11 +95,183 @@ namespace
 		}
 	}
 
+	bool ReadWords(const void* data, uint32_t* out, int n)
+	{
+		__try {
+			for (int i = 0; i < n; ++i) {
+				out[i] = ((const uint32_t*)data)[i];
+			}
+			return true;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
 	// An attack ability (bite, strike, charge, spit) is left to PlayAnimation and the damage messages, as before.
 	bool IsAttack(Simulator::cCreatureBase* creature, int index)
 	{
-		Simulator::cCreatureAbility* ability = index >= 0 ? creature->GetAbility(index) : nullptr;
-		return !ability || ability->mCategory == Simulator::cCreatureAbility::kCategoryAttack;
+		int type = 0, category = 0;
+		return !ReadAbility(creature, index, &type, &category) || category == Simulator::cCreatureAbility::kCategoryAttack;
+	}
+
+	void Hold(uint32_t who, bool echo, unsigned long ms)
+	{
+		if (echo) {
+			PuppetMotion::HoldPuppet(ms);
+		}
+		else {
+			World::HoldCreature(who, ms);
+		}
+	}
+
+	// Plays one kMsgAction on `target` (our copy of its creature). True when the game took it (the ability is known to the copy,
+	// the effect was made); `echo` = the target is the echo puppet of our own avatar.
+	bool Apply(const uint8_t* data, size_t size, Simulator::cCreatureBase* target, bool echo)
+	{
+		coop::Reader r(data, size);
+		r.U8();
+		uint8_t kind = r.U8();
+		uint32_t who = r.U32();
+		if (kind == kVoice) {
+			int p2 = (int)r.U32(), p3 = (int)r.U32();
+			uint8_t len = r.U8();
+			char name[256] = {};
+			for (uint8_t i = 0; i < len; ++i) {
+				name[i] = (char)r.U8();
+			}
+			if (!r.ok) {
+				return false;
+			}
+			if (LogFirst(0x80 | kVoice, (uint32_t)id(name))) {
+				Logf("action: replay voice %s on %s %u (%s)", name, echo ? "echo" : "copy of", who, target ? "ok" : "no copy");
+			}
+			if (!target) {
+				return false;
+			}
+			++sReplaying;
+			target->PlayVoice(name, p2, p3);
+			--sReplaying;
+			++sCounters.replayed;
+			return true;
+		}
+		uint32_t value = r.U32();
+		uint32_t pool = (kind == kEffect1 || kind == kEffect2) ? r.U32() : 0;
+		if (!r.ok) {
+			return false;
+		}
+		bool ok = false;
+		if (target) {
+			++sReplaying;
+			switch (kind) {
+			case kAbility: {
+				int index = target->GetAbilityIndexByType((int)value);
+				if (index >= 0) {
+					target->PlayAbility(index);
+					Hold(who, echo, kAbilityHoldMs);
+					ok = true;
+				}
+				break;
+			}
+			case kEffect1: case kEffect2: {
+				Swarm::IVisualEffect* fx = nullptr;
+				if (kind == kEffect1) {
+					fx = target->CreateAndStartEffectForPool1Renamed(value, pool);
+				}
+				else if ((fx = target->CreateEffectForPool2Renamed(value, pool)) != nullptr) {
+					fx->Start(0);
+				}
+				if (fx) {
+					S().replayed[Key(echo ? 0xEC40u : who, pool)] = { who, pool, GetTickCount() };
+					ok = true;
+				}
+				break;
+			}
+			case kEffectStop:
+				target->StopEffectFromPools(value, 0);
+				S().replayed.erase(Key(echo ? 0xEC40u : who, value));
+				ok = true;
+				break;
+			}
+			--sReplaying;
+		}
+		if (ok) {
+			++sCounters.replayed;
+		}
+		if (LogFirst(0x80 | kind, value)) {
+			Logf("action: replay %s %08x pool %08x on %s %u (%s)", KindName(kind), value, pool, echo ? "echo" : "copy of", who,
+				!target ? "no copy" : ok ? "ok" : "not taken by the game");
+		}
+		return ok;
+	}
+
+	// Sends one captured thing to the other side, and through the same bytes to the echo puppet. False when it is not sent.
+	bool Capture(Simulator::cCreatureBase* creature, uint8_t kind, uint32_t value, uint32_t pool, const char* voice, int p2, int p3)
+	{
+		if (sReplaying || !creature) {
+			return false;
+		}
+		uint32_t who = 0;
+		auto avatar = GameNounManager.GetAvatar();
+		bool ownAvatar = avatar && creature == static_cast<Simulator::cCreatureBase*>(avatar);
+		bool known = World::WhoOf(creature, &who);
+		Simulator::cCreatureBase* echo = ownAvatar ? sEchoTarget : nullptr;
+		if (!known && !echo) {
+			return false;
+		}
+		// effects and voices of animals would flood the link (every step of every animal): only the avatars' are sent
+		if (kind != kAbility && known && !IsAvatar(who)) {
+			return false;
+		}
+		State& s = S();
+		DWORD now = GetTickCount();
+		if (kind != kEffectStop) {
+			DWORD& last = s.lastSent[Key(((uint32_t)kind << 24) ^ who, value)];
+			if (now - last < kRepeatMs) {
+				return false;
+			}
+			last = now;
+		}
+		else if (!s.startedPools.erase(Key(who, value))) {
+			return false;  // a stop of something we never sent
+		}
+		if (kind == kEffect1 || kind == kEffect2) {
+			s.startedPools.insert(Key(who, pool));
+		}
+		switch (kind) {
+		case kAbility: ++sCounters.abilities; break;
+		case kEffect1: case kEffect2: ++sCounters.effects; break;
+		case kEffectStop: ++sCounters.stops; break;
+		case kVoice: ++sCounters.voices; break;
+		}
+		if (LogFirst(kind, value)) {
+			Logf("action: %s %08x %s by %s %u%s", KindName(kind), value, voice ? voice : "", IsAvatar(who) ? "avatar" : "animal", who,
+				sLogging ? "" : " (first times only)");
+		}
+
+		coop::Writer w;
+		w.U8(kMsgAction); w.U8(kind); w.U32(who);
+		if (kind == kVoice) {
+			size_t len = voice ? strlen(voice) : 0;
+			len = len > 255 ? 255 : len;
+			w.U32((uint32_t)p2); w.U32((uint32_t)p3); w.U8((uint8_t)len);
+			for (size_t i = 0; i < len; ++i) {
+				w.U8((uint8_t)voice[i]);
+			}
+		}
+		else {
+			w.U32(value);
+			if (kind == kEffect1 || kind == kEffect2) {
+				w.U32(pool);
+			}
+		}
+		if (known) {
+			World::SendReliable(w.buf.data(), w.buf.size());
+		}
+		if (echo) {
+			Apply(w.buf.data(), w.buf.size(), echo, true);
+		}
+		return true;
 	}
 }
 
@@ -228,11 +279,10 @@ member_detour(PlayAbility_detour, Simulator::cCreatureBase, void(int, Anim::Anim
 {
 	void detoured(int abilityIndex, Anim::AnimIndex* dstAnimIndex)
 	{
-		bool outer = sDepth == 0 && !sReplaying && !IsAttack(this, abilityIndex);
 		bool sent = false;
-		if (outer) {
-			Simulator::cCreatureAbility* ability = GetAbility(abilityIndex);
-			sent = Capture(this, kAbility, (uint32_t)ability->mType, 0, nullptr, 0, 0);
+		int type = 0, category = 0;
+		if (sDepth == 0 && !sReplaying && !IsAttack(this, abilityIndex) && ReadAbility(this, abilityIndex, &type, &category)) {
+			sent = Capture(this, kAbility, (uint32_t)type, 0, nullptr, 0, 0);
 		}
 		++sDepth;
 		if (sent) {
@@ -379,8 +429,38 @@ namespace Actions
 		sEchoTarget = nullptr;
 	}
 
+	void OnAnimation(void* creaturePtr, uint32_t animationId, int block, bool disableBlendIn)
+	{
+		auto avatar = GameNounManager.GetAvatar();
+		if (sReplaying || !avatar || creaturePtr != (void*)static_cast<Simulator::cCreatureBase*>(avatar)) {
+			return;
+		}
+		++sCounters.anims;
+		// research: does the game play the player's actions in another block than the default (-1) we replay with?
+		if (LogFirst(0xA1, animationId)) {
+			Logf("action: animation %08x block %d blend-in off %d by our avatar", animationId, block, disableBlendIn ? 1 : 0);
+		}
+		// the echo puppet plays our avatar's animations as the other side would (World::OnMessage, kMsgAnim)
+		if (!sEchoTarget || sAbilityDepth > 0) {
+			return;
+		}
+		DWORD now = GetTickCount();
+		DWORD& last = S().lastSent[Key(0xA0000000u, animationId)];
+		if (now - last < kAnimRepeatMs) {
+			return;
+		}
+		last = now;
+		++sReplaying;
+		sEchoTarget->PlayAnimation(animationId, block, disableBlendIn);
+		--sReplaying;
+		PuppetMotion::HoldPuppet(kAnimHoldMs);
+		++sCounters.replayed;
+	}
+
 	void OnModeAction(uint32_t actionId, void* data)
 	{
+		++sCounters.modeActions;
+		sCounters.lastModeAction = actionId;
 		switch (actionId) {
 		case 0xD3353638: case 0xD335362B: case 0xD335362D: case 0xD335362C: case 0xD3353636:
 			return;  // Interact, EatFruit, EatMeat, Mate, Pickup: known (World::OnModeAction)
@@ -414,49 +494,8 @@ namespace Actions
 		if (size < 6 || data[0] != kMsgAction) {
 			return false;
 		}
-		coop::Reader r(data, size);
-		r.U8();
-		uint8_t kind = r.U8();
-		uint32_t who = r.U32();
-		Simulator::cCreatureBase* target = CopyOf(who);
-		if (kind == kVoice) {
-			int p2 = (int)r.U32(), p3 = (int)r.U32();
-			uint8_t len = r.U8();
-			char name[256] = {};
-			for (uint8_t i = 0; i < len; ++i) {
-				name[i] = (char)r.U8();
-			}
-			if (r.ok) {
-				if (sLogging || ++S().seen[Key(0x80 | kVoice, (uint32_t)id(name))] <= 3) {
-					Logf("action: replay voice %s on %u (%s)", name, who, target ? "ok" : "no copy");
-				}
-				Replay(who, target, [&](Simulator::cCreatureBase* t) { t->PlayVoice(name, p2, p3); });
-			}
-			return true;
-		}
-		uint32_t id = r.U32();
-		uint32_t pool = (kind == kEffect1 || kind == kEffect2) ? r.U32() : 0;
-		if (!r.ok) {
-			return true;
-		}
-		if (sLogging || ++S().seen[Key(0x80 | kind, id)] <= 3) {
-			Logf("action: replay %s %08x pool %08x on %u (%s)", KindName(kind), id, pool, who, target ? "ok" : "no copy");
-		}
-		Replay(who, target, [&](Simulator::cCreatureBase* t) {
-			switch (kind) {
-			case kAbility:
-				PlayAbilityOf(t, id, who);
-				World::HoldCreature(who, kAbilityHoldMs);
-				break;
-			case kEffect1: case kEffect2:
-				StartEffectOf(t, kind, id, pool, who);
-				break;
-			case kEffectStop:
-				t->StopEffectFromPools(id, 0);
-				S().replayed.erase(Key(who, id));
-				break;
-			}
-		});
+		uint32_t who = *(const uint32_t*)(data + 2);
+		Apply(data, size, CopyOf(who), false);
 		return true;
 	}
 
@@ -471,7 +510,8 @@ namespace Actions
 				++it;
 				continue;
 			}
-			Simulator::cCreatureBase* target = sEchoTarget && IsAvatar(it->second.who) ? sEchoTarget : CopyOf(it->second.who);
+			bool echo = (it->first >> 32) == 0xEC40u;
+			Simulator::cCreatureBase* target = echo ? sEchoTarget : CopyOf(it->second.who);
 			if (target) {
 				++sReplaying;
 				target->StopEffectFromPools(it->second.pool, 0);
@@ -488,6 +528,34 @@ namespace Actions
 	{
 		sEchoTarget = creature ? static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creature)) : nullptr;
 	}
+
+	void* EchoTarget() { return sEchoTarget; }
+
+	uint32_t CurrentAnimation(void* creaturePtr)
+	{
+		if (!creaturePtr) {
+			return 0;
+		}
+		auto creature = static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creaturePtr));
+		uint32_t current = 0;
+		__try {
+			if (Anim::AnimatedCreature* animated = creature->mpAnimatedCreature.get()) {
+				animated->GetCurrentAnimation(&current);
+			}
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			current = 0;
+		}
+		return current;
+	}
+
+	bool AbilityInfo(void* creature, int index, int* type, int* category)
+	{
+		return creature && ReadAbility(static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creature)),
+			index, type, category);
+	}
+
+	Counters GetCounters() { return sCounters; }
 
 	void SetLogging(bool on) { sLogging = on; }
 	bool GetLogging() { return sLogging; }
