@@ -24,6 +24,15 @@ namespace Models
 	// True when the game can build this species here.
 	bool Has(uint32_t instance, uint32_t type, uint32_t group);
 
+	// FNV-1a over the type and bytes of every record (never the instance, so a body keeps its hash under an alias). 0 = no records.
+	uint32_t Hash(const std::vector<Record>& records);
+
+	// A stable instance id for "the body with this hash under this species key": non-zero and never `instance` itself.
+	uint32_t AliasInstance(uint32_t instance, uint32_t hash);
+
+	// Like Install, but files the records under another instance id (the alias): the key already stands for another body here.
+	bool InstallAlias(uint32_t aliasInstance, uint32_t type, uint32_t group, const std::vector<Record>& records);
+
 	// Guest: writes CoopModels\m_<group>_<instance>.package and registers it. False on failure.
 	bool Install(uint32_t instance, uint32_t type, uint32_t group, const std::vector<Record>& records);
 

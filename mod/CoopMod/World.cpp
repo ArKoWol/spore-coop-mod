@@ -53,6 +53,8 @@ namespace
 		float lastHostHealth = -1.0f;  // the host's health we applied last
 		DWORD lastOffsetLog = 0;
 		uint32_t species = 0;  // the species the body was made for (a hatchling's species becomes known a moment after it appears)
+		uint32_t built = 0;    // the instance of the profile it was meant to be built from (the host's avatar species may be an alias)
+		bool viaAlias = false; // that instance is an alias, not the species key itself
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
 		bool dead = false;
 	};
@@ -98,7 +100,21 @@ namespace
 		ResourceKey remoteKey;               // species of the other player's avatar
 		bool remoteKnown = false;
 		DWORD remoteSince = 0;
-		ResourceKey sentKey;                 // species of our own avatar as last sent
+		// The same key can stand for two bodies (a guest joins with a copy of the host's save, then one of them edits his
+		// creature: the key stays, the body changes). The hash of the body travels with the key; when ours differs, the other
+		// player's body is fetched and filed under an alias key.
+		uint32_t remoteHash = 0;             // hash of the other player's body as announced (0 = unknown)
+		bool remoteDirty = false;            // key or hash changed: compare again
+		bool remoteResolved = false;         // the last comparison found the key buildable here
+		uint32_t cmpStamp = 0;               // ownStamp at the last comparison
+		bool aliasWanted = false, aliasFailed = false, aliasReady = false;
+		ResourceKey remoteAlias;
+		DWORD aliasSince = 0;
+		std::map<uint32_t, ResourceKey> pendingAlias;  // species instance -> alias its incoming model chunks are filed under
+		uint32_t sentHash = 0;               // hash of our own avatar's body (0 = unreadable)
+		bool sentHashValid = false;
+		uint32_t ownStamp = 0;               // counts changes of our own key / body
+		ResourceKey sentKey;                // species of our own avatar as last sent
 		uint32_t sentSeq = 0;                // its profile sequence (changes when the editor changed the creature)
 		DWORD lastSpeciesSend = 0;
 		void* puppet = nullptr;              // the other player's puppet (a cCreatureAnimal*)
@@ -382,6 +398,124 @@ namespace
 
 	// ------------------------------------------------------------ guest
 
+	// ------------------------------------------------------------ the other player's body (both roles)
+
+	// Asks the other side for the model of `key` (the answer is filed under `key` or, with a pending alias, under the alias).
+	void RequestModel(State& s, const ResourceKey& key)
+	{
+		Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+		QueueReliable(s, w.buf);
+	}
+
+	// The alias profile exists here: puppets and mirrors of that species are built from it from now on.
+	void RefreshAlias(State& s)
+	{
+		if (s.aliasWanted && !s.aliasReady && !s.aliasFailed &&
+			Models::Has(s.remoteAlias.instanceID, s.remoteAlias.typeID, s.remoteAlias.groupID)) {
+			s.aliasReady = true;
+			s.pendingAlias.erase(s.remoteKey.instanceID);
+			Logf("world: the other player's creature %08x is ready under alias %08x", s.remoteKey.instanceID, s.remoteAlias.instanceID);
+		}
+	}
+
+	void FailAlias(State& s, const char* why)
+	{
+		if (!s.aliasFailed) {
+			s.aliasFailed = true;
+			s.aliasReady = false;
+			s.pendingAlias.erase(s.remoteKey.instanceID);
+			Logf("world: ALIAS %08x FAILED (%s), showing the other player's creature %08x with OUR body", s.remoteAlias.instanceID, why,
+				s.remoteKey.instanceID);
+		}
+	}
+
+	// Decides which key the other player's avatar is built from: his key itself, or an alias when his body differs from the one
+	// we hold under the same key. Runs when his key / hash changed, when our own body changed, and (cheaply) while his model is
+	// still missing.
+	void ResolveRemote(State& s)
+	{
+		s.remoteDirty = false;
+		s.cmpStamp = s.ownStamp;
+		const ResourceKey k = s.remoteKey;
+		DWORD now = GetTickCount();
+		Models::RegisterCached();
+		if (!Models::Has(k.instanceID, k.typeID, k.groupID)) {
+			// we have no body for this key at all: fetch it and file it under the key itself
+			s.aliasWanted = s.aliasReady = false;
+			s.remoteResolved = false;
+			State::ModelWait& wait = s.models[k.instanceID];
+			if (!wait.requested && !wait.done && !wait.failed) {
+				wait.requested = true;
+				wait.since = now;
+				RequestModel(s, k);
+				Logf("world: the other player's creature %08x is not buildable here, asking for its model", k.instanceID);
+			}
+			return;
+		}
+		s.remoteResolved = true;
+		// our body for the same key: our own avatar's hash, or read it (this runs on a change, not every frame)
+		uint32_t local = 0;
+		if (s.sentHashValid && k.instanceID == s.sentKey.instanceID && k.groupID == s.sentKey.groupID) {
+			local = s.sentHash;
+		}
+		else {
+			std::vector<Models::Record> records;
+			if (Models::Read(k.instanceID, k.typeID, k.groupID, records)) {
+				local = Models::Hash(records);
+			}
+		}
+		if (!s.remoteHash || !local || s.remoteHash == local) {
+			if (s.aliasWanted) {
+				Logf("world: the other player's creature %08x equals ours again (hash %08x), using the key itself", k.instanceID, s.remoteHash);
+			}
+			s.aliasWanted = s.aliasFailed = s.aliasReady = false;
+			s.pendingAlias.erase(k.instanceID);
+			return;
+		}
+		ResourceKey alias(Models::AliasInstance(k.instanceID, s.remoteHash), k.typeID, k.groupID);
+		if (!s.aliasWanted || s.remoteAlias.instanceID != alias.instanceID) {
+			Logf("world: the other player's creature %08x differs from ours (hash %08x vs %08x), using alias %08x", k.instanceID,
+				s.remoteHash, local, alias.instanceID);
+			s.aliasWanted = true;
+			s.aliasFailed = s.aliasReady = false;
+			s.remoteAlias = alias;
+			s.aliasSince = now;
+		}
+		if (s.aliasFailed || s.aliasReady) {
+			return;
+		}
+		if (Models::Has(alias.instanceID, alias.typeID, alias.groupID)) {
+			RefreshAlias(s);  // cached from an earlier run
+			return;
+		}
+		auto pending = s.pendingAlias.find(k.instanceID);
+		if (pending == s.pendingAlias.end() || pending->second.instanceID != alias.instanceID) {
+			// the model of K is fetched again; the chunks are filed under the alias (the wait state of K may say "done" from before)
+			s.pendingAlias[k.instanceID] = alias;
+			State::ModelWait& wait = s.models[k.instanceID];
+			wait = State::ModelWait();
+			wait.requested = true;
+			wait.since = now;
+			RequestModel(s, k);
+			Logf("world: asking for the model of %08x again, to file it under alias %08x", k.instanceID, alias.instanceID);
+		}
+	}
+
+	// The instance a mirror of the host's species `species` is to be built from (0 = unknown species). The host's avatar species
+	// can be an alias when the guest holds another body under the same key.
+	uint32_t MirrorInstance(State& s, uint32_t species)
+	{
+		auto key = s.species.find(species);
+		if (key == s.species.end()) {
+			return 0;
+		}
+		const ResourceKey& k = key->second;
+		if (s.aliasReady && s.remoteKnown && k.instanceID == s.remoteKey.instanceID && k.groupID == s.remoteKey.groupID) {
+			return s.remoteAlias.instanceID;
+		}
+		return k.instanceID;
+	}
+
 	// Builds the mirror: an EMPTY quiet herd plus an animal created into it (the way SporeCoop does it). A herd of size 1
 	// made by CreateHerd only got its animal when the game's own herd logic decided to, which happened for 23 of 99
 	// animals in the first guest test. Returns false when it has to wait (model on its way) or failed.
@@ -389,8 +523,13 @@ namespace
 	{
 		Simulator::cSpeciesProfile* profile = nullptr;
 		auto key = s.species.find(st.species);
+		uint32_t built = MirrorInstance(s, st.species);
 		if (key != s.species.end()) {
-			profile = SpeciesManager.GetSpeciesProfile(key->second);
+			ResourceKey use = key->second;
+			if (built) {
+				use.instanceID = built;  // the host's own species may be an alias (another body under the same key)
+			}
+			profile = SpeciesManager.GetSpeciesProfile(use);
 		}
 		if (!profile) {
 			// The species is not buildable here (yet). Its model is on its way from the host (see OnMessage): wait for it
@@ -432,6 +571,8 @@ namespace
 			EnsureTuning(animal);
 		}
 		m.species = st.species;
+		m.built = built;
+		m.viaAlias = key != s.species.end() && built && built != key->second.instanceID;
 		return true;
 	}
 
@@ -504,7 +645,9 @@ namespace
 				continue;
 			}
 			// grew up (or was made with another age): build the body again, the model of a baby and an adult differ
-			if ((st.age && m.age != st.age) || (st.species && m.species != st.species)) {
+			// or the host's own species is now (or no longer) built from an alias: another body under the same key
+			if ((st.age && m.age != st.age) || (st.species && m.species != st.species) ||
+				(st.species && (s.aliasReady || m.viaAlias) && m.built != MirrorInstance(s, st.species))) {
 				DestroyMirror(m);
 				m = Mirror();
 				continue;
@@ -989,14 +1132,28 @@ namespace World
 						Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
 							(void*)avatar->mpSpeciesProfile, (unsigned)avatar->mProfileSeq, (unsigned)s.sentSeq);
 					}
+					if (changed || seqChanged || !s.sentHashValid) {
+						// The key can stay while the body changes (an edit): the hash tells the other side which body this is.
+						std::vector<Models::Record> records;
+						s.sentHash = Models::Read(key.instanceID, key.typeID, key.groupID, records) ? Models::Hash(records) : 0;
+						s.sentHashValid = true;
+						++s.ownStamp;
+						Logf("world: our avatar's body hash is %08x (%d records)", s.sentHash, (int)records.size());
+					}
 					s.sentSeq = avatar->mProfileSeq;
 					s.lastSpeciesSend = now;
 					s.sentKey = key;
 					Writer w;
-					w.U8(kMsgAvatarSpecies); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
+					w.U8(kMsgAvatarSpecies); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID); w.U32(s.sentHash);
 					QueueReliable(s, w.buf);
 				}
 			}
+		}
+		if (s.remoteKnown) {
+			if (s.remoteDirty || !s.remoteResolved || s.ownStamp != s.cmpStamp) {
+				ResolveRemote(s);
+			}
+			RefreshAlias(s);
 		}
 		if (puppet && s.remoteAvatar.valid) {
 			auto p = static_cast<Simulator::cCreatureAnimal*>(puppet);
@@ -1205,7 +1362,11 @@ namespace World
 		if (data[0] == kMsgModelNone && size == 5) {
 			Reader r(data, size);
 			r.U8();
-			s.models[r.U32()].failed = true;
+			uint32_t instance = r.U32();
+			s.models[instance].failed = true;
+			if (s.pendingAlias.count(instance)) {
+				FailAlias(s, "the other side has no record for the key");
+			}
 			return;
 		}
 		if (data[0] == kMsgModel && size >= 38) {
@@ -1238,37 +1399,61 @@ namespace World
 			}
 			if (complete) {
 				wait.done = true;
-				if (!Models::Install(instance, type, group, wait.records)) {
+				auto pending = s.pendingAlias.find(instance);
+				if (pending != s.pendingAlias.end()) {
+					// the body of a key we already hold: file it under the alias (never over our own body)
+					ResourceKey alias = pending->second;
+					uint32_t got = Models::Hash(wait.records);
+					if (got != s.remoteHash) {
+						Logf("world: the model of %08x for alias %08x has hash %08x, announced %08x", instance, alias.instanceID, got, s.remoteHash);
+						FailAlias(s, "the received body is not the announced one");
+					}
+					else if (!Models::InstallAlias(alias.instanceID, type, group, wait.records)) {
+						wait.failed = true;
+						FailAlias(s, "the package could not be written or registered");
+					}
+					else if (!Models::Has(alias.instanceID, type, group)) {
+						FailAlias(s, "registered, but the game finds no profile under the alias");
+					}
+					else {
+						RefreshAlias(s);
+					}
+				}
+				else if (!Models::Install(instance, type, group, wait.records)) {
 					wait.failed = true;
 				}
 				std::vector<Models::Record>().swap(wait.records);
 			}
 			return;
 		}
-		if (data[0] == kMsgAvatarSpecies && size == 13) {
+		if (data[0] == kMsgAvatarSpecies && (size == 17 || size == 13)) {
 			Reader r(data, size);
 			r.U8();
 			ResourceKey key;
 			key.instanceID = r.U32();
 			key.typeID = r.U32();
 			key.groupID = r.U32();
+			uint32_t hash = size == 17 ? r.U32() : 0;
 			if (r.ok && key.instanceID) {
-				if (!s.remoteKnown || s.remoteKey.instanceID != key.instanceID || s.remoteKey.groupID != key.groupID) {
-					Logf("world: the other player's avatar is species %08x/%08x/%08x", key.instanceID, key.typeID, key.groupID);
+				bool keyChanged = !s.remoteKnown || s.remoteKey.instanceID != key.instanceID || s.remoteKey.groupID != key.groupID;
+				if (keyChanged) {
+					Logf("world: the other player's avatar is species %08x/%08x/%08x (body hash %08x)", key.instanceID, key.typeID, key.groupID, hash);
 					s.remoteSince = GetTickCount();
+					s.aliasWanted = s.aliasFailed = s.aliasReady = false;
+					s.pendingAlias.clear();
+					s.remoteResolved = false;
+				}
+				else if (hash != s.remoteHash) {
+					Logf("world: the other player's creature %08x has a new body (hash %08x, was %08x)", key.instanceID, hash, s.remoteHash);
+				}
+				if (keyChanged || hash != s.remoteHash) {
+					s.remoteDirty = true;
 				}
 				s.remoteKey = key;
+				s.remoteHash = hash;
 				s.remoteKnown = true;
-				Models::RegisterCached();
-				if (!Models::Has(key.instanceID, key.typeID, key.groupID)) {
-					State::ModelWait& wait = s.models[key.instanceID];
-					if (!wait.requested && !wait.done && !wait.failed) {
-						wait.requested = true;
-						wait.since = GetTickCount();
-						Writer w; w.U8(kMsgModelReq); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID);
-						QueueReliable(s, w.buf);
-						Logf("world: the other player's creature %08x is not buildable here, asking for its model", key.instanceID);
-					}
+				if (s.remoteDirty) {
+					ResolveRemote(s);
 				}
 			}
 			return;
@@ -1558,6 +1743,19 @@ namespace World
 		}
 		State& s = *sState;
 		const ResourceKey& k = s.remoteKey;
+		if (s.aliasWanted && !s.aliasFailed) {
+			// his body differs from ours under the same key: build from the alias once it is here
+			if (s.aliasReady) {
+				key[0] = s.remoteAlias.instanceID; key[1] = s.remoteAlias.typeID; key[2] = s.remoteAlias.groupID;
+				return 2;
+			}
+			if (GetTickCount() - s.aliasSince > 15000) {
+				FailAlias(s, "timeout, the body did not arrive");
+			}
+			else {
+				return 1;
+			}
+		}
 		if (Models::Has(k.instanceID, k.typeID, k.groupID)) {
 			key[0] = k.instanceID; key[1] = k.typeID; key[2] = k.groupID;
 			return 2;

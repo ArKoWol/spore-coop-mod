@@ -162,6 +162,41 @@ namespace Models
 		return ok;
 	}
 
+	uint32_t Hash(const std::vector<Record>& records)
+	{
+		if (records.empty()) {
+			return 0;
+		}
+		uint32_t h = 2166136261u;
+		for (const Record& r : records) {
+			for (int i = 0; i < 4; ++i) {
+				h = (h ^ (uint8_t)(r.type >> (8 * i))) * 16777619u;
+			}
+			for (uint8_t b : r.data) {
+				h = (h ^ b) * 16777619u;
+			}
+		}
+		return h ? h : 1;
+	}
+
+	uint32_t AliasInstance(uint32_t instance, uint32_t hash)
+	{
+		uint32_t a = (instance * 0x9E3779B1u) ^ (hash * 0x85EBCA6Bu) ^ 0xC0DE5EEDu;
+		while (a == 0 || a == instance) {
+			a = a * 1664525u + 1013904223u;
+		}
+		return a;
+	}
+
+	bool InstallAlias(uint32_t aliasInstance, uint32_t type, uint32_t group, const std::vector<Record>& records)
+	{
+		std::vector<Record> copy = records;
+		for (Record& r : copy) {
+			r.instance = aliasInstance;
+		}
+		return Install(aliasInstance, type, group, copy);
+	}
+
 	bool WritePackage(const std::wstring& path, const std::vector<Record>& records)
 	{
 		std::vector<uint8_t> bytes = BuildPackage(records);
