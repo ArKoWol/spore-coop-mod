@@ -37,6 +37,8 @@ namespace
 	const uint8_t kMsgAnim = 112;       // both ways: [112][who][animation id]; who: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else a netId
 	const DWORD kAnimRepeatMs = 400;     // the same animation of the same creature is sent at most this often
 	const DWORD kAvatarEveryMs = 200;
+	const float kPoolRadius = 100.0f;    // animals closer than this to the planet's centre are the game's pool: the host does not announce them, the guest does not remove them
+	const DWORD kDeathWaitMs = 2000;     // how long the game's own tick may turn a 0-health mirror into a corpse before we mark it dead
 	const float kFollowRadius = 150.0f;  // mirrors farther than this from our avatar are only teleported, not walked
 	const uint32_t kModelChunk = 40 * 1024;
 	const DWORD kModelWaitMs = 20000;   // after this long a missing model is replaced by a stand-in (and counted)
@@ -57,7 +59,9 @@ namespace
 		uint32_t built = 0;    // the instance of the profile it was meant to be built from (the host's avatar species may be an alias)
 		bool viaAlias = false; // that instance is an alias, not the species key itself
 		PuppetMotion::Follower follower;  // the game's locomotion walks the mirror (legs move) instead of sliding it
-		bool dead = false;
+		bool dead = false;         // the animal's own mbDead is set (a real corpse)
+		DWORD killAt = 0;          // when KillLocally was called (0 = not yet); the game's tick may finish the death for kDeathWaitMs
+		bool deathLogged = false;  // the log line that tells which way the death came was written
 		bool pinned = false;       // the corpse was placed once after the death (afterwards only when it drifts)
 		bool foodApplied = false;  // the host's food value was written into the corpse
 	};
@@ -94,7 +98,8 @@ namespace
 		std::set<uint32_t> consumed;   // netIds of animals eaten on this machine (the host removes the real ones)
 		struct CorpseInfo { float food = 0; uint32_t flags = 0; };
 		std::map<uint32_t, CorpseInfo> corpses;  // what the host told about its dead animals (kMsgCorpse), by netId
-		bool strayTuningLogged = false;          // the research log of the strays' tuning objects was written
+		bool poolLogged = false;                 // the pool animals that GuestNeuter leaves alone were logged once
+		bool strayTuningLogged = false;         // the research log of the strays' tuning objects was written
 		bool haveWorld = false;  // a snapshot arrived: the guest's own animals are strays now
 		DWORD lastNeuter = 0, lastTelemetry = 0, lastLog = 0;
 		int strays = 0, removedStrays = 0;
@@ -208,9 +213,11 @@ namespace
 		bool before = animal->mbDead;
 		DealDamage(animal, animal->mMaxHealthPoints + 100.0f, Simulator::kMelee, nullptr, 0);
 		if (logged++ < 20) {
-			// research: why can the guest not eat a mirror's corpse? what state does the replayed death leave?
-			Logf("kill: mirror %p dead %d -> %d, health %.1f, eaten %d, flags %x", (void*)animal, before ? 1 : 0, animal->mbDead ? 1 : 0,
-				animal->mHealthPoints, animal->mbHasBeenEaten ? 1 : 0, (unsigned)animal->mGeneralFlags);
+			// TakeDamage brings the health to 0 but leaves mbDead false (the SDK has no death function): the game's own tick makes the
+			// corpse (ShouldSkipAI lets it run for kDeathWaitMs), else GuestMirrors marks the animal dead. "kill: mirror N died/marked" tells which.
+			Logf("kill: mirror %p dead %d -> %d, health %.1f, eaten %d, flags %x%s", (void*)animal, before ? 1 : 0, animal->mbDead ? 1 : 0,
+				animal->mHealthPoints, animal->mbHasBeenEaten ? 1 : 0, (unsigned)animal->mGeneralFlags,
+				animal->mbDead ? " (dead at once)" : ", waiting for the game's tick");
 		}
 	}
 
@@ -309,7 +316,7 @@ namespace
 			// key: the game's pool of animals that a nest or a mating call "spawns" later. Mirroring them showed 65 copies stacked in one
 			// place at the guest, which then flew out of the ground when the call used them ("bodiless dummies, the sound comes from under
 			// the nest"). They are not announced until they have a place on the surface (the planet's radius is about 505).
-			if (animal->GetPosition().Length() < 100.0f) {
+			if (animal->GetPosition().Length() < kPoolRadius) {
 				++pooled;
 				continue;
 			}
@@ -691,11 +698,27 @@ namespace
 			if (m.animal->mbDead) {
 				m.dead = true;  // killed here by our own bite (native death, native DNA), or by the replay below
 			}
-			if (dead && !m.dead) {
-				m.dead = true;
-				KillLocally(m.animal.get());  // the host's animal died: the game plays the death, a corpse is pinned below
+			if (dead && !m.dead && !m.killAt) {
+				m.killAt = now;
+				KillLocally(m.animal.get());  // the host's animal died: 0 health now, the game's tick (ShouldSkipAI lets it run) makes the corpse
+				if (m.animal->mbDead) {
+					m.dead = true;
+				}
 			}
-			else if (!dead && !m.dead && st.maxHealth > 0.0f) {
+			else if (dead && !m.dead && now - m.killAt >= kDeathWaitMs) {
+				// the game's tick made no corpse in time: do it ourselves, else the guest can never eat it
+				m.animal->mbDead = true;
+				m.dead = true;
+				m.deathLogged = true;
+				Logf("kill: mirror %u marked dead by us (the game's tick did not, after %u ms, health %.1f)", e.first, (unsigned)(now - m.killAt),
+					m.animal->mHealthPoints);
+			}
+			if (m.dead && m.killAt && !m.deathLogged) {
+				m.deathLogged = true;
+				Logf("kill: mirror %u died by the game's tick after %u ms (health %.1f, eaten %d, flags %x)", e.first, (unsigned)(now - m.killAt),
+					m.animal->mHealthPoints, m.animal->mbHasBeenEaten ? 1 : 0, (unsigned)m.animal->mGeneralFlags);
+			}
+			if (!dead && !m.dead && st.maxHealth > 0.0f) {
 				m.animal->mMaxHealthPoints = st.maxHealth;
 				// Our own bites already lowered the health here (they are reported to the host, which echoes the new value
 				// a moment later): take the host's number only when it changed, so our hit is not undone in between.
@@ -761,7 +784,7 @@ namespace
 			const Math::Quaternion rotation(m.rot[0], m.rot[1], m.rot[2], m.rot[3]);
 			auto avatar = GameNounManager.GetAvatar();
 			bool closeBy = avatar && (m.pos - avatar->GetPosition()).Length() < kFollowRadius;
-			if (m.dead) {
+			if (m.dead || m.killAt) {  // (a mirror in its last moments, waiting for the game's tick, is held as a corpse too)
 				// A corpse must not fly away (SporeCoop found it does), but a Teleport every frame (it sets mbTeleport and resets the
 				// placement) may disturb the eat interaction: place it once after the death and again only when it drifted.
 				float drift = (m.animal->GetPosition() - m.pos).Length();
@@ -807,7 +830,7 @@ namespace
 		}
 		s.lastNeuter = now;
 		std::vector<Simulator::cCreatureAnimal*> strays;
-		int animalsTotal = 0, herdsTotal = 0;
+		int animalsTotal = 0, herdsTotal = 0, pooled = 0;
 		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
 			Simulator::cGameData* object = &*it;
 			uint32_t noun = object->GetNounID();
@@ -823,6 +846,14 @@ namespace
 			}
 			if (IsMirrorAnimal(s, object)) {
 				continue;
+			}
+			// The game's pool (animals at the planet's centre, same rule as HostTick) is left alone: the game keeps references to them,
+			// and a destroyed one came back as a "picture" clone around the nest after a mating call (two-PC test 2026-10-31).
+			if (auto candidate = object_cast<Simulator::cCreatureAnimal>(object)) {
+				if (candidate->GetPosition().Length() < kPoolRadius) {
+					++pooled;
+					continue;
+				}
 			}
 			bool pending = false;  // a mirror herd whose animal we have not picked up yet
 			for (auto& m : s.mirrors) {
@@ -840,13 +871,17 @@ namespace
 			}
 		}
 		s.strays = (int)strays.size();
+		if (pooled && !s.poolLogged) {
+			s.poolLogged = true;
+			Logf("world: %d pool animals within %.0f m of the planet's centre are left alone (not removed as strays)", pooled, kPoolRadius);
+		}
 		// Research for "hundreds of puppets inside each other after a mating call" (the guest's test of 2026-10-25): a census of what the
 		// game holds when something runs away, at most every 5 s.
 		static DWORD lastCensus = 0;
-		if (now - lastCensus > 5000 && (animalsTotal > (int)s.mirrors.size() + 15 || strays.size() > 5)) {
+		if (now - lastCensus > 5000 && (animalsTotal - pooled > (int)s.mirrors.size() + 15 || strays.size() > 5)) {
 			lastCensus = now;
-			Logf("world: census: %d animals (%d mirrors, %d strays about to go), %d herds, %d nest herds of ours", animalsTotal,
-				(int)s.mirrors.size(), (int)strays.size(), herdsTotal, (int)s.nestMirrors.size());
+			Logf("world: census: %d animals (%d mirrors, %d pool, %d strays about to go), %d herds, %d nest herds of ours", animalsTotal,
+				(int)s.mirrors.size(), pooled, (int)strays.size(), herdsTotal, (int)s.nestMirrors.size());
 		}
 		if (!s.strayTuningLogged && !strays.empty()) {
 			// Research: do all animals of a species share one tuning object (could be lent to mirrors later)? Nothing is changed.
@@ -1905,7 +1940,21 @@ namespace World
 
 	bool ShouldSkipAI(void* animal)
 	{
-		return sState && sState->haveWorld && animal != (void*)GameNounManager.GetAvatar();
+		if (!sState || !sState->haveWorld || animal == (void*)GameNounManager.GetAvatar()) {
+			return false;
+		}
+		// A mirror that was just killed (0 health, no corpse yet) gets the game's own tick for kDeathWaitMs: that is what turns a
+		// 0-health creature into a corpse (GuestMirrors marks it dead by itself if the tick does not).
+		for (auto& m : sState->mirrors) {
+			if (m.second.animal.get() == animal) {
+				if (m.second.killAt && !m.second.dead && !m.second.animal->mbDead && m.second.animal->mHealthPoints <= 0.0f &&
+					GetTickCount() - m.second.killAt < kDeathWaitMs) {
+					return false;
+				}
+				break;
+			}
+		}
+		return true;
 	}
 
 	void Reset()
