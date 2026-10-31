@@ -19,7 +19,7 @@ change), **partly**, **not done**.
 | 2f | Corpses both players can eat | the guest cannot eat a corpse (2026-10-25); the host's food value sent, corpse placed once (2026-10-31), to check. A newborn from an egg has the right species (works, 2026-10-25) |
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
-| 3b | Walking backwards, sideways, running | not done |
+| 3b | Walking backwards, sideways, running | partly (2026-10-31, 1 PC): walking and running keep up (5.2 m/s); sideways, backwards and standing look right; not seen on 2 PCs |
 | 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31 (protocol 13), to check; the guest's own creature at start (`SetSpecies`) is not done |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | partly (`kMsgAnim`, untested on two PCs) |

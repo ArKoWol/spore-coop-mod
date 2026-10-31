@@ -1789,7 +1789,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1904,6 +1904,17 @@ public:
 		}
 		else if (strcmp(sub, "menureload") == 0) {
 			MenuWorlds::ReloadMenu();
+		}
+		else if (strcmp(sub, "facing") == 0) {
+			// cycles always -> steps -> off -> always (game/PuppetMotion.h)
+			PuppetMotion::Facing next = PuppetMotion::GetFacing() == PuppetMotion::Facing::Always ? PuppetMotion::Facing::Steps
+				: PuppetMotion::GetFacing() == PuppetMotion::Facing::Steps ? PuppetMotion::Facing::Off : PuppetMotion::Facing::Always;
+			PuppetMotion::SetFacing(next);
+			App::ConsolePrintF("coop: puppet steps back and sideways: %s", PuppetMotion::FacingName(next));
+		}
+		else if (strcmp(sub, "run") == 0) {
+			PuppetMotion::SetRunning(!PuppetMotion::GetRunning());
+			App::ConsolePrintF("coop: puppet speeds up when the remote player runs %s", PuppetMotion::GetRunning() ? "on" : "off");
 		}
 		else if (strcmp(sub, "motionlog") == 0) {
 			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());

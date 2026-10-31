@@ -58,7 +58,7 @@ Full player instructions: [`package/README.txt`](package/README.txt) (shipped as
 | `coop udphost` / `coopudpjoin <ip>` | fallback over plain UDP, port 27777 (no world transfer, needs VPN or port forwarding) |
 | `coop move` / `coop walk` / `coop teleport` | how the other player's creature follows (`move` is the default) |
 | `coop echo` | test on one PC: a copy of your creature repeats you 0.4 s later, 4 m to the side |
-| `coop dump`, `coop fps`, `coop motionlog`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
+| `coop dump`, `coop fps`, `coop motionlog`, `coop facing`, `coop run`, `coop restart`, `coop modeltest` | developer diagnostics (see `CLAUDE.md`) |
 
 The game accepts exactly one word after `coop`, so joining is the separate command `coopjoin`. In the remote console
 (`console.bat`) several commands go in one line separated by `;`: `coop dump; coop status`; **Tab** completes commands

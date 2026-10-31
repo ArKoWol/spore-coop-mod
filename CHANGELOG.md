@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The puppet steps back and sideways and keeps up with the player** (exxecute; `game/PuppetMotion.cpp`, STATUS 3b). A walking
+  puppet keeps the friend's facing and gets its velocity set directly (`coop facing`: `always` / `steps` / `off`); turning it every
+  frame or turn rate 0 froze it (`FACTS.md` section 7). Stuck 1.5 s: teleported. Standing creatures (also mirrors) stop within 1 m
+  and walk up again beyond 1.5 m (a `MoveTo` every 100 ms at 0.7 m made them twitch). Tested on 1 PC (`coop echo`): walking, running,
+  sideways, backwards and standing look right. No protocol change (merged into protocol 13).
+
 - **Join flow re-planned, now ArKoWol's area** (docs only; owner's decisions D19-D22). **exxecute:** `features/JOIN_FLOW.md` was
   rewritten from your draft: a friend's world is played in a "co-op launch" (swapped in for one launch from `Games\Coop\<id>`, own
   `Game0` restored at every start), a CO-OP button replaces the star, Rich Presence and manifests come later (M1-M5). Path C is

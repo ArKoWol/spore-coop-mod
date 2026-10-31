@@ -136,8 +136,17 @@ seen in our tests.
 - **A puppet walks with the game's own locomotion even with its AI skipped**: `cLocomotiveObject::MoveTo(goal, 0.3, 0.6)` every
   100 ms on the herd animal (whose `NPCTickAI` we skip) makes it walk with leg animation; `StopMovement` stops it. Puppet speed
   up to **4.0 m/s** (seems to be the walk speed; a sprinting player at ~4.8 m/s gets 2-4 m ahead), no teleports while
-  following *(verified 2026-10-24, `coop echo`)*. `SetDesiredSpeed` is the knob to try for running. `Teleport` every frame
-  gives no leg animation.
+  following *(verified 2026-10-24, `coop echo`)*. `Teleport` every frame gives no leg animation.
+- **Speeds** *(verified 2026-10-31, `coop motionlog`)*: `GetStandardSpeed()` is 4.75 on the player's avatar and 4.0 on the puppet
+  (same species); the avatar walks at its standard speed with `mSpeedState` 2 (0 standing). Every `MoveTo` resets the desired
+  speed to the standard one; a desired speed above it gives `mSpeedState` 3 until the next `MoveTo`.
+- **A creature walked by `MoveTo` does not move while `SetOrientation` turns it away from its goal every frame**, nor with
+  `mTurnRate` (PI by default) set to 0; after turn rate 0 it stayed stuck even with the rate given back, lying flat
+  *(verified 2026-10-31)*. A creature's forward axis is its local **+Y** (walking back gives ~150 degrees, sideways ~90)
+  *(verified 2026-10-31)*. `SetOrientation` + `SetVelocity` every frame (no `MoveTo`) walks it sideways with its facing kept
+  *(verified 2026-10-31, `coop echo`)*.
+- `SetDesiredSpeed(v, 0)` right after `MoveTo` makes the puppet walk faster than its standard speed (5.2 m/s seen)
+  *(verified 2026-10-31)*.
 - **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is `coop walk` now (untested with a herd).
 - **Every creature needs a tuning object**: the game reads `*(creature + 0xE84) + 0x32C` (`cCreatureBase::field_E84`) without a
   null check (guest crashes "reading 0000032c" at `SporeApp.exe+0x948634` / `+0x76ca11`). It is filled only for creatures made

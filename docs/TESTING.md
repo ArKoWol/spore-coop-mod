@@ -1,6 +1,6 @@
 # How we test
 
-> Status: agreed · Owner: both · Updated: 2026-10-25
+> Status: agreed · Owner: both · Updated: 2026-10-31
 > Read when: before you test a change and before you call anything "done". Results go into `STATUS.md` section 5.
 
 ## 1. The two-PC test (the real test)
@@ -23,6 +23,7 @@ Never run the guest's game minimized or fullscreen in the background: a minimize
 | Telemetry (`kMsgTelemetry`) | the guest's counts in the host's log |
 | `coop echo` | one-PC puppet test: a copy of you 0.4 s later, 4 m to the side |
 | `coop motionlog`, `coop fps` | puppet motion and frame-rate diagnostics |
+| `coop facing`, `coop run` | the puppet's steps back / sideways (`always`, `steps`, `off`) and its speed matching (on / off) |
 | `tests\run_core_tests.bat` | the replication core with a fake world, no game, seconds |
 | `crash:` lines in `CoopMod.log`, link map | find a crash (`FACTS.md` section 4) |
 

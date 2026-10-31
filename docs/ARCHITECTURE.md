@@ -107,8 +107,12 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   `herd->mHerd` a few frames later; its AI is skipped by the `cCreatureAnimal::NPCTickAI` detour; the received position is
   smoothed and handed to `game/PuppetMotion.cpp`, which lets the game's locomotion walk it there (`MoveTo` to a point a little
   ahead, `StopMovement` + `SetOrientation` when the remote player stands, `Teleport` only when more than 6 m behind). The
-  remote speed comes from the received positions. A creature that stands more than 1.5 m off a standing target for 600 ms
-  is teleported there ("settle snap": blocked by a body or a hit reaction). Removed with `GameNounManager.DestroyInstance(herd)`.
+  remote speed comes from the received positions. While the remote player walks, the puppet keeps his facing and gets its
+  velocity set directly instead of `MoveTo` (steps back and sideways; `coop facing` limits it to steps >60 degrees off the
+  facing or switches it off); `MoveTo` walks a creature up to a standing target (stops within 1 m, starts again beyond 1.5 m).
+  After every `MoveTo` its desired speed is set to the remote speed when that is above its standard speed (up to x2). A
+  puppet that should walk but stands for 1.5 s while more than 1.5 m behind is teleported. A creature that stands more than
+  1.5 m off a standing target for 600 ms is teleported there ("settle snap": blocked by a body or a hit reaction). Removed with `GameNounManager.DestroyInstance(herd)`.
 - **The other player's creature**: each side sends its avatar's species key and a hash of its body (`kMsgAvatarSpecies`,
   on change and every 10 s, the hash read again each time). The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
