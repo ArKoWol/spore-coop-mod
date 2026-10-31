@@ -6,6 +6,15 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Click on the friend's creature to follow it** (exxecute; `game/FollowFriend.cpp`). Our avatar walks after it with `MoveTo`
+  (stays 3 m behind); W/A/S/D, arrows, a click elsewhere or on the friend again stop it; the own name plate shows "(following)".
+  The hovered object comes from `GameViewManager.GetHoveredObject()`. Not tested (works with `coop echo` too). No protocol change.
+
+- **Abilities, effects and voices of creatures reach the other side, protocol 14** (exxecute; `game/Actions.cpp`, STATUS 3e).
+  `PlayAnimation` alone showed only the first frames of a song, dance or mating call and no vomit. Now `PlayAbility` (non-attack),
+  the creature effect pools and `PlayVoice` are captured and replayed on the copy; effects and voices only of the avatars.
+  `coop actionlog` logs it; `coop echo` replays it on one PC. Not tested; **both must update** (protocol 14).
+
 - **Fixes from the 2026-10-31 test: clones, corpses, nests, editor** (ArKoWol; facts in `FACTS.md` sections 7-8). The guest no longer
   removes the game's pool at the planet's centre (destroyed pool animals came back as hundreds of "picture" clones); a killed mirror
   gets the game's tick for 2 s, else `mbDead` is set (it never became a corpse); the guest moves its own drawn nests to the host's

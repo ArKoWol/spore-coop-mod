@@ -54,6 +54,14 @@ namespace World
 	// 1 = known, its model is on the way (wait), 0 = unknown or not coming (use the local species).
 	int RemoteSpecies(uint32_t* key);
 
+	// Who a creature is for the other side: 0 = the host's avatar, 0xFFFFFFFF = the guest's avatar, else the host's netId of
+	// an animal. False for creatures the other side does not know (the guest's mirrors, the puppet, strangers).
+	bool WhoOf(void* creature, uint32_t* who);
+	// Our copy of `who` from the other side (the puppet or a living mirror) as a cCreatureAnimal*, nullptr if none.
+	void* CreatureOf(uint32_t who);
+	// An action animation was started on our copy of `who`: leave it standing for `ms` (PuppetMotion::Hold).
+	void HoldCreature(uint32_t who, unsigned long ms);
+
 	// Queues a reliable, ordered message for the other side (used by Objects.cpp).
 	void SendReliable(const uint8_t* data, size_t size);
 

@@ -51,6 +51,8 @@
     <ClInclude Include="Log.h" />
     <ClInclude Include="RecentHosts.h" />
     <ClInclude Include="game\PuppetMotion.h" />
+    <ClInclude Include="game\Actions.h" />
+    <ClInclude Include="game\FollowFriend.h" />
     <ClInclude Include="game\MenuWorlds.h" />
     <ClInclude Include="game\CoopMenu.h" />
     <ClInclude Include="game\CoopNet.h" />
@@ -71,6 +73,8 @@
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="RecentHosts.cpp" />
     <ClCompile Include="game\PuppetMotion.cpp" />
+    <ClCompile Include="game\Actions.cpp" />
+    <ClCompile Include="game\FollowFriend.cpp" />
     <ClCompile Include="game\MenuWorlds.cpp" />
     <ClCompile Include="game\CoopMenu.cpp" />
     <ClCompile Include="game\SaveIds.cpp" />

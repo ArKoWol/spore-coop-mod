@@ -202,7 +202,9 @@ seen in our tests.
   them change on the guest, then it stops) *(verified 2026-10-25, owner's two-PC test)*.
 - **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well, but the carnivore's vomit after a fruit,
   and the waves and notes of the mating call (only the head-up frames played) are not shown on the other machine. These come
-  from the ability and effect system, not from `PlayAnimation` *(guess; the replay of `PlayAbility` is the next try)*.
+  from the ability and effect system, not from `PlayAnimation` *(guess; `game/Actions.cpp` replays `PlayAbility`, the
+  effect pools and `PlayVoice` since 2026-10-31, not seen in the game yet)*. `PlayAbility` does not play skill abilities (glide,
+  jump, mating call, sprint, sneak) *(SDK)*.
 
 ## 9. Combat, DNA and species relations
 - `TakeDamage`'s 4th argument is a push vector; pass `(0,0,0)` *(SporeCoop)*. The animal's `TakeDamage` is entered with `this` =

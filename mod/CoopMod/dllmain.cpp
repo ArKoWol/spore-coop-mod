@@ -10,6 +10,8 @@
 #include "game/LoadTrace.h"
 #include "game/HostPanel.h"
 #include "game/NamePlates.h"
+#include "game/Actions.h"
+#include "game/FollowFriend.h"
 #include "game/CoopLaunch.h"
 #include "../../core/coop_launch.h"
 
@@ -450,7 +452,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 13;
+static const uint32_t kProtocolVersion = 14;
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1291,6 +1293,7 @@ static void RunRestartIfDue()
 static void DrivePuppet(DWORD now, bool inGame)
 {
 	if (!inGame) {
+		FollowFriend::Stop("left the creature stage");
 		return;
 	}
 	// the other player came back from the editor with another creature: build his puppet again
@@ -1349,7 +1352,10 @@ static void DrivePuppet(DWORD now, bool inGame)
 
 		// the game's locomotion walks the puppet there (leg animation), see game/PuppetMotion.cpp
 		PuppetMotion::Drive(sPuppet.get(), sPuppetPos, Math::Quaternion(sPuppetRot[0], sPuppetRot[1], sPuppetRot[2], sPuppetRot[3]));
-	}}
+	}
+	// a click on the friend's creature: our avatar follows it (game/FollowFriend.cpp)
+	FollowFriend::Update(sPuppet ? sPuppet.get() : nullptr);
+}
 
 // `coop echo`: feeds sLatest from our own avatar, delayed and shifted, instead of from the network.
 static void EchoFeed(DWORD now)
@@ -1548,6 +1554,8 @@ static void NetUpdate()
 		if (inGame) {
 			EchoFeed(GetTickCount());
 			DrivePuppet(GetTickCount(), inGame);
+			Actions::SetEchoTarget(sPuppetRaw);
+			Actions::Update();
 		}
 		return;
 	}
@@ -1773,7 +1781,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop echo | coop dump | coop hit | coop kill | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1908,6 +1916,10 @@ public:
 			PuppetMotion::SetRunning(!PuppetMotion::GetRunning());
 			App::ConsolePrintF("coop: puppet speeds up when the remote player runs %s", PuppetMotion::GetRunning() ? "on" : "off");
 		}
+		else if (strcmp(sub, "actionlog") == 0) {
+			Actions::SetLogging(!Actions::GetLogging());
+			App::ConsolePrintF("coop: action log (abilities, effects, voices) in CoopMod.log %s", Actions::GetLogging() ? "on" : "off");
+		}
 		else if (strcmp(sub, "motionlog") == 0) {
 			PuppetMotion::SetLogging(!PuppetMotion::GetLogging());
 			App::ConsolePrintF("coop: motion log in CoopMod.log %s", PuppetMotion::GetLogging() ? "on" : "off");
@@ -1916,6 +1928,7 @@ public:
 			sEcho = !sEcho;
 			sEchoStarted = false;
 			if (!sEcho) {
+				Actions::SetEchoTarget(nullptr);
 				ReleasePuppet();
 				sHaveLatest = false;
 				sPuppetInit = false;
@@ -2109,6 +2122,7 @@ void Dispose()
 	NPCTickAI_detour::detach();
 	TakeDamage_detour::detach();
 	PlayAnimation_detour::detach();
+	Actions::Detach();
 	ModeAction_detour::detach();
 	PlayMovie_detour::detach();
 	MovieUpdate_detour::detach();
@@ -2143,6 +2157,7 @@ void AttachDetours()
 	NPCTickAI_detour::attach(GetAddress(Simulator::cCreatureAnimal, NPCTickAI));
 	TakeDamage_detour::attach(GetAddress(Simulator::cCreatureAnimal, TakeDamage));
 	PlayAnimation_detour::attach(GetAddress(Simulator::cCreatureBase, PlayAnimation));
+	Actions::Attach();
 	ModeAction_detour::attach(GetAddress(App::cCreatureModeStrategy, ExecuteAction));
 	PlayMovie_detour::attach(GetAddress(Movie::MovieSystem, PlayMovie));
 	MovieUpdate_detour::attach(GetAddress(Movie::MovieSystem, Update));

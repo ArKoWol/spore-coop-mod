@@ -3,6 +3,7 @@
 #include "NamePlates.h"
 #include "CoopNet.h"
 #include "UiDraw.h"
+#include "FollowFriend.h"
 #include "../Log.h"
 
 #include <Spore\App\cViewer.h>
@@ -179,7 +180,7 @@ namespace NamePlates
 		uint64_t peer = CoopNet::PeerId();
 		std::string remote = peer ? NameOf(peer, "Friend") : puppet ? NameOf(host.myId, "You") + " (echo)" : "";
 		Place(sRemote, puppet, remote, viewer, w, h);
-		Place(sOwn, avatar, NameOf(host.myId, "You"), viewer, w, h);
+		Place(sOwn, avatar, NameOf(host.myId, "You") + (FollowFriend::IsFollowing() ? " (following)" : ""), viewer, w, h);
 	}
 
 	void Shutdown()
