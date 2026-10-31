@@ -164,6 +164,10 @@ seen in our tests.
   no corpse, so the guest cannot eat it *(verified 2026-10-31)*. Probably the death is processed in the creature's tick, which is
   skipped for mirrors *(guess)*. A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*: 100 on the host's corpses,
   200 on a fresh mirror *(verified 2026-10-31)*.
+- **Respawn**: the message `kMsgRestartAtNest` (0x04F60B92) "respawns the avatar creature at their nest" *(SDK)*; the nest is
+  the one of the avatar's herd (`mHerd->mpNest`) *(guess)*. Whether the respawned avatar is the same object, how long the death
+  lasts and whether its health goes to 0: not known yet, `respawn:` lines in `CoopMod.log` tell (`coop die`). The mod does not
+  send that message itself (calls through `IMessageManager` are not trusted, section 6).
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
   avatar 3 s after the load *(SporeCoop)*.
 

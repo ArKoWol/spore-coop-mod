@@ -13,6 +13,7 @@
 #include "game/Actions.h"
 #include "game/FollowFriend.h"
 #include "game/SelfTest.h"
+#include "game/Respawn.h"
 #include "game/CoopLaunch.h"
 #include "game/WorldTransfer.h"
 #include "game/Presence.h"
@@ -1201,6 +1202,15 @@ static void DrivePuppet(DWORD now, bool inGame)
 			ReleasePuppet();
 		}
 	}
+	// the other player is dead: no puppet until he respawns, then it is built where he is (game/Respawn.cpp)
+	if (Respawn::HidePuppet()) {
+		if (sPuppetHerd) {
+			ReleasePuppet();
+			sPuppetInit = false;
+		}
+		FollowFriend::Update(nullptr);
+		return;
+	}
 	if (sHaveLatest && !sPuppetHerd) {
 		if (SpawnPuppet()) {
 			App::ConsolePrintF("coop: remote player appeared.");
@@ -1541,6 +1551,7 @@ static void NetUpdate()
 	HostPanel::Update();
 	NamePlates::Update();
 	SelfTest::Update();
+	Respawn::Update(sEcho, sPuppetRaw);  // death and respawn of both players (game/Respawn.cpp)
 	Presence::Update();     // starts Steam in the main menu, publishes our state, scans the friends while the window is open
 	InvitePanel::Update();  // the host's invite list, the toast of an invitation in the main menu
 	if (sSteam.ready && sTransport != Transport::Steam) {
@@ -1908,6 +1919,14 @@ public:
 				sEchoStarted = false;
 			}
 			SelfTest::Start();
+		}
+		else if (strcmp(sub, "die") == 0) {
+			// game/Respawn.cpp: kills our avatar, checks the respawn at the own nest and the echo puppet
+			if (!sEcho) {
+				sEcho = true;
+				sEchoStarted = false;
+			}
+			Respawn::StartDieTest();
 		}
 		else if (strcmp(sub, "echo") == 0) {
 			sEcho = !sEcho;

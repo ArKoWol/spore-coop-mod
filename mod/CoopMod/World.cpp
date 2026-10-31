@@ -6,6 +6,7 @@
 #include "Objects.h"
 #include "game/PuppetMotion.h"
 #include "game/Actions.h"
+#include "game/Respawn.h"
 #include "../../core/coop_core.h"
 
 #include <algorithm>
@@ -1467,7 +1468,8 @@ namespace World
 			s.lastAvatarSend = now;
 			if (auto avatar = GameNounManager.GetAvatar()) {
 				Writer w;
-				w.U8(kMsgAvatar); w.F32(avatar->mHealthPoints); w.F32(avatar->mMaxHealthPoints); w.F32(avatar->GetScale());
+				w.U8(kMsgAvatar); w.F32(Respawn::ReportedHealth(avatar));  // 0 while dead (game/Respawn.cpp)
+				w.F32(avatar->mMaxHealthPoints); w.F32(avatar->GetScale());
 				sSendUnreliable(w.buf.data(), (uint32_t)w.buf.size());
 			}
 		}
@@ -1538,7 +1540,8 @@ namespace World
 			auto p = static_cast<Simulator::cCreatureAnimal*>(puppet);
 			if (s.remoteAvatar.maxHealth > 0.0f) {
 				p->mMaxHealthPoints = s.remoteAvatar.maxHealth;
-				p->mHealthPoints = s.remoteAvatar.health;
+				// never 0 on the puppet: the game's death of a puppet would leave a corpse (game/Respawn.cpp removes it instead)
+				p->mHealthPoints = s.remoteAvatar.health > 0.0f ? s.remoteAvatar.health : 0.01f * s.remoteAvatar.maxHealth;
 			}
 			if (s.remoteAvatar.scale > 0.0f && fabsf(p->GetScale() - s.remoteAvatar.scale) > 0.001f) {
 				p->SetScale(s.remoteAvatar.scale);
@@ -1700,7 +1703,7 @@ namespace World
 			float damage = r.F32();
 			int type = r.U8();
 			auto avatar = GameNounManager.GetAvatar();
-			if (r.ok && avatar && damage > 0.0f && damage <= 1000.0f) {
+			if (r.ok && avatar && damage > 0.0f && damage <= 1000.0f && !Respawn::OwnDead()) {  // a late hit on our dead avatar is dropped
 				++s.damageApplied;
 				DealDamage(avatar, damage, type, nullptr, 0);
 				if (s.damageLogged < 40) {
@@ -2111,7 +2114,7 @@ namespace World
 				++s.damageLogged;
 				Logf("damage: host, hit on the guest's puppet: %.1f (type %d) -> sent to the guest", damage, type);
 			}
-			if (damage > 0.0f) {
+			if (damage > 0.0f && !Respawn::RemoteDead()) {  // the guest is dead: no hit for his respawned creature
 				Writer w;
 				w.U8(kMsgDamage); w.F32(damage); w.U8((uint8_t)type);
 				QueueReliable(s, w.buf);
@@ -2190,6 +2193,14 @@ namespace World
 		delete sState->guest;
 		delete sState;
 		sState = nullptr;
+	}
+
+	int RemoteAlive()
+	{
+		if (!sState || !sState->remoteAvatar.valid || !(sState->remoteAvatar.maxHealth > 0.0f)) {
+			return -1;
+		}
+		return sState->remoteAvatar.health > 0.0f ? 1 : 0;
 	}
 
 	int RemoteSpecies(uint32_t* key)

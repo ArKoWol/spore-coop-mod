@@ -26,7 +26,7 @@ change), **partly**, **not done**.
 | 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
 | 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite goes through the host (no crash since, owner 2026-10-31), no DNA yet |
 | 4b | Host damage and deaths | works |
-| 4c | PvP, death and respawn at the own nest, no reward | not done |
+| 4c | PvP, death and respawn at the own nest, no reward | respawn built 2026-10-31 (`game/Respawn.cpp`, `coop die`), not run yet, to check on 2 PCs; PvP death goes through the same path (no reward), not seen |
 | 4d | Hit and get-hit animations of mirrors | not done |
 | 5a | Separate DNA / brain / parts per player, saved in the host's save | not done |
 | 5b | Stage change when both are ready | not done |
