@@ -76,7 +76,8 @@ namespace
 		HostWorld host;
 		std::map<void*, uint32_t> ids;             // game object -> netId
 		std::map<uint32_t, ResourceKey> speciesSent;
-		std::map<void*, ResourceKey> profileKeys;  // species profile -> its key (see SpeciesKeyOf)
+		struct ProfileKey { ResourceKey key; uint32_t raw[3] = { 0, 0, 0 }; };  // the key found, and the raw mCreatureKey it was found for
+		std::map<void*, ProfileKey> profileKeys;   // species profile -> its key (see KeyOfProfile; recomputed when the raw key changes)
 		std::map<void*, DWORD> unresolvedSince;    // animal -> when we first saw it without a species
 		DWORD lastTick = 0, lastFull = 0;
 		bool fullNow = false;
@@ -129,6 +130,13 @@ namespace
 		uint32_t ownStamp = 0;               // counts changes of our own key / body
 		ResourceKey sentKey;                // species of our own avatar as last sent
 		uint32_t sentSeq = 0;                // its profile sequence (changes when the editor changed the creature)
+		DWORD lastOwnCheck = 0;              // last time the avatar's key was looked at
+		ResourceKey wantedKey;               // the key we last wanted to announce (the profile's creature key, else the avatar's species key)
+		bool ownFallback = false;            // the wanted key had no readable body: the avatar's species key was sent instead
+		DWORD lastDiag = 0;                  // diagnostics of the avatar's profile (research: what does the editor change?)
+		bool diagValid = false;
+		void* diagProfile = nullptr;
+		uint32_t diagRaw[3] = { 0, 0, 0 }, diagSpecies[3] = { 0, 0, 0 }, diagSeq = 0;
 		DWORD lastSpeciesSend = 0;
 		void* puppet = nullptr;              // the other player's puppet (a cCreatureAnimal*)
 		DWORD lastAvatarSend = 0;
@@ -273,22 +281,40 @@ namespace
 		if (!profile) {
 			return ResourceKey();
 		}
+		// The avatar's own profile: the key we announce for the avatar (after an edit it is the profile's new creature key, which the
+		// SpeciesManager may not map back to this profile; every animal of the player's species shares that profile).
+		if (s.sentKey.instanceID) {
+			auto avatar = GameNounManager.GetAvatar();
+			if (avatar && avatar->mpSpeciesProfile == profile) {
+				return s.sentKey;
+			}
+		}
+		uint32_t raw[3] = { 0, 0, 0 };
+		const bool readable = ReadProfileKey(profile, raw);
 		auto cached = s.profileKeys.find(profile);
 		if (cached != s.profileKeys.end()) {
-			return cached->second;
+			const State::ProfileKey& c = cached->second;
+			// An edit in the creature editor changes the profile's key in place: the cached answer is only good for the raw key it was made for.
+			if (!readable || (c.raw[0] == raw[0] && c.raw[1] == raw[1] && c.raw[2] == raw[2])) {
+				return c.key;
+			}
+			Logf("world: species profile %p changed its raw key %08x/%08x/%08x -> %08x/%08x/%08x", (void*)profile, c.raw[0], c.raw[1], c.raw[2],
+				raw[0], raw[1], raw[2]);
 		}
 		// Iterating SpeciesManager.mSpeciesProfiles crashed the host (CoopMod.dll+0x159d0 in HostNests, "reading 3ea99f65": the
 		// ModAPI layout of that hash map does not match this game build). The key of a profile is stored in the profile itself
 		// (mCreatureKey, +0x504); a key is accepted only if the game maps it back to the same profile.
 		ResourceKey found;
-		uint32_t raw[3] = { 0, 0, 0 };
-		if (ReadProfileKey(profile, raw)) {
+		if (readable) {
 			ResourceKey candidate(raw[0], raw[1], raw[2]);
 			if (candidate.instanceID && SpeciesManager.GetSpeciesProfile(candidate) == profile) {
 				found = candidate;
 			}
 		}
-		s.profileKeys[profile] = found;
+		State::ProfileKey entry;
+		entry.key = found;
+		entry.raw[0] = raw[0]; entry.raw[1] = raw[1]; entry.raw[2] = raw[2];
+		s.profileKeys[profile] = entry;
 		Logf("world: species profile %p -> key %08x/%08x/%08x%s", (void*)profile, found.instanceID, found.typeID, found.groupID,
 			found.instanceID ? "" : " (unknown)");
 		return found;
@@ -1374,6 +1400,51 @@ namespace World
 		s.corpseSent.clear();
 	}
 
+	bool SameKey(const ResourceKey& a, const ResourceKey& b)
+	{
+		return a.instanceID == b.instanceID && a.typeID == b.typeID && a.groupID == b.groupID;
+	}
+
+	// The key our avatar is announced under: the creature key of its species profile when it has one (the editor may change the shared
+	// profile in place to a NEW key while avatar->mSpeciesKey stays), else the avatar's species key.
+	ResourceKey WantedOwnKey(Simulator::cCreatureAnimal* avatar)
+	{
+		ResourceKey key = avatar->mSpeciesKey;
+		uint32_t raw[3] = { 0, 0, 0 };
+		if (avatar->mpSpeciesProfile && ReadProfileKey(avatar->mpSpeciesProfile, raw) && raw[0]) {
+			key = ResourceKey(raw[0], raw[1], raw[2]);
+		}
+		return key;
+	}
+
+	// Research log, once a second, only changes: the avatar's profile pointer, the creature key inside it, the avatar's species key and
+	// the profile sequence. Shows what the creature editor really changes.
+	void LogAvatarProfile(State& s, Simulator::cCreatureAnimal* avatar, DWORD now)
+	{
+		if (now - s.lastDiag < 1000) {
+			return;
+		}
+		s.lastDiag = now;
+		void* profile = (void*)avatar->mpSpeciesProfile;
+		uint32_t raw[3] = { 0, 0, 0 };
+		if (profile) {
+			ReadProfileKey(avatar->mpSpeciesProfile, raw);
+		}
+		const uint32_t species[3] = { avatar->mSpeciesKey.instanceID, avatar->mSpeciesKey.typeID, avatar->mSpeciesKey.groupID };
+		const uint32_t seq = avatar->mProfileSeq;
+		if (s.diagValid && profile == s.diagProfile && seq == s.diagSeq && !memcmp(raw, s.diagRaw, sizeof(raw)) && !memcmp(species, s.diagSpecies, sizeof(species))) {
+			return;
+		}
+		Logf("world: avatar profile %p creature key %08x/%08x/%08x, species key %08x/%08x/%08x, sequence %u (was %p %08x/%08x/%08x, %08x/%08x/%08x, %u)",
+			profile, raw[0], raw[1], raw[2], species[0], species[1], species[2], (unsigned)seq,
+			s.diagProfile, s.diagRaw[0], s.diagRaw[1], s.diagRaw[2], s.diagSpecies[0], s.diagSpecies[1], s.diagSpecies[2], (unsigned)s.diagSeq);
+		s.diagValid = true;
+		s.diagProfile = profile;
+		memcpy(s.diagRaw, raw, sizeof(raw));
+		memcpy(s.diagSpecies, species, sizeof(species));
+		s.diagSeq = seq;
+	}
+
 	void Update(bool host, bool inGame, void* puppet)
 	{
 		State& s = S();
@@ -1399,33 +1470,59 @@ namespace World
 			}
 		}
 		// The species of our own avatar goes to the other side now and when it changes (the player came back from the editor with
-		// another body) and every 10 s; the other side builds our puppet from it.
-		if (now - s.lastSpeciesSend >= 1000) {
+		// another body) and every 10 s; the other side builds our puppet from it. The key is the creature key of the avatar's profile
+		// (the editor changes it in place, avatar->mSpeciesKey stays), as long as a body can be read under it.
+		if (now - s.lastOwnCheck >= 1000) {
+			s.lastOwnCheck = now;
 			if (auto avatar = GameNounManager.GetAvatar()) {
-				const ResourceKey& key = avatar->mSpeciesKey;
-				bool changed = key.instanceID != s.sentKey.instanceID || key.groupID != s.sentKey.groupID;
-				bool seqChanged = avatar->mProfileSeq != s.sentSeq;
-				if (key.instanceID && (changed || seqChanged || now - s.lastSpeciesSend >= 10000)) {
-					if (changed || seqChanged) {
-						Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
-							(void*)avatar->mpSpeciesProfile, (unsigned)avatar->mProfileSeq, (unsigned)s.sentSeq);
-					}
-					// The key can stay while the body changes (an edit): the hash tells the other side which body this is. It is read again
-					// with every send (every 10 s too): the editor may write the new body after the profile sequence changed.
+				LogAvatarProfile(s, avatar, now);
+				const ResourceKey wanted = WantedOwnKey(avatar);
+				const bool wantedChanged = !SameKey(wanted, s.wantedKey);
+				const bool seqChanged = avatar->mProfileSeq != s.sentSeq;
+				// while the new key has no body yet (fallback) it is tried again every second
+				if (wanted.instanceID && (wantedChanged || seqChanged || s.ownFallback || now - s.lastSpeciesSend >= 10000)) {
 					std::vector<Models::Record> records;
-					uint32_t hash = Models::Read(key.instanceID, key.typeID, key.groupID, records, true) ? Models::Hash(records) : 0;
-					if (changed || !s.sentHashValid || hash != s.sentHash) {
-						s.sentHash = hash;
-						s.sentHashValid = true;
-						++s.ownStamp;
-						Logf("world: our avatar's body hash is %08x (%d records)", s.sentHash, (int)records.size());
+					ResourceKey key = wanted;
+					bool read = Models::Read(key.instanceID, key.typeID, key.groupID, records, true);
+					bool fallback = false;
+					if (!read && !SameKey(wanted, avatar->mSpeciesKey) && avatar->mSpeciesKey.instanceID) {
+						// no body under the profile's key (yet): keep announcing the avatar's species key, nothing breaks
+						fallback = true;
+						key = avatar->mSpeciesKey;
+						read = Models::Read(key.instanceID, key.typeID, key.groupID, records, true);
 					}
-					s.sentSeq = avatar->mProfileSeq;
-					s.lastSpeciesSend = now;
-					s.sentKey = key;
-					Writer w;
-					w.U8(kMsgAvatarSpecies); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID); w.U32(s.sentHash);
-					QueueReliable(s, w.buf);
+					if (wantedChanged || fallback != s.ownFallback) {
+						Logf("world: our avatar's profile key %08x/%08x/%08x: %s (species key %08x/%08x/%08x, game maps the profile key to %s)",
+							wanted.instanceID, wanted.typeID, wanted.groupID,
+							fallback ? "NO readable body under it, announcing the species key" : "announcing it",
+							avatar->mSpeciesKey.instanceID, avatar->mSpeciesKey.typeID, avatar->mSpeciesKey.groupID,
+							SpeciesManager.GetSpeciesProfile(wanted) == avatar->mpSpeciesProfile ? "our profile" : "another profile or none");
+					}
+					s.wantedKey = wanted;
+					s.ownFallback = fallback;
+					const bool changed = !SameKey(key, s.sentKey);
+					const uint32_t hash = read ? Models::Hash(records) : 0;
+					const bool hashChanged = !s.sentHashValid || hash != s.sentHash;
+					if (changed || seqChanged || wantedChanged || hashChanged || now - s.lastSpeciesSend >= 10000) {
+						if (changed || seqChanged) {
+							Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
+								(void*)avatar->mpSpeciesProfile, (unsigned)avatar->mProfileSeq, (unsigned)s.sentSeq);
+						}
+						// The key can stay while the body changes (an edit): the hash tells the other side which body this is. It is read again
+						// with every send (every 10 s too): the editor may write the new body after the profile sequence changed.
+						if (changed || hashChanged) {
+							s.sentHash = hash;
+							s.sentHashValid = true;
+							++s.ownStamp;
+							Logf("world: our avatar's body hash is %08x (%d records)", s.sentHash, (int)records.size());
+						}
+						s.sentSeq = avatar->mProfileSeq;
+						s.lastSpeciesSend = now;
+						s.sentKey = key;
+						Writer w;
+						w.U8(kMsgAvatarSpecies); w.U32(key.instanceID); w.U32(key.typeID); w.U32(key.groupID); w.U32(s.sentHash);
+						QueueReliable(s, w.buf);
+					}
 				}
 			}
 		}
