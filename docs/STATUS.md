@@ -19,7 +19,7 @@ change), **partly**, **not done**.
 | 2f | Corpses both players can eat | the guest cannot eat a corpse (2026-10-25); the host's food value sent, corpse placed once (2026-10-31), to check. A newborn from an egg has the right species (works, 2026-10-25) |
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
-| 3b | Walking backwards, sideways, running | partly (2026-10-31, 1 PC): walking and running keep up (5.2 m/s); sideways, backwards and standing look right; not seen on 2 PCs |
+| 3b | Walking backwards, sideways, running | works (2 PCs, 2026-10-31) |
 | 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31 (protocol 13), to check; the guest's own creature at start (`SetSpecies`) is not done |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | partly (`kMsgAnim`, untested on two PCs) |
@@ -58,6 +58,7 @@ Newest first. One line per test: date, build (commit), who, what was tested, res
 
 | Date | Build | Who | What | Result |
 |---|---|---|---|---|
+| 2026-10-31 | 3df9d61 (protocol 13) | exxecute + friend | the other player walking, running, sideways, backwards, standing | works: the puppet keeps up, keeps the facing, does not twitch when standing |
 | 2026-10-25 | c785a3b era (protocol 12) | both | species change, mating, corpses, fruit, fights | host edit changes the look of everything of the host's species and of the guest's puppet on the host, the guest sees nothing new (key unchanged?); many animals gather at the nest after the mating call on the guest; the guest cannot eat a corpse, the host can; fruit at other places; the real animal stood elsewhere than its mirror in a fight |
 | 2026-10-25 | 8d35044 era (protocol 11) | both | eggs, bites, eating, animations | newborn has the right species; guest crashed on the lethal bite (fixed f632199); fruit does not vanish when eaten (switched off, to redo); eating plays, carnivore vomit and mating-call effects do not; trees/fruit jump for a few seconds at the start |
 | 2026-10-25 | 287fc81 era | both | nests, animals, plants, actions | endless nests and 25 of 99 animals found and fixed; guest bites reach the host; guest animations arrive |
