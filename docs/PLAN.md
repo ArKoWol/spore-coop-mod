@@ -77,6 +77,29 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 5. **Civilization**: two civilizations, PvP, the winner becomes home.
 6. **Space**: one empire, two ships, shared money and missions.
 
+### 7.1 Creature stage priorities (MoSCoW)
+**Proposed by exxecute on 2026-10-31, not yet agreed by ArKoWol.** Once agreed, it gets a line in `DECISIONS.md`. The test:
+can two players play the creature stage for several evenings without losing progress? Numbers are `STATUS.md` section 1.
+
+| Priority | Mechanic | STATUS | Who |
+|---|---|---|---|
+| Must | stability: no clones at the nest, the guest leaves and returns | 1, 6 | ArKoWol |
+| Must | the guest eats corpses | 2f | exxecute |
+| Must | the guest's lethal hit applied on his machine, he gets the DNA | 4a | exxecute |
+| Must | the guest's own creature from the start (`SetSpecies`), editor changes seen by the friend | 3c | exxecute |
+| Must | the guest's progress in the host's save (sidecar, section 8) | 5a | ArKoWol |
+| Must | a dead player respawns at his own nest | 4c | exxecute |
+| Must | the two players' species are allies | 2g | ArKoWol |
+| Should | the host's nests on the guest | 2b | ArKoWol |
+| Should | species relation tables, shared extinction | 2g | ArKoWol |
+| Should | checkpoints: nest move together, transition to the tribe stage | 5b | ArKoWol |
+| Should | the guest's social mini-game, simplified (section 3, weak spot) | 3e | exxecute |
+| Should | check: the puppet's health and size, mirrors in fights | 3d, 2a | exxecute, ArKoWol |
+| Could | shared fruit; song and dance animations; hit animations; eggs; plants; follow the friend; PvP rewards; join flow M5 | 2c-2e, 3e, 3f, 4c, 4d | - |
+| Won't | pack followers (D1), more than two players, host migration, exact sync of every animation | - | - |
+
+Join flow M5 waits until the Musts are done; M1-M4 are only checked on 2 PCs.
+
 ## 8. Save model
 The host's save is the world. The guest's personal data (species and creature file, DNA, brain level, parts, relation table,
 and later his tribe/civ identity) is written by the host into a sidecar `Game0\coop_players.json` next to the save, on every
