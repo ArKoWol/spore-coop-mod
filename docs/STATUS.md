@@ -48,8 +48,8 @@ Animals that waited for their species were never announced (25 of 99 reached the
 ## 3. Who does what
 | Who | Area | Now |
 |---|---|---|
-| ArKoWol + Claude | world truth and lifecycle, the plan; since 2026-10-31 also the join flow (`features/JOIN_FLOW.md`) | creature-stage fixes (protocol 13, to check); join flow M1-M4 to check on 2 PCs. Proposed (2026-10-31, `PLAN.md` 7.1, waits for ArKoWol): stability, guest progress in the save, players' species allied |
-| exxecute + Claude | how the other player looks and acts (models, animation, walking), menu UI | proposed (2026-10-31, `PLAN.md` 7.1, waits for ArKoWol): guest's own creature and edits (3c), guest eats corpses (2f), guest's lethal hit and DNA (4a), respawn at the own nest (4c) |
+| ArKoWol + Claude | world truth and lifecycle, the plan; since 2026-10-31 also the join flow (`features/JOIN_FLOW.md`) | creature-stage fixes (protocol 13, to check); join flow M1-M4 to check on 2 PCs. Next (`PLAN.md` 7.1, D23): stability, guest progress in the save, players' species allied |
+| exxecute + Claude | how the other player looks and acts (models, animation, walking), menu UI | next (`PLAN.md` 7.1, D23): guest's own creature and edits (3c), guest eats corpses (2f), guest's lethal hit and DNA (4a), respawn at the own nest (4c) |
 
 ## 4. Known gaps in the repo
 - `README.md`'s player table is kept short and points here.

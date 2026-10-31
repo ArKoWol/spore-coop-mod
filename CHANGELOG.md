@@ -6,10 +6,9 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
-- **Creature-stage priorities (MoSCoW) and a new split of the work, proposed** (exxecute; docs only, `PLAN.md` 7.1, `STATUS.md` 3).
-  Seven Musts for playable co-op; exxecute takes the guest's own creature, corpses, the guest's DNA for a kill and respawn;
-  join flow M5 waits. **ArKoWol:** this edits your `PLAN.md`; please agree or change it, then log it in `DECISIONS.md`.
-  Not tested (no code); no protocol change.
+- **Creature-stage priorities (MoSCoW) and a new split of the work, agreed (D23)** (exxecute; docs only, `PLAN.md` 7.1,
+  `STATUS.md` 3). Seven Musts for playable co-op; exxecute takes the guest's own creature, corpses, the guest's DNA for a kill
+  and respawn; join flow M5 waits. Proposed by exxecute, agreed by ArKoWol on 2026-10-31. Not tested (no code); no protocol change.
 
 - **Automatic one-PC test of creature actions: `coop selftest` and `tests\actions_test.ps1`** (exxecute; `game/SelfTest.cpp`). With
   the echo puppet (now fed through the network message bytes, plain animations too) it plays abilities, the vomit animation and

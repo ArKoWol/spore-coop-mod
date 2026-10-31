@@ -78,7 +78,7 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 6. **Space**: one empire, two ships, shared money and missions.
 
 ### 7.1 Creature stage priorities (MoSCoW)
-**Proposed by exxecute on 2026-10-31, not yet agreed by ArKoWol.** Once agreed, it gets a line in `DECISIONS.md`. The test:
+Agreed by ArKoWol on 2026-10-31 (`DECISIONS.md` D23). The test:
 can two players play the creature stage for several evenings without losing progress? Numbers are `STATUS.md` section 1.
 
 | Priority | Mechanic | STATUS | Who |

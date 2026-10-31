@@ -7,9 +7,10 @@
 Newest first. Each line: what was decided, and which earlier decision it replaces. `PLAN.md` always follows the newest
 decisions.
 
-## 2026-10-31: join flow (`features/JOIN_FLOW.md`)
+## 2026-10-31: join flow (`features/JOIN_FLOW.md`) and creature-stage priorities
 | # | Decision | Replaces |
 |---|---|---|
+| D23 | Creature stage: the MoSCoW priorities and the split of work in `PLAN.md` 7.1 (proposed by exxecute, agreed by ArKoWol); exxecute takes the guest's own creature, corpses, the guest's DNA for a kill and respawn; join flow M5 waits until the Musts are done | D5 for these items |
 | D22 | Old installs whose `Game0` is a host's world: the menu asks once whether to restore the own save from `Game0.coopbackup*`; nothing is deleted | - |
 | D21 | The guest starts joining from a CO-OP button in the main menu; the CO-OP star goes away | the CO-OP star of 2026-10-25 |
 | D20 | A friend's world is played in a "co-op launch": swapped in place of `Game0` for one launch from `Games\Coop\<id>`, the own `Game0` restored at every start; entering costs one restart (path C parked) | the permanent swap into `Game0.coopbackupN` |
