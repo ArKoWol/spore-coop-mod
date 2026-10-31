@@ -95,7 +95,7 @@ namespace Models
 		return SpeciesManager.GetSpeciesProfile(ResourceKey(instance, type, group)) != nullptr;
 	}
 
-	bool Read(uint32_t instance, uint32_t type, uint32_t group, std::vector<Record>& out)
+	bool Read(uint32_t instance, uint32_t type, uint32_t group, std::vector<Record>& out, bool quiet)
 	{
 		out.clear();
 		// a creature key (type crt) is stored as a `bem` record; ask the game which record types belong to it
@@ -129,8 +129,10 @@ namespace Models
 				}
 			}
 			db->CloseRecord(record);
-			Logf("models: species %08x/%08x/%08x record type %08x: %d bytes from %ls", instance, type, group, recordType,
-				(int)r.data.size(), (const wchar_t*)db->GetLocation());
+			if (!quiet) {
+				Logf("models: species %08x/%08x/%08x record type %08x: %d bytes from %ls", instance, type, group, recordType,
+					(int)r.data.size(), (const wchar_t*)db->GetLocation());
+			}
 			if (!r.data.empty()) {
 				out.push_back(std::move(r));
 			}

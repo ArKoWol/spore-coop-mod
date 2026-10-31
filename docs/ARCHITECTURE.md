@@ -1,6 +1,6 @@
 # How the mod works now
 
-> Status: reference · Owner: both · Updated: 2026-10-25
+> Status: reference · Owner: both · Updated: 2026-10-31
 > Read when: before you change the mod's code, the protocol or the tools. It describes the code as it is, not the plan
 > (the plan is `PLAN.md`). Update it in the same change that makes it wrong.
 
@@ -48,7 +48,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
   relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **12**. Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **13**. Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -67,9 +67,10 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | 108 `kMsgDamage` | host -> guest | apply this damage to your own avatar |
 | 109 / 110 `kMsgManifest` / `kMsgRemove` | both | object manifest and removals (`Objects.h`; applying them is switched off) |
 | 112 `kMsgAnim` | both | creature (0 = host avatar, 0xFFFFFFFF = guest avatar, else netId) started animation id |
-| 113 `kMsgNests` | host -> guest | the host's nests (position, species), every 20 s and on connect |
+| 113 `kMsgNests` | host -> guest | the host's nests (position, species, orientation, model key, scale), every 20 s and on connect |
 | 114 `kMsgEaten` | guest -> host | the guest ate this animal's corpse (netId); the host removes the real one |
-| 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar; the receiver builds the puppet from it (model requests go both ways) |
+| 115 `kMsgAvatarSpecies` | both | species key of the sender's avatar and a hash of its body; the receiver builds the puppet from it (model requests go both ways) |
+| 116 `kMsgCorpse` | host -> guest | once per dead animal: netId, food value, flags (the guest writes the food value into the corpse) |
 
 ## 5. World transfer (joining)
 When a client first contacts the host, the host sends the files of `%APPDATA%\Spore\Games\Game0` (about 3 MB, 60 KB chunks, a
@@ -106,22 +107,31 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   `herd->mHerd` a few frames later; its AI is skipped by the `cCreatureAnimal::NPCTickAI` detour; the received position is
   smoothed and handed to `game/PuppetMotion.cpp`, which lets the game's locomotion walk it there (`MoveTo` to a point a little
   ahead, `StopMovement` + `SetOrientation` when the remote player stands, `Teleport` only when more than 6 m behind). The
-  remote speed comes from the received positions. Removed with `GameNounManager.DestroyInstance(herd)`. Today it is built
-  from the **local** avatar's species.
+  remote speed comes from the received positions. A creature that stands more than 1.5 m off a standing target for 600 ms
+  is teleported there ("settle snap": blocked by a body or a hit reaction). Removed with `GameNounManager.DestroyInstance(herd)`.
+- **The other player's creature**: each side sends its avatar's species key and a hash of its body (`kMsgAvatarSpecies`,
+  on change and every 10 s, the hash read again each time). The puppet is built from that key. When the receiver holds
+  another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
+  it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);
+  the puppet and, on the guest, the mirrors of the host's species are built from the alias. A failed alias is logged and
+  the key itself is used.
 - **Host side of the world**: every 100 ms the `cCreatureAnimal`s (not the avatar, not the puppet) go into `HostWorld`
   (`core/coop_core.h`); deltas of 20 entities on channel 2, spawn/destroy events, a full snapshot every 10 s and all species
   definitions with every full snapshot on channel 3. An animal with an unknown species is held back up to 3 s. Every entity
   carries position, orientation, scale, age, health and the flags dead / alpha.
 - **Mirrors** (the host's animals on the guest): each in its own empty, disabled herd of one, no nest (`World.cpp`
   `MakeMirror`), built with the host's age (rebuilt when age or species change), with scale, health and alpha applied on
-  every update; AI skipped (`World::ShouldSkipAI`); within 150 m walked by `PuppetMotion::Follower`, farther ones and
-  corpses teleported. A dead one is killed locally once (`KillLocally`) and pinned to the corpse position. The guest's own
+  every update; AI skipped (`World::ShouldSkipAI`); within 150 m walked by `PuppetMotion::Follower`, farther ones
+  teleported. A dead one is killed locally once (`KillLocally`), placed at the corpse position once and again only
+  when it drifts more than 0.3 m; the host's food value (`kMsgCorpse`) is written into it. The host does not announce
+  animals within 100 m of the planet's centre (the game's spawn pool, `FACTS.md` section 8). The guest's own
   animals are removed as strays every 0.5 s. A species the guest cannot build waits up to 20 s for its model, then becomes a
   counted stand-in. The guest reports its counts every 2 s (`kMsgTelemetry`).
-- **Nests**: the guest removes its own nests once (except its avatar's) and makes the host's ones as quiet herds with a nest
-  (`CreateHerd(..., createNest = true)`), a few per half second, trusting only its own record of what it made.
-- **Animations**: the same animation of the same creature is sent at most every 400 ms; a standing creature gets no stop/turn
-  orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
+- **Nests**: the guest removes its own nests once (except its avatar's) and makes the host's ones as enabled herds of target
+  size 0 with a nest (`CreateHerd(..., createNest = true)`), a few per half second, trusting only its own record of what it
+  made; each nest is teleported to the host's place and gets the host's orientation, scale and model key.
+- **Animations**: the same animation of the same creature is sent at most every 400 ms; a creature within 1 m of its target
+  gets no stop/turn orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
 - **Avatars**: both sides send their own avatar's health, max health and size 5 times a second (`kMsgAvatar`) and show them
   on their puppet of the other player.
 - **Damage** (PLAN rule 3, the actor decides): the guest's own bite on a mirror is applied by the game on his machine at once

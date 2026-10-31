@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Four fixes from the 2026-10-25 test, protocol 13** (ArKoWol). (1) Creature edits: `kMsgAvatarSpecies` carries a hash of the body; the
+  same key with another body is fetched and built under an alias key (puppet, host-species mirrors). (2) Corpses: the host sends each
+  corpse's food value (`kMsgCorpse` 116), the corpse is placed once, not every frame. (3) Fights: "settle snap" in `PuppetMotion`.
+  (4) Nests: the host sends orientation, scale and model key, the guest sets them. Built, not tested; **both must update**. Look for
+  log lines `world: ... alias`, `corpse:`, `eat:`, `motion: settle snap`, `nests: made one` (details: `ARCHITECTURE.md` section 7).
+
 - **Cause of the "bodiless dummies" found in the dumps; nests try to show** (ArKoWol). 65 of the 101 animals sit at the planet's centre (the game's pool for
   mating calls and nests); the host mirrored them, so the guest saw 65 stacked copies that flew out of the ground. The host no longer announces
   animals within 100 m of the centre. The herds of nests we make stay enabled (nests were present in the guest's dump but invisible).

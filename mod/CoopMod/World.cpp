@@ -1272,10 +1272,12 @@ namespace World
 						Logf("world: our avatar is species %08x/%08x/%08x, profile %p, profile sequence %u (was %u)", key.instanceID, key.typeID, key.groupID,
 							(void*)avatar->mpSpeciesProfile, (unsigned)avatar->mProfileSeq, (unsigned)s.sentSeq);
 					}
-					if (changed || seqChanged || !s.sentHashValid) {
-						// The key can stay while the body changes (an edit): the hash tells the other side which body this is.
-						std::vector<Models::Record> records;
-						s.sentHash = Models::Read(key.instanceID, key.typeID, key.groupID, records) ? Models::Hash(records) : 0;
+					// The key can stay while the body changes (an edit): the hash tells the other side which body this is. It is read again
+					// with every send (every 10 s too): the editor may write the new body after the profile sequence changed.
+					std::vector<Models::Record> records;
+					uint32_t hash = Models::Read(key.instanceID, key.typeID, key.groupID, records, true) ? Models::Hash(records) : 0;
+					if (changed || !s.sentHashValid || hash != s.sentHash) {
+						s.sentHash = hash;
 						s.sentHashValid = true;
 						++s.ownStamp;
 						Logf("world: our avatar's body hash is %08x (%d records)", s.sentHash, (int)records.size());

@@ -1,6 +1,6 @@
 # Status: what works, what is being done, by whom
 
-> Status: live · Owner: both · Updated: 2026-10-25
+> Status: live · Owner: both · Updated: 2026-10-31
 > Read when: at the start of every work session (after `git pull`), and before you pick a task. Update it when you start or
 > finish a piece of work and after every two-PC test.
 
@@ -11,19 +11,19 @@ change), **partly**, **not done**.
 | # | Item | State |
 |---|---|---|
 | 1 | Session: connect, world transfer, automatic restart and rejoin, console | works |
-| 2a | Same animals on both sides: model, size, age, health, alpha | works, to re-check |
-| 2b | Nests (the host's nests on the guest) | to check (endless-nest bug fixed 2026-10-25) |
+| 2a | Same animals on both sides: model, size, age, health, alpha | works; in a fight a mirror stood off the real animal (2026-10-25), settle snap built 2026-10-31, to check |
+| 2b | Nests (the host's nests on the guest) | not visible on the guest (2026-10-25); orientation, scale, model key sent since 2026-10-31, to check |
 | 2c | Plants not flickering | to check (fixed 2026-10-25) |
 | 2d | Fruit at the same places and gone when eaten | not done (fruit is generated per machine, 6 of 74 match) |
 | 2e | Eggs and hatching | partly |
-| 2f | Corpses both players can eat | to check (eating reported by `kMsgEaten`); a newborn from an egg has the right species (works, 2026-10-25) |
+| 2f | Corpses both players can eat | the guest cannot eat a corpse (2026-10-25); the host's food value sent, corpse placed once (2026-10-31), to check. A newborn from an egg has the right species (works, 2026-10-25) |
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | not done |
-| 3c | Each player's own creature model on the puppet | to check (2026-10-25, protocol 12): built from the other avatar's species, rebuilt on change; the guest's own creature at start (`SetSpecies`) is not done |
+| 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31 (protocol 13), to check; the guest's own creature at start (`SetSpecies`) is not done |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | partly (`kMsgAnim`, untested on two PCs) |
-| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal native death crashed the guest (2026-10-25), so the kill goes through the host, no DNA yet |
+| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite goes through the host (no crash since, owner 2026-10-31), no DNA yet |
 | 4b | Host damage and deaths | works |
 | 4c | PvP, death and respawn at the own nest, no reward | not done |
 | 4d | Hit and get-hit animations of mirrors | not done |

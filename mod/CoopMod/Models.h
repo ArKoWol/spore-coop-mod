@@ -19,7 +19,8 @@ namespace Models
 	};
 
 	// Host: the records that make up a species (its `bem` model). False if none was found.
-	bool Read(uint32_t instance, uint32_t type, uint32_t group, std::vector<Record>& out);
+	// `quiet` leaves out the log line per record (the avatar's body is read every 10 s for its hash).
+	bool Read(uint32_t instance, uint32_t type, uint32_t group, std::vector<Record>& out, bool quiet = false);
 
 	// True when the game can build this species here.
 	bool Has(uint32_t instance, uint32_t type, uint32_t group);

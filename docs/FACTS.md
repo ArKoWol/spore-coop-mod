@@ -1,6 +1,6 @@
 # Hard-won facts
 
-> Status: reference · Owner: both · Updated: 2026-10-25
+> Status: reference · Owner: both · Updated: 2026-10-31
 > Read when: before you change any code that talks to the game, ModAPI, Steam or the save files. Read it all once; it is
 > grouped by topic so you can come back to one section.
 
@@ -148,6 +148,11 @@ seen in our tests.
   later: never look a nest up again by position, keep your own record of what you made (else: 295 nests in minutes).
 - `SetSpecies` on a creature during world load crashes: wait about 3 s after the load *(SporeCoop)*.
 - A dead mirror flies away unless it is pinned to the corpse position every frame *(SporeCoop)*.
+- An edit in the creature editor probably keeps the avatar's species key and changes only the body (`bem`): the host's edit changed
+  the look of everything of his species on his machine, the guest saw nothing new *(guess, owner's two-PC test 2026-10-25)*. The
+  game caches species profiles by key, so a new body for a known key is registered under another key (alias) *(guess)*.
+- A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*; a mirror (blank tuning) may have none, which may be why
+  the guest could not eat a mirror's corpse *(guess)*.
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
   avatar 3 s after the load *(SporeCoop)*.
 
