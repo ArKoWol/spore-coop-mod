@@ -20,7 +20,7 @@ change), **partly**, **not done**.
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | works (2-PC test 2026-10-31) |
-| 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31: still not seen, the host's hash never changed (2-PC test 2026-10-31). Built 2026-10-31, to check: editor close, profile in memory and new EditorSaves records as signals, body from every database; the guest's avatar switched to his own creature in a co-op launch (`own:` lines) |
+| 3c | Each player's own creature model on the puppet | an edit by the host was not seen by the guest (2026-10-25); body hash and alias key since 2026-10-31: still not seen, the host's hash never changed (2-PC test 2026-10-31). Built 2026-10-31, to check: editor close, profile in memory and new EditorSaves records as signals, body from every database; the guest's avatar switched to his own creature in a co-op launch (`own:` lines): works on 1 PC 2026-11-01 (co-op launch with a cached world: the own creature is played, model reloaded, nothing broken); editor changes still to check on 2 PCs |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
 | 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
@@ -38,7 +38,7 @@ Animals that waited for their species were never announced (25 of 99 reached the
 | Part | What | State |
 |---|---|---|
 | today | CO-OP star + window, Steam join, download, restart (seen on 2 PCs 2026-10-25, before M1) | works |
-| M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | partly seen on 2 PCs 2026-10-31: the co-op launch moved the folders and joined; Leave, restore and the migration answer "Restore" still to see |
+| M1 | co-op launch: host's world in `Coop\<id>` for one launch, own `Game0` restored at every start, migration question | partly seen on 2 PCs 2026-10-31: the co-op launch moved the folders and joined. Leave and restore work on 1 PC 2026-11-01 (own `Game0` back, cache back in `Coop\<id>`); the migration answer "Restore" still to see |
 | M2 + J9 | CO-OP button (bottom right since 2026-11-01), CO-OP star only in the co-op launch (D24), that star selected (J9) | star works on 1 PC 2026-11-01 (co-op launch with a cached world: star shown, Play on it enters the host's world); J9 gave up there (game in the background); to check on 2 PCs |
 | M3 + J3 | Steam Rich Presence: who hosts, version before connecting, invites | built 2026-10-31 (protocol 16, 55 logic checks): Steam starts in the menu, friends list with reasons, invites; to check on 2 PCs |
 | M4 | manifest: a rejoin downloads only what differs, every file checked (protocol 14) | built 2026-10-31, logic tested (85 checks), to check on 2 PCs |

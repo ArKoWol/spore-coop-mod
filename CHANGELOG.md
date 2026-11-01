@@ -6,6 +6,10 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **One-PC checks of 2026-11-01, docs only** (exxecute; `STATUS.md` 3c, M1). In a co-op launch with a cached world the guest plays
+  his own creature (`own: switching ...`, model reloaded); Leave restarts into the own `Game0` and the cache goes back. Core
+  tests all pass. Tested on 1 PC; no protocol change. Still for 2 PCs: editor changes seen by the friend, the migration answer.
+
 - **Fix: the guest's native lethal bite (4a, protocol 17) was off on every PC; the echo puppet no longer crawls in the ground**
   (exxecute; `game/Kills.cpp`, `dllmain.cpp`). The exe is loaded off 0x400000 (ASLR) and `Kills.cpp` used raw addresses: now
   `Address()` (`FACTS.md` 2). The echo's target is kept at our height above the planet's centre (was often underground).
