@@ -1,6 +1,6 @@
 # Hard-won facts
 
-> Status: reference · Owner: both · Updated: 2026-10-31
+> Status: reference · Owner: both · Updated: 2026-11-01
 > Read when: before you change any code that talks to the game, ModAPI, Steam or the save files. Read it all once; it is
 > grouped by topic so you can come back to one section.
 
@@ -115,6 +115,9 @@ seen in our tests.
   `[size][8-byte id][0x01A80D26][payload size][field count][(field id, size) table][values]`, name as UTF-16LE. The game reads
   the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list
   *(verified 2026-10-25)*. **`planetRecords.pkp`**: one entry per planet (instance = PlanetID), each a nested DBPF.
+- **A star the mod adds in memory is kept by `stars.db` when the game saves** and comes back in the saved-game list at the next
+  start, even without its `.spo`: a host's cached galaxy listed a star named `CO-OP` (an old build's CO-OP star) with no
+  `CO-OP.spo` in the folder *(verified 2026-11-01, one PC)*. The co-op launch therefore removes stars named `CO-OP...` first.
 - The star card: its caption window holds the star name; its Play button is control id `0x0375408c` (an `IButton`), the bin
   and close buttons are next to it. **The game ignores synthetic clicks** (mouse down/up sent with `SendMsg`, or a button-click
   message) on it, and `SetActiveModeByName("LoadGame")` called by the mod crashes (`+0x293df0`): only the player's click works

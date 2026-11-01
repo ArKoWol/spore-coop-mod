@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The CO-OP star is back, only in the co-op launch; the CO-OP button moves to the bottom right (D24)** (exxecute; `game/MenuWorlds.cpp`,
+  `game/CoopMenu.cpp`). After the restart into the host's world a `CO-OP: <host>` star (copy of the host's save, near the centre)
+  appears and is selected; Play on its card enters the host's world; dropped by the galaxy -> the window names the host's planet.
+  Own galaxy untouched. Tested on 1 PC (star added, not seen on screen); no protocol change. **ArKoWol**: this is your join-flow
+  area (D19), I edited `JOIN_FLOW.md` section 4 and `DECISIONS.md` D24; `COOP_NO_STAR=1` turns the star off.
+
 - **A dead player respawns at his own nest; the friend's creature goes away meanwhile** (exxecute; `game/Respawn.cpp`, STATUS 4c).
   The game's own death and respawn run; health 0 in `kMsgAvatar` means dead, the puppet goes 1.5 s later and comes back at
   the respawn place; hits on a dead player are dropped; an avatar respawned >60 m from its herd's nest is put beside it (the

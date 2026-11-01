@@ -35,7 +35,7 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
    "Invite" lists friends who sit in their main menu; press Invite next to a name and the friend gets
    a message "<you> invites you to <planet>  [Join] [Not now]". Or press "Copy my Steam ID" and send
    that number. (Or type   coop host   in the console.)
-2. GUEST: stay in the MAIN MENU. Click the CO-OP button (small plate, bottom left of the screen). The
+2. GUEST: stay in the MAIN MENU. Click the CO-OP button (small plate, bottom right of the screen). The
    window lists your invitations, friends who are hosting ("Join"), friends who run the mod and the
    hosts you joined before. A grey Join says why: another mod version (both run update.bat), the
    world is full, or the host is in the editor / a menu. "Refresh" looks again (Steam must be running).
@@ -45,8 +45,8 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
    The friend's world is played IN PLACE of your saves for this one run: your own saves are put
    aside (%APPDATA%\Spore\Games\Game0.own) and come back at the next start. Nothing is deleted.
    The friend's world is kept in %APPDATA%\Spore\Games\Coop\<his Steam ID>.
-4. GUEST: the CO-OP window opens by itself and says "<name>'s world: press Play on <planet>". Press
-   Play on that planet's star and enter the creature stage. The window title says
+4. GUEST: the CO-OP window opens by itself and a star "CO-OP: <name>" appears near the centre of the
+   galaxy. Click it and press Play on its card (the host's own star works too) to enter the creature stage. The window title says
    "CO-OP: you are in the HOST's world", and a small plate shows "In <name>'s world - Leave".
 5. GUEST: to go back to your own world press Leave (the plate, or the CO-OP window in the main menu)
    or type   coop leave   : the game restarts in your own world. Closing the game works too:

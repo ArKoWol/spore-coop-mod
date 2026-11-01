@@ -1,11 +1,16 @@
 # Decisions of the owner
 
-> Status: agreed · Owner: ArKoWol · Updated: 2026-10-31
+> Status: agreed · Owner: ArKoWol · Updated: 2026-11-01
 > Read when: before you question the direction or propose something that changes it. Add a line here for every new
 > decision of the owner; never edit an old line except to mark it replaced.
 
 Newest first. Each line: what was decided, and which earlier decision it replaces. `PLAN.md` always follows the newest
 decisions.
+
+## 2026-11-01: the CO-OP star comes back in the co-op launch
+| # | Decision | Replaces |
+|---|---|---|
+| D24 | In a co-op launch the guest's menu gets the CO-OP star again (`CO-OP: <host>`, near the galaxy's centre, a copy of the host's save, in memory only); the player's own galaxy still gets none. The CO-OP button stays and sits bottom right, off the game's own menu. Decided by exxecute; ArKoWol to be told (his area by D19) | D21 in part (no star at all; button bottom left) |
 
 ## 2026-10-31: join flow (`features/JOIN_FLOW.md`) and creature-stage priorities
 | # | Decision | Replaces |

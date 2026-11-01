@@ -102,12 +102,12 @@ namespace
 	bool sButtonHot = false;
 	bool sToggleRequested = false;  // the button was clicked: acted on in Update, outside the UI message
 	bool sCornerRead = false;
-	bool sTop = false, sRight = false;  // the corner: COOP_BUTTON_CORNER = tl, tr, bl (default), br
+	bool sTop = false, sRight = true;  // the corner: COOP_BUTTON_CORNER = tl, tr, bl, br (default: off the game's own menu)
 	float sScreenW = 0, sScreenH = 0;
 	float sButtonX = 0, sButtonY = 0;   // top left of the button picture
 	bool sButtonLogged = false;
 
-	// co-op launch: the window opens by itself, then the host's star is selected (J9)
+	// co-op launch: the window opens by itself, the CO-OP star is added (D24), then it is selected (J9)
 	bool sLaunchOpened = false;
 	DWORD sLaunchStart = 0;
 	DWORD sNameCheckedAt = 0;
@@ -119,6 +119,9 @@ namespace
 	int sStarChecks = 0;       // read-back lines logged so far
 	bool sStarDone = false;    // the attempt is over (verdict logged or given up): never repeated
 	bool sStarSticks = false;  // the selection still held after the last read-back
+	uint32_t sCoopStar = 0;    // the CO-OP star while it is in the galaxy (0: not added, failed, or dropped)
+	bool sCoopStarTried = false;
+	std::string* sCoopStarName = nullptr;  // heap: freed in Shutdown
 
 	Ui& U()
 	{
@@ -389,10 +392,12 @@ namespace
 		else if (sState == State::Ready) {
 			// a co-op launch: the friend's world is Game0 for this run; Play is pressed on the galaxy's own card
 			std::string line = (ui.worldOf.empty() ? std::string("Your friend") : ui.worldOf) + "'s world: press Play"
-				+ (ui.planet.empty() ? "" : " on " + ui.planet);
+				+ (sCoopStar ? std::string(" on the CO-OP star") : ui.planet.empty() ? "" : " on " + ui.planet);
 			Text(g, Wide(line), line.size() > 38 ? 17.0f : 20.0f, true, green, Gdiplus::RectF(left, y, width, 30));
-			Text(g, sStarSticks ? L"Its star is selected for you. If no card shows, click the star." : L"Click its star in the galaxy, then press Play on the card.",
-				13, false, ink, Gdiplus::RectF(left, y + 36, width, 22));
+			const wchar_t* how = sCoopStar
+				? (sStarSticks ? L"The CO-OP star is selected for you. If no card shows, click it." : L"Click the CO-OP star in the galaxy, then press Play on its card.")
+				: (sStarSticks ? L"Its star is selected for you. If no card shows, click the star." : L"Click its star in the galaxy, then press Play on the card.");
+			Text(g, how, 13, false, ink, Gdiplus::RectF(left, y + 36, width, 22));
 			Text(g, L"It is a copy: the host's game keeps the real world.", 12.5f, false, soft, Gdiplus::RectF(left, y + 62, width, 20));
 			// the way out is Leave (the game restarts in the own world)
 			AddButton(g, Gdiplus::RectF(right - 110, y + 92, 110, 36), L"Leave", kLeave, false);
@@ -648,7 +653,7 @@ namespace
 		}
 		else {
 			sTop = false;
-			sRight = false;
+			sRight = true;
 		}
 	}
 
@@ -738,12 +743,34 @@ namespace
 
 	// ------------------------------------------------------------------ the co-op launch
 
-	// In a co-op launch (the host's world is Game0): opens the window by itself, names the host's planet and selects the
-	// host's star once (spike J9, docs/features/JOIN_FLOW.md section 4).
+	std::string CoopStarName(const std::string& host)
+	{
+		return host.empty() ? std::string("CO-OP") : "CO-OP: " + host;
+	}
+
+	// the star the window points at: the CO-OP star while it is in the galaxy, else the host's own star (Play works on both)
+	uint32_t TargetStar()
+	{
+		return sCoopStar ? sCoopStar : sHostStar;
+	}
+
+	// In a co-op launch (the host's world is Game0): opens the window by itself, names the host's planet, adds the CO-OP star
+	// near the galaxy's centre (D24) and selects it once (spike J9, docs/features/JOIN_FLOW.md section 4).
 	void FollowCoopLaunch()
 	{
 		Ui& ui = U();
 		DWORD now = GetTickCount();
+		if (sCoopStar && !MenuWorlds::CoopStarListed()) {
+			// left a game without saving: the galaxy was read again from disk without our star, and a star added now is not
+			// drawn (FACTS section 6); the host's own star loads the same world
+			Logf("menu: the CO-OP star is gone from the galaxy (reloaded); the window points at the host's star %08x", sHostStar);
+			MenuWorlds::ForgetCoopStar();
+			sCoopStar = 0;
+			sDirty = true;
+			if (sHostStar && !getenv("COOP_NO_SELECT")) {
+				MenuWorlds::SelectStar(sHostStar);
+			}
+		}
 		if (!sLaunchOpened) {
 			sLaunchOpened = true;
 			sLaunchStart = now;
@@ -758,6 +785,13 @@ namespace
 			if (name != ui.worldOf) {
 				ui.worldOf = name;
 				sDirty = true;
+			}
+			if (sCoopStar && (!sCoopStarName || *sCoopStarName != CoopStarName(ui.worldOf))) {
+				if (!sCoopStarName) {
+					sCoopStarName = new std::string();
+				}
+				*sCoopStarName = CoopStarName(ui.worldOf);
+				MenuWorlds::RenameCoopStar(*sCoopStarName);
 			}
 		}
 		if (sStarDone) {
@@ -780,8 +814,23 @@ namespace
 					Logf("menu: the host's world: planet '%s' on star %08x (newest creature-stage save of Game0)", planet.c_str(), sHostStar);
 				}
 			}
+			if (sStarFound && !sCoopStarTried) {
+				sCoopStarTried = true;
+				// COOP_NO_STAR: no CO-OP star, the window points at the host's own star
+				if (!getenv("COOP_NO_STAR")) {
+					if (!sCoopStarName) {
+						sCoopStarName = new std::string();
+					}
+					*sCoopStarName = CoopStarName(ui.worldOf);
+					sCoopStar = MenuWorlds::AddCoopStar(sHostStar, *sCoopStarName);
+					if (!sCoopStar) {
+						Logf("menu: no CO-OP star; the window points at the host's star");
+					}
+				}
+				sDirty = true;
+			}
 			// COOP_NO_SELECT turns the spike off (the text alone guides the player) if the raw write ever misbehaves
-			if (sStarFound && !getenv("COOP_NO_SELECT") && MenuWorlds::SelectStar(sHostStar)) {
+			if (sStarFound && !getenv("COOP_NO_SELECT") && MenuWorlds::SelectStar(TargetStar())) {
 				sStarWritten = true;
 				sStarWrittenAt = now;
 			}
@@ -793,10 +842,10 @@ namespace
 		if (sStarChecks < 3 && since >= checkAt[sStarChecks]) {
 			uint32_t now_id = MenuWorlds::SelectedStar();
 			Logf("menu: J9: %lu ms after the write the selected star reads %08x (%s)", (unsigned long)since, now_id,
-				now_id == sHostStar ? "kept" : "CHANGED, the game does not follow");
+				now_id == TargetStar() ? "kept" : "CHANGED, the game does not follow");
 			++sStarChecks;
 			if (sStarChecks == 3) {
-				sStarSticks = now_id == sHostStar;
+				sStarSticks = now_id == TargetStar();
 				sStarDone = true;
 				sDirty = true;
 				Logf("menu: J9 verdict: %s", sStarSticks ? "the selection holds (check on screen: card, highlight, does Play use it?)"
@@ -913,6 +962,9 @@ namespace CoopMenu
 		sUi = nullptr;
 		delete sJoinName;
 		sJoinName = nullptr;
+		MenuWorlds::RemoveCoopStar();
+		delete sCoopStarName;
+		sCoopStarName = nullptr;
 		if (sGdi) {
 			StopGdi();
 			sGdi = false;

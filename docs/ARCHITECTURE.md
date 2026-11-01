@@ -1,6 +1,6 @@
 # How the mod works now
 
-> Status: reference · Owner: both · Updated: 2026-10-31
+> Status: reference · Owner: both · Updated: 2026-11-01
 > Read when: before you change the mod's code, the protocol or the tools. It describes the code as it is, not the plan
 > (the plan is `PLAN.md`). Update it in the same change that makes it wrong.
 
@@ -29,8 +29,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/RecentHosts.cpp/.h` | remembered hosts in `%APPDATA%\Spore\Games\CoopHosts.txt` (`steamid<TAB>unixtime<TAB>name`, newest first, 10 at most) |
 | `mod/CoopMod/Log.cpp/.h` | `CoopMod.log` |
 | `mod/CoopMod/game/PuppetMotion.cpp/.h` | how a puppet or mirror follows received positions with the game's locomotion |
-| `mod/CoopMod/game/MenuWorlds.cpp/.h` | the main menu's galaxy, read-only: `SelectedStar` and `SelectStar` (spike J9: writes the StarID at `[GlobalGGEUI + 0xFC] + 0x7C`), `HostPlanet` (the star and planet of the newest creature-stage save of `Game0`), the `select:` log; detours on `cGameModeManager::SetActiveMode/At/ByName` (logging, `ByName("LoadGame")` starts `LoadTrace`). The galaxy is never changed (no star, no save is added) |
-| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP button plate (bottom left of the main menu, `COOP_BUTTON_CORNER=tl\|tr\|bl\|br`) and the CO-OP window anchored to it: GDI+ pictures shown by UTFWin windows (look: `features/UI_STYLE.md`), the list (invitations, friends hosting, friends running the mod, recent sessions; rules in `core/coop_presence.h`, data from `game/Presence.cpp`), Join through `CoopNet` (connect, download, restart), `JoinHost` for the invitation toast. In a co-op launch the window opens by itself (`<host>'s world: press Play on <planet>`, a Leave button) and the host's star is selected once (J9) (`coop menu`) |
+| `mod/CoopMod/game/MenuWorlds.cpp/.h` | the main menu's galaxy: `SelectedStar` and `SelectStar` (spike J9: writes the StarID at `[GlobalGGEUI + 0xFC] + 0x7C`), `HostPlanet` (the star and planet of the newest creature-stage save of `Game0`), the `select:` log; detours on `cGameModeManager::SetActiveMode/At/ByName` (logging, `ByName("LoadGame")` starts `LoadTrace`). In a co-op launch only, the CO-OP star (`AddCoopStar`: a free star near the centre named `CO-OP: <host>`, planets like the host's system, `Game0\CO-OP.spo` a copy of the host's save; `CoopStarListed`, `ForgetCoopStar`, `RemoveCoopStar` at exit); the player's own galaxy is never changed |
+| `mod/CoopMod/game/CoopMenu.cpp/.h` | the CO-OP button plate (bottom right of the main menu, `COOP_BUTTON_CORNER=tl\|tr\|bl\|br`) and the CO-OP window anchored to it: GDI+ pictures shown by UTFWin windows (look: `features/UI_STYLE.md`), the list (invitations, friends hosting, friends running the mod, recent sessions; rules in `core/coop_presence.h`, data from `game/Presence.cpp`), Join through `CoopNet` (connect, download, restart), `JoinHost` for the invitation toast. In a co-op launch the window opens by itself (`<host>'s world: press Play on the CO-OP star`, a Leave button), adds the CO-OP star and selects it once (J9); if the galaxy drops the star, the window names the host's planet (`coop menu`) |
 | `mod/CoopMod/game/LoadTrace.cpp/.h` | research: with `COOP_LOAD_TRACE=1` logs how a save loads (`load:` lines: planet database records, planet resources, record lookups, `cPlanet::Read`, planet views) |
 | `mod/CoopMod/game/CoopNet.h` | what the windows need from the session code (implemented in `dllmain.cpp`): `Join`, `Host` (refused in a co-op launch), `Cancel`, `Leave`, `RestartGame`, `State` (answer, version, download share, staged, `upToDate`, `error`, co-op launch = `installedAtStart`), `Hosting` (hosting, guest here, own Steam ID), `Name`; for M3 `StartSteam`, `FriendsApi`, `SetRichPresence`, the friends list calls and `SendTo` (one reliable message to any Steam user) |
 | `mod/CoopMod/game/Presence.cpp/.h` | M3: starts Steam when the main menu first opens, publishes the Rich Presence key `sporecoop` (section 4), reads the key of the Steam friends every 5 s while a window watches (`presence:` lines), keeps the received invitations, sends and parses `kMsgInvite` (`invite:` lines) |
@@ -144,7 +144,8 @@ restart off; `coop restart` tests it without a world). The new game opens its ow
    `Game0.own`, `Coop\<id>` becomes `Game0`. This run is a co-op launch (`CoopLaunch::Active()`, `CoopNet::State().installedAtStart`):
    `Initialize` joins the host by itself, a world sent again is ignored, `coop host` is refused. In the main menu the CO-OP window
    opens by itself (`CoopMenu`), finds the star of the newest creature-stage save of `Game0` (the host's played planet, `MenuWorlds::
-   HostPlanet`) and writes its id into the menu's selection once (J9; `menu: J9` lines); the player presses Play on the card.
+   HostPlanet`), adds the CO-OP star next to the centre (`menu: CO-OP star ... added`, `COOP_NO_STAR` turns it off) and writes
+   its id into the menu's selection once (J9; `menu: J9` lines); the player presses Play on the card.
 A failed move (a process holds the folder) is retried twice, then undone as far as it went, logged and told to the player: in the
 console at start and in a plate in the main menu; the co-op launch does not start (`CoopLaunch.txt` is still consumed) and a failed
 restore keeps `Game0.own` for the next start.
