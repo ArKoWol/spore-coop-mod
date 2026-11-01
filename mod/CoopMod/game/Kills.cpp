@@ -1,4 +1,5 @@
-// Kills.cpp : see Kills.h. Addresses are of the March 2017 exe (the GOG build, FACTS.md section 1), found by disassembly.
+// Kills.cpp : see Kills.h. Addresses are of the March 2017 exe (the GOG build, FACTS.md section 1), found by disassembly. They
+// assume the image base 0x400000; the exe is loaded elsewhere (ASLR), so every use goes through Address().
 #include "stdafx.h"
 #include "Kills.h"
 #include "../World.h"
@@ -42,7 +43,7 @@ namespace
 	bool Usable()
 	{
 		if (sUsable < 0) {
-			sUsable = CodeMatches(kHerdTypeLookup, kHerdTypeLookupStart, sizeof(kHerdTypeLookupStart)) ? 1 : 0;
+			sUsable = CodeMatches(Address(kHerdTypeLookup), kHerdTypeLookupStart, sizeof(kHerdTypeLookupStart)) ? 1 : 0;
 			if (!sUsable) {
 				Logf("kills: the herd type lookup is not at %08x in this exe: native kills of mirrors stay off", (unsigned)kHerdTypeLookup);
 			}
@@ -57,7 +58,7 @@ namespace
 			return false;
 		}
 		__try {
-			return ((HerdTypeLookup_t)kHerdTypeLookup)(manager, nullptr, type, index) != nullptr;
+			return ((HerdTypeLookup_t)Address(kHerdTypeLookup))(manager, nullptr, type, index) != nullptr;
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			return false;
@@ -123,7 +124,7 @@ namespace Kills
 {
 	void Attach()
 	{
-		if (!CodeMatches(kApplyEvent, kApplyEventStart, sizeof(kApplyEventStart))) {
+		if (!CodeMatches(Address(kApplyEvent), kApplyEventStart, sizeof(kApplyEventStart))) {
 			Logf("kills: ApplyEvent is not at %08x in this exe: relation events are not filtered", (unsigned)kApplyEvent);
 			return;
 		}

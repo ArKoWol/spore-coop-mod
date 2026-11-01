@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: the guest's native lethal bite (4a, protocol 17) was off on every PC; the echo puppet no longer crawls in the ground**
+  (exxecute; `game/Kills.cpp`, `dllmain.cpp`). The exe is loaded off 0x400000 (ASLR) and `Kills.cpp` used raw addresses: now
+  `Address()` (`FACTS.md` 2). The echo's target is kept at our height above the planet's centre (was often underground).
+  Tested on 1 PC: `coop killcheck` PASS, `coop selftest` 6/6, `coop die` 5/5, echo walks without snaps. No protocol change;
+  **both must update** before the next 2-PC test of 4a.
+
 - **The CO-OP star is back, only in the co-op launch; the CO-OP button moves to the bottom right (D24)** (exxecute; `game/MenuWorlds.cpp`,
   `game/CoopMenu.cpp`). After the restart into the host's world a `CO-OP: <host>` star (copy of the host's save, near the centre)
   appears and is selected; Play on its card enters the host's world; dropped by the galaxy -> the window names the host's planet.

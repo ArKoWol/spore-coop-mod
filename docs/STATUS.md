@@ -24,9 +24,9 @@ change), **partly**, **not done**.
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
 | 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
-| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite went through the host (no crash, owner 2026-10-31), no DNA. Built 2026-10-31 (protocol 17), to check: the lethal bite native with a repaired herd type (crash cause, `FACTS.md` section 9), relation events of mirrors dropped |
+| 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | partly: non-lethal bites native; the lethal bite went through the host (no crash, owner 2026-10-31), no DNA. Built 2026-10-31 (protocol 17); its addresses were not rebased until 2026-11-01, so it was off: `coop killcheck` and `coop selftest` pass on 1 PC since then (2026-11-01). To check on 2 PCs: the lethal bite native with a repaired herd type (crash cause, `FACTS.md` section 9), relation events of mirrors dropped |
 | 4b | Host damage and deaths | works |
-| 4c | PvP, death and respawn at the own nest, no reward | respawn built 2026-10-31 (`game/Respawn.cpp`, `coop die`), not run yet, to check on 2 PCs; PvP death goes through the same path (no reward), not seen |
+| 4c | PvP, death and respawn at the own nest, no reward | respawn built 2026-10-31 (`game/Respawn.cpp`); `coop die` PASS 5/5 on 1 PC 2026-11-01 (respawn 8.4 s, 0.3 m from the own nest), to check on 2 PCs; PvP death goes through the same path (no reward), not seen |
 | 4d | Hit and get-hit animations of mirrors | not done |
 | 5a | Separate DNA / brain / parts per player, saved in the host's save | not done |
 | 5b | Stage change when both are ready | not done |

@@ -170,7 +170,7 @@ Console commands (Ctrl+Shift+C in the game, or `console.bat`): `coop host`, `coo
 world), `coopjoin <steamid | last | number | name>`,
 `coop friends`, `coop udphost`, `coopudpjoin <ip>`, `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport`
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
-to the side), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
+to the side, at our height above the planet's centre), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
 death and respawn, section 7), `coop killcheck` (one PC: the herd
 type of a mirror-like herd and its repair, `game/Kills.cpp`),

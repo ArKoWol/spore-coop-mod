@@ -41,6 +41,13 @@ seen in our tests.
   `new`/`delete` to the game's allocator**, a static `std::string`/`std::vector` holding memory crashes in the game's free
   (`SporeApp.exe+0x527270`) because the game's heap is already gone. `Dispose` also frees our static containers.
 - A `member_detour` needs `GetAddress(Class, Method)`; example: `NPCTickAI_detour` in `AttachDetours()`.
+- **`SporeApp.exe` has DYNAMIC_BASE (ASLR) and is not loaded at 0x400000**: an exe address from disassembly or the SDK tables
+  (written for base 0x400000) must go through `Address(x)` (`baseAddress + x - 0x400000`) before it is read, called or hooked;
+  a raw `0x4E00C0` reads the wrong memory *(verified 2026-11-01: `Kills.cpp` checked raw addresses, `coop killcheck` failed, with
+  `Address()` it passes)*.
+- **`PlanetModel.ToSurface` crashes when the mod calls it** from its update in the creature stage: inside `GetHeightAt`
+  (`SporeApp.exe+0x77f0d3`, reading a wild address) *(verified 2026-11-01, one PC)*. Keep a position at a height by scaling it
+  from the planet's centre (section 11) instead.
 - **ArgScript**: `line.GetArguments(n)` accepts exactly `n` arguments: fewer gives "Expecting at least n arguments", more
   "Expecting at most n arguments" (the game prints it, our code is not reached). So every command has a fixed argument count:
   `coop <word>`, `coopjoin <steamid>`, `coopudpjoin <ip>`. `GetArgumentsRange` was suspected of crashing and is avoided. A
@@ -244,7 +251,7 @@ seen in our tests.
   `ApplyEvent` events 0 and 5 raise `numKilled`; at the threshold it calls 0xBA4750 (sets `cHerd::mbExtinction` on every herd of the
   species), which first looks up the dead animal's herd type: `cSpeciesManager` 0x4E00C0 with `cHerd::mArchetype` (+0x88) and
   `mGeneration` (+0xF0), null for a type it does not know, then reads +0x14 of it. A mirror's herd (made by `CreateHerd`) has such a
-  type *(guess, from disassembly 2026-10-31; `coop killcheck` shows the type on one PC)*.
+  type: `coop killcheck` found it `00000000`, unknown to the game, and known after the repair *(verified 2026-11-01, one PC)*.
 - `TakeDamage` is 0xBFCF10 in our exe *(SDK)*: it stores the attacker, and on a lethal hit sets the combatant's state (+0x34) to 2
   (dead, later hits return at once) and sends message `0x1622184` *(guess, from disassembly 2026-10-31)*.
 

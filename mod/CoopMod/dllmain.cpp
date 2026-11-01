@@ -1301,7 +1301,14 @@ static void EchoFeed(DWORD now)
 	if (!pick) {
 		return;
 	}
+	// at our avatar's height above the planet's centre (the origin, FACTS.md section 11): the fixed sideways offset points off the
+	// round planet, into the ground, and the puppet then crawls flat and is snapped and teleported after a target it cannot
+	// reach. PlanetModel.ToSurface would follow the terrain but crashed in GetHeightAt when called from here (2026-11-01).
 	Vector3 pos = pick->pos + side;
+	float radius = pick->pos.Length(), length = pos.Length();
+	if (radius > 1.0f && length > 1.0f) {
+		pos = pos * (radius / length);
+	}
 	sLatest.type = 1;
 	sLatest.pos[0] = pos.x; sLatest.pos[1] = pos.y; sLatest.pos[2] = pos.z;
 	sLatest.rot[0] = pick->rot.x; sLatest.rot[1] = pick->rot.y; sLatest.rot[2] = pick->rot.z; sLatest.rot[3] = pick->rot.w;
