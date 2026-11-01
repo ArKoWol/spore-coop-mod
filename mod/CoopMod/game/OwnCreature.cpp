@@ -11,6 +11,7 @@
 #include <Spore\Simulator\cStarRecord.h>
 #include <Spore\Simulator\cCreatureGameData.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <map>
@@ -471,6 +472,36 @@ namespace
 		}
 	}
 
+	// The game's own rebuild of the ability buttons (exe 0xD49400, March 2017; FACTS.md section 7): clears the button map
+	// (Simulator::cAbilityUIMap, its pointer at 0x169E3EC), puts every ability of the player's creature on the button of its type
+	// and redraws the icons (0xD48CE0). The game calls it after the creature editor. No arguments.
+	const uintptr_t kRebuildAbilityButtons = 0xD49400;
+	const uintptr_t kAbilityUIMapPtr = 0x169E3EC;
+
+	bool RebuildAbilityButtons()
+	{
+		const uint8_t* code = (const uint8_t*)Address(kRebuildAbilityButtons);
+		__try {
+			// mov ecx, [map pointer] ; xor eax, eax - the pointer is relocated like the code (ASLR)
+			uint32_t operand;
+			memcpy(&operand, code + 2, 4);
+			if (code[0] != 0x8B || code[1] != 0x0D || operand != (uint32_t)Address(kAbilityUIMapPtr) || code[6] != 0x33 || code[7] != 0xC0) {
+				Logf("own: the ability button rebuild is not at %08x in this exe: buttons stay the old creature's", (unsigned)kRebuildAbilityButtons);
+				return false;
+			}
+			if (!*(void* const*)Address(kAbilityUIMapPtr)) {
+				Logf("own: no ability button map yet: buttons not rebuilt");
+				return false;
+			}
+			((void(*)())Address(kRebuildAbilityButtons))();
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			Logf("own: the ability button rebuild failed (exception)");
+			return false;
+		}
+		return true;
+	}
+
 	// The ability of the same type in our avatar's (new) list, else the first of the same category; -1 if none.
 	int SameAbility(Simulator::cCreatureAnimal* avatar, Simulator::cCreatureAbility* old)
 	{
@@ -541,6 +572,7 @@ namespace
 					avatar->mDefaultSocializeAbilityIndex = s.socialIdx;
 				}
 				avatar->GrowUp();
+				RebuildAbilityButtons();
 				Logf("own: our avatar lives again after a death: our creature %08x set again, model reloaded (GrowUp)",
 					avatar->mSpeciesKey.instanceID);
 				s.verify = avatar;
@@ -582,6 +614,9 @@ namespace
 		RemapDefaults(avatar, (Simulator::cSpeciesProfile*)s.oldProfile);
 		s.attackIdx = avatar->mDefaultAttackAbilityIndex;
 		s.socialIdx = avatar->mDefaultSocializeAbilityIndex;
+		if (RebuildAbilityButtons()) {
+			Logf("own: ability buttons rebuilt for our creature");
+		}
 		avatar->mSpeciesKey = own;
 		avatar->mProfileSeq = profile->creatureSeq;
 		if ((model.instanceID == before[0] && model.groupID == before[2]) || (model.instanceID == species[0] && model.groupID == species[2])) {
@@ -610,6 +645,7 @@ namespace
 		}
 		s.verify = nullptr;
 	}
+
 }
 
 namespace OwnCreature

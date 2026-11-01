@@ -202,7 +202,8 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   5 s after it appears and its model is reloaded (`SetModelKey` or `GrowUp`); its default attack and socialize abilities are
   pointed at the same ability types of the new list (`RemapDefaults`); a second after a respawn the profile, those defaults and the
   model are set again (the game rebuilds the save creature's model); `COOP_NO_OWN_CREATURE=1` turns it off. The ability buttons
-  stay the old creature's until the editor was visited (`FACTS.md` section 7); `coop abilities` logs both lists.
+  are rebuilt for our creature by the game's own function (`RebuildAbilityButtons`, exe 0xD49400, `FACTS.md` section 7) after
+  the switch and after a respawn; `coop abilities` logs both lists.
   The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);

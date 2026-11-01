@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The guest's ability buttons match his own creature** (exxecute; `game/OwnCreature.cpp`, `FACTS.md` 7). After the switch the
+  buttons still played the old creature's slots (stealth fired Raging Roar). The mod now calls the game's own rebuild of the
+  button map and icons (exe 0xD49400, what the editor's exit does), also after a respawn. Tested on 1 PC (buttons right); no
+  protocol change. Open: the HUD portrait and blindness come from the friendly nest's species the guest's save loads with (`FACTS.md` 7).
+
 - **Fixes from the 2-PC test of 2026-11-01: creature models arrive, the guest stays his own creature, his attack works** (exxecute;
   `core/coop_models.h`, `World.cpp`, `game/OwnCreature.cpp`; results in `STATUS.md` 5). The model receiver read chunks at byte 38
   instead of 31 since 2026-10-24: no model ever arrived (17 new checks in `testsun_core_tests.bat`). After a respawn the own model

@@ -191,12 +191,20 @@ seen in our tests.
   avatar 3 s after the load *(SporeCoop)*. We set `mpSpeciesProfile`, `mSpeciesKey`, `mProfileSeq` of the avatar and reload the
   model (`SetModelKey` when the model key is the species key, else `GrowUp`): the avatar looks like the new creature
   *(verified 2026-11-01, 2 PCs)*. What it does not change:
-  - **the ability buttons (verb tray)** are built when creature mode is entered and keep the old creature's list; after a visit to
-    the creature editor they match the new creature *(verified 2026-11-01, one PC)*;
+  - **the ability buttons** keep the old creature's list. They follow `Simulator::cAbilityUIMap` (pointer at exe `0x169E3EC`;
+    ModAPI's addresses for it are of another exe): 25 entries = 5 categories x 5 buttons, each ability type on a fixed button
+    (sing 0, bite 5, mating call 10, jump 11, stealth 13), value = index in the player creature's ability list. **`0xD49400`**
+    (no arguments) refills the map from the player creature and redraws the icons through `0xD48CE0`; the game calls it after
+    the editor. Called by the mod after the switch, the buttons match the new creature *(verified 2026-11-01, one PC)*;
+  - the HUD portrait and the eyes' view (blindness) stay the save creature's *(verified 2026-11-01, one PC)*;
   - `cCreatureBase::mDefaultAttackAbilityIndex` / `mDefaultSocializeAbilityIndex` keep the old list's indexes (attack 7 became a
     super power, socialize 6 sprint) *(verified 2026-11-01, `coop abilities`)*;
   - **the game's respawn rebuilds the save creature's model** on the same avatar object; species key and profile stay ours
     *(verified 2026-11-01, 2 PCs)*.
+- In a co-op launch the guest's avatar loads as a **different, random species each run** (`5517d2d4`, `2ed2d353`, ...) although the
+  host's save names the host's creature: it is the species of a friendly nest (seen in the game), and an eyeless one makes the
+  guest blind *(verified 2026-11-01, one PC)*. Why: the host's creature is not buildable on the guest, so the game takes a nest's
+  species instead *(guess)*.
 
 ## 8. What a creature-stage planet contains
 - First real dump (host, owner's save, 2026-10-24): 4188 nouns: 101 CreatureAnimal, 123 Herd, **101 Nest** (one per herd, all
