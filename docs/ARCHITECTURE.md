@@ -49,6 +49,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `core/coop_manifest.h` | the manifest logic (plain C++, Win32 file calls only): CRC32, wire formats, snapshot of a folder, diff against the cache, the `Download` (chunks in, build, verify), `Commit`, `RemoveIncoming`; tests in `tests/manifest_tests.cpp` |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
 | `core/coop_launch.h` | the folder logic of the co-op launch (Win32 file calls only, no game headers): restore, launch, migration; tests in `tests/launch_tests.cpp` |
+| `core/coop_models.h` | the chunks a creature model travels in (`kMsgModel`: 31-byte header, encode, decode with checks); tests in `tests/models_tests.cpp` |
 | `core/coop_presence.h` | the Rich Presence string (format, parse), who may be joined or invited and why not, the text of a row, the order of the friends (plain C++); tests in `tests/presence_tests.cpp` |
 
 ## 3. Each frame
@@ -172,7 +173,7 @@ world), `coopjoin <steamid | last | number | name>`,
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side, at our height above the planet's centre), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
-death and respawn, section 7), `coop killcheck` (one PC: the herd
+death and respawn, section 7), `coop abilities` (our avatar's abilities and default indexes, `own: ab` lines), `coop killcheck` (one PC: the herd
 type of a mirror-like herd and its repair, `game/Kills.cpp`),
 `coop menu` (opens the CO-OP window), plus `stage <name>` and `coophello`.
 Every command has at least one word (`FACTS.md` section 3). A new command is also added to the `$commands` list of
@@ -198,7 +199,10 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   the animals sharing that profile with the same key, and re-reads every profile's key instead of caching it forever.
   **The guest's own creature**: outside a co-op launch the avatar's key goes into `Games\CoopOwnCreature.txt` (else, in the main
   menu, the citizen species of the newest creature save); in a co-op launch the guest's avatar gets that profile and species key
-  5 s after it appears and its model is reloaded (`SetModelKey` or `GrowUp`); `COOP_NO_OWN_CREATURE=1` turns it off.
+  5 s after it appears and its model is reloaded (`SetModelKey` or `GrowUp`); its default attack and socialize abilities are
+  pointed at the same ability types of the new list (`RemapDefaults`); a second after a respawn the profile, those defaults and the
+  model are set again (the game rebuilds the save creature's model); `COOP_NO_OWN_CREATURE=1` turns it off. The ability buttons
+  stay the old creature's until the editor was visited (`FACTS.md` section 7); `coop abilities` logs both lists.
   The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);

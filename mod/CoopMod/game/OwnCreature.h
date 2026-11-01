@@ -32,6 +32,10 @@ namespace OwnCreature
 	// is one (else the one FindRecord returns). Logs the copies when they changed. For our own avatar's body only.
 	bool ReadFresh(uint32_t instance, uint32_t type, uint32_t group, std::vector<Models::Record>& out);
 
+	// coop abilities: logs our avatar's abilities (index, type, category, hot key), its default attack / socialize index, the
+	// attack or social stance and, after a switch to the own creature, the abilities of the profile it had before (`own: ab` lines).
+	void DumpAbilities();
+
 	// Dispose: frees the memory.
 	void Shutdown();
 }

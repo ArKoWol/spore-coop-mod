@@ -20,5 +20,8 @@ cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\manif
 out\manifest_tests.exe || exit /b 1
 rem the Rich Presence string and the list rules (core\coop_presence.h)
 cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\presence_tests.exe presence_tests.cpp || exit /b 1
-out\presence_tests.exe
+out\presence_tests.exe || exit /b 1
+rem the chunks a creature model travels in (core\coop_models.h)
+cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\models_tests.exe models_tests.cpp || exit /b 1
+out\models_tests.exe
 exit /b %errorlevel%

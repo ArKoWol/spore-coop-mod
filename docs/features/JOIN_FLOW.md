@@ -32,7 +32,7 @@ hosting. Friends see him as hosting (M3).
    Artyom's world. The game restarts once.`
 3. **Co-op launch**: the game starts with Artyom's world in place of `Game0`; the mod joins Artyom again by itself. The menu
    shows Artyom's galaxy with a `CO-OP: Artyom` star near the centre (D24); our window opens by itself and says `Artyom's
-   world: press Play on the CO-OP star`, and that star is selected (spike J9, to check).
+   world: press Play on the CO-OP star`, the mod tries to select that star (spike J9: does not hold, 2026-11-01).
 4. In the game: a small plate `In Artyom's world · Leave`.
 5. **Leave**, or simply closing the game: the next normal launch is always your own world. Your own `Game0` comes back at the
    start of the next launch, before the game opens it, so a crash or a killed process also brings it back.
@@ -90,7 +90,7 @@ an old install with backups is restored by the question.
   guest, not written by the host** (differs from the first plan, no protocol change needed): Game0 is the host's world, so the
   planet is the newest creature-stage save (newest `.spo`, named after its played planet) and its star is the saved-game star
   that save belongs to (`MenuWorlds::HostPlanet`; `menu: the host's world: planet ... on star ...`).
-- **Spike J9** (to check on 2 PCs): once per co-op launch the mod writes the CO-OP star's StarID (else the host's) at `[GlobalGGEUI + 0xFC] + 0x7C`
+- **Spike J9** (2026-11-01, 2 PCs: the game resets the selection after 1 s, so the text is the way): once per co-op launch the mod writes the CO-OP star's StarID (else the host's) at `[GlobalGGEUI + 0xFC] + 0x7C`
   (`MenuWorlds::SelectStar`) and reads it back after 0.1 s, 1 s and 3 s (`menu: J9:` lines, verdict `menu: J9 verdict`; `COOP_NO_SELECT=1` turns the write off). Look at
   the screen too: is the card open, is the star marked, does Play use it? If the value is overwritten or nothing shows, the
   window says `Click its star in the galaxy, then press Play on the card.` (the text is the fallback). No synthetic clicks and no

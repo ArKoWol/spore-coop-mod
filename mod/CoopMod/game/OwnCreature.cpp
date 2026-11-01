@@ -9,6 +9,7 @@
 #include <Spore\Editors\cEditorResource.h>
 #include <Spore\Simulator\SubSystem\StarManager.h>
 #include <Spore\Simulator\cStarRecord.h>
+#include <Spore\Simulator\cCreatureGameData.h>
 
 #include <array>
 #include <cstdio>
@@ -56,6 +57,11 @@ namespace
 		Key3 written = { 0, 0, 0 };
 		bool menuTried = false;
 		void* swapped = nullptr;           // the avatar we switched (or decided not to switch)
+		void* ownProfile = nullptr;        // the profile we switched to (null: no switch made)
+		void* oldProfile = nullptr;        // the profile the avatar had before the switch
+		int attackIdx = -1, socialIdx = -1;  // our default attack / socialize ability after the switch
+		bool deadSeen = false;             // our switched avatar died: the respawn rebuilds its model from the save's creature
+		DWORD aliveAt = 0;                 // when it lived again (the model is loaded a second later, after the game's own)
 		void* verify = nullptr;
 		DWORD verifyAt = 0;
 	};
@@ -465,11 +471,81 @@ namespace
 		}
 	}
 
+	// The ability of the same type in our avatar's (new) list, else the first of the same category; -1 if none.
+	int SameAbility(Simulator::cCreatureAnimal* avatar, Simulator::cCreatureAbility* old)
+	{
+		if (!old) {
+			return -1;
+		}
+		int byCategory = -1;
+		for (int i = 0; i < avatar->GetAbilitiesCount(); ++i) {
+			Simulator::cCreatureAbility* a = avatar->GetAbility(i);
+			if (a && a->mType == old->mType) {
+				return i;
+			}
+			if (a && byCategory < 0 && a->mCategory == old->mCategory) {
+				byCategory = i;
+			}
+		}
+		return byCategory;
+	}
+
+	// After a profile switch the avatar keeps the indexes of its old ability list: its default attack (bite) and socialize (sing)
+	// then point at other abilities of the new list (2-PC test 2026-11-01: attack index 7 was a super power, socialize 6 sprint,
+	// so a click on an animal did not bite). Points them at the same abilities in the new list.
+	void RemapDefaults(Simulator::cCreatureAnimal* avatar, Simulator::cSpeciesProfile* old)
+	{
+		if (!old) {
+			return;
+		}
+		auto oldAbility = [old](int index) -> Simulator::cCreatureAbility* {
+			return index >= 0 && index < (int)old->mActiveAbilities.size() ? old->mActiveAbilities[index] : nullptr;
+		};
+		const int attack = avatar->mDefaultAttackAbilityIndex, social = avatar->mDefaultSocializeAbilityIndex;
+		const int newAttack = SameAbility(avatar, oldAbility(attack)), newSocial = SameAbility(avatar, oldAbility(social));
+		if (newAttack >= 0) {
+			avatar->mDefaultAttackAbilityIndex = newAttack;
+		}
+		if (newSocial >= 0) {
+			avatar->mDefaultSocializeAbilityIndex = newSocial;
+		}
+		avatar->mCurrentAttackIdx = (uint32_t)-1;
+		Logf("own: default attack ability %d -> %d, socialize %d -> %d (same type in our creature's list)", attack,
+			avatar->mDefaultAttackAbilityIndex, social, avatar->mDefaultSocializeAbilityIndex);
+	}
+
 	// In a co-op launch: the guest plays his own creature. ModAPI has no SetSpecies (SporeCoop calls the game's own); we set the
 	// species fields of the avatar and reload its model (guess, never tried before 2026-10-31).
 	void PlayOwn(State& s, Simulator::cCreatureAnimal* avatar, DWORD now)
 	{
 		if (s.swapped == avatar) {
+			// the game's respawn keeps the avatar object and our species key but rebuilds the model from the save's creature
+			// (2-PC test 2026-11-01): after a death, load our model again once the avatar lives
+			const bool dead = avatar->mbDead || avatar->mHealthPoints <= 0.0f;
+			if (s.ownProfile && dead) {
+				s.deadSeen = true;
+				s.aliveAt = 0;
+			}
+			else if (s.deadSeen && !dead && !s.aliveAt) {
+				s.aliveAt = now;
+			}
+			else if (s.deadSeen && !dead && now - s.aliveAt >= 1000) {
+				s.deadSeen = false;
+				s.aliveAt = 0;
+				// the respawn may also have set the save creature's default abilities again
+				avatar->mpSpeciesProfile = (Simulator::cSpeciesProfile*)s.ownProfile;
+				if (s.attackIdx >= 0) {
+					avatar->mDefaultAttackAbilityIndex = s.attackIdx;
+				}
+				if (s.socialIdx >= 0) {
+					avatar->mDefaultSocializeAbilityIndex = s.socialIdx;
+				}
+				avatar->GrowUp();
+				Logf("own: our avatar lives again after a death: our creature %08x set again, model reloaded (GrowUp)",
+					avatar->mSpeciesKey.instanceID);
+				s.verify = avatar;
+				s.verifyAt = now + 2000;
+			}
 			return;
 		}
 		s.swapped = avatar;
@@ -500,7 +576,12 @@ namespace
 		Logf("own: switching our avatar to our own creature %08x/%08x/%08x (from %s): profile %p -> %p, species %08x, model key %08x/%08x/%08x, "
 			"profile sequence %u -> %u", key[0], key[1], key[2], source, (void*)avatar->mpSpeciesProfile, (void*)profile, species[0], model.instanceID,
 			model.typeID, model.groupID, (unsigned)avatar->mProfileSeq, (unsigned)profile->creatureSeq);
+		s.ownProfile = profile;
+		s.oldProfile = avatar->mpSpeciesProfile;
 		avatar->mpSpeciesProfile = profile;
+		RemapDefaults(avatar, (Simulator::cSpeciesProfile*)s.oldProfile);
+		s.attackIdx = avatar->mDefaultAttackAbilityIndex;
+		s.socialIdx = avatar->mDefaultSocializeAbilityIndex;
 		avatar->mSpeciesKey = own;
 		avatar->mProfileSeq = profile->creatureSeq;
 		if ((model.instanceID == before[0] && model.groupID == before[2]) || (model.instanceID == species[0] && model.groupID == species[2])) {
@@ -533,6 +614,36 @@ namespace
 
 namespace OwnCreature
 {
+	void DumpAbilities()
+	{
+		auto avatar = GameNounManager.GetAvatar();
+		if (!avatar) {
+			Logf("own: abilities: no avatar (creature stage only)");
+			return;
+		}
+		int count = avatar->GetAbilitiesCount();
+		Logf("own: abilities of our avatar (species %08x, profile %p): %d, default attack %d, default socialize %d, current attack %d, "
+			"stance %s", avatar->mSpeciesKey.instanceID, (void*)avatar->mpSpeciesProfile, count, avatar->mDefaultAttackAbilityIndex,
+			avatar->mDefaultSocializeAbilityIndex, (int)avatar->mCurrentAttackIdx,
+			Simulator::cCreatureGameData::GetAbilityMode() == Simulator::cCreatureGameData::AbilityMode::Attack ? "attack" : "social");
+		for (int i = 0; i < count && i < 32; ++i) {
+			Simulator::cCreatureAbility* a = avatar->GetAbility(i);
+			if (a) {
+				Logf("own: ab %2d: type %d, category %d, hot key %d", i, (int)a->mType, a->mCategory, a->mVerbIconTriggerKey);
+			}
+		}
+		if (sS && sS->oldProfile) {
+			auto* old = (Simulator::cSpeciesProfile*)sS->oldProfile;
+			Logf("own: the profile before the switch (%p) had %d abilities:", (void*)old, (int)old->mActiveAbilities.size());
+			for (size_t i = 0; i < old->mActiveAbilities.size() && i < 32; ++i) {
+				Simulator::cCreatureAbility* a = old->mActiveAbilities[i];
+				if (a) {
+					Logf("own: ab old %2d: type %d, category %d, hot key %d", (int)i, (int)a->mType, a->mCategory, a->mVerbIconTriggerKey);
+				}
+			}
+		}
+	}
+
 	void Update(bool inGame)
 	{
 		State& s = S();

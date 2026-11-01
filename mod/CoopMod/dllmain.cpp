@@ -1803,7 +1803,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1873,6 +1873,10 @@ public:
 		}
 		else if (strcmp(sub, "hit") == 0 || strcmp(sub, "kill") == 0) {
 		World::TestHit(strcmp(sub, "kill") == 0);
+	}
+	else if (strcmp(sub, "abilities") == 0) {
+		OwnCreature::DumpAbilities();  // `own: ab` lines in CoopMod.log
+		App::ConsolePrintF("coop: abilities written to CoopMod.log (own: lines)");
 	}
 	else if (strcmp(sub, "killcheck") == 0) {
 		// game/Kills.cpp: does a herd made like a mirror's have a herd type the game knows (the lethal-bite crash), and does the repair work?

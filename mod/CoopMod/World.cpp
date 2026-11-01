@@ -10,6 +10,7 @@
 #include "game/OwnCreature.h"
 #include "game/Kills.h"
 #include "../../core/coop_core.h"
+#include "../../core/coop_models.h"
 
 #include <algorithm>
 #include <deque>
@@ -48,7 +49,6 @@ namespace
 	const float kPoolRadius = 100.0f;    // animals closer than this to the planet's centre are the game's pool: the host does not announce them, the guest does not remove them
 	const DWORD kDeathWaitMs = 2000;     // how long the game's own tick may turn a 0-health mirror into a corpse before we mark it dead
 	const float kFollowRadius = 150.0f;  // mirrors farther than this from our avatar are only teleported, not walked
-	const uint32_t kModelChunk = 40 * 1024;
 	const DWORD kModelWaitMs = 20000;   // after this long a missing model is replaced by a stand-in (and counted)
 
 	struct Mirror
@@ -1808,14 +1808,10 @@ namespace World
 			for (size_t i = 0; i < records.size(); ++i) {
 				const Models::Record& rec = records[i];
 				total += rec.data.size();
-				for (uint32_t offset = 0; offset < rec.data.size(); offset += kModelChunk) {
-					uint32_t len = (uint32_t)std::min<size_t>(kModelChunk, rec.data.size() - offset);
-					Writer w;
-					w.U8(kMsgModel); w.U32(instance); w.U32(type); w.U32(group);
-					w.U8((uint8_t)i); w.U8((uint8_t)records.size()); w.U32(rec.type);
-					w.U32((uint32_t)rec.data.size()); w.U32(offset); w.U32(len);
-					w.buf.insert(w.buf.end(), rec.data.begin() + offset, rec.data.begin() + offset + len);
-					QueueReliable(s, w.buf);
+				// the chunk layout lives in core/coop_models.h (tested)
+				for (const Message& m : models::Encode(instance, type, group, (uint8_t)i, (uint8_t)records.size(), rec.type,
+					rec.data.data(), (uint32_t)rec.data.size())) {
+					QueueReliable(s, m);
 				}
 			}
 			Logf("world: sending the model of species %08x (%d records, %d bytes)", instance, (int)records.size(), (int)total);
@@ -1831,15 +1827,14 @@ namespace World
 			}
 			return;
 		}
-		if (data[0] == kMsgModel && size >= 38) {
-			Reader r(data, size);
-			r.U8();
-			uint32_t instance = r.U32(), type = r.U32(), group = r.U32();
-			uint8_t index = r.U8(), count = r.U8();
-			uint32_t recType = r.U32(), total = r.U32(), offset = r.U32(), len = r.U32();
-			if (!r.ok || len > size - 38 || total > 8u * 1024 * 1024 || offset + len > total || index >= count) {
+		if (data[0] == kMsgModel) {
+			models::Chunk c;
+			if (!models::Decode(data, size, c)) {
 				return;
 			}
+			const uint32_t instance = c.instance, type = c.type, group = c.group, recType = c.recType, total = c.total;
+			const uint32_t offset = c.offset, len = c.len;
+			const uint8_t index = c.index, count = c.count;
 			State::ModelWait& wait = s.models[instance];
 			if (wait.done) {
 				return;
@@ -1853,7 +1848,7 @@ namespace World
 				rec.data.assign(total, 0);
 				rec.type = recType; rec.group = group; rec.instance = instance;
 			}
-			memcpy(rec.data.data() + offset, data + 38, len);
+			memcpy(rec.data.data() + offset, c.bytes, len);
 			wait.got[index] += len;
 			bool complete = true;
 			for (uint8_t i = 0; i < count; ++i) {

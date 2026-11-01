@@ -92,7 +92,8 @@ seen in our tests.
   exit (eip 0 / 0x28 / 0x2a0 after `CoopMod disposed`).
 - Closing the game from the menu does not save `stars.db`.
 - The **selected star** of the menu is the StarID at `[GlobalGGEUI::Get() + 0xFC] + 0x7C` (keeps the last selection when you
-  click empty space; `+0x138` is something else) *(verified 2026-10-25, one PC)*.
+  click empty space; `+0x138` is something else) *(verified 2026-10-25, one PC)*. A StarID the mod writes there holds about 1 s,
+  then the game sets it to 0: the card does not open *(verified 2026-11-01, 2 PCs)*.
 - **Play** calls `cGameModeManager::SetActiveModeByName("LoadGame")` (then mode `0x1654C08`, then `Game_Creature`) and sends
   `kMessageLoadGame`; it never calls `cGamePersistenceManager::LoadGame`. Modes change through `SetActiveModeAt` /
   `SetActiveModeByName`, not `SetActiveMode`. A save star whose `.spo` was copied from another save loads normally by Play
@@ -188,7 +189,14 @@ seen in our tests.
   *(guess, from disassembly 2026-10-31)*.
 - `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
   avatar 3 s after the load *(SporeCoop)*. We set `mpSpeciesProfile`, `mSpeciesKey`, `mProfileSeq` of the avatar and reload the
-  model (`SetModelKey` when the model key is the species key, else `GrowUp`) instead *(guess, built 2026-10-31, not tried)*.
+  model (`SetModelKey` when the model key is the species key, else `GrowUp`): the avatar looks like the new creature
+  *(verified 2026-11-01, 2 PCs)*. What it does not change:
+  - **the ability buttons (verb tray)** are built when creature mode is entered and keep the old creature's list; after a visit to
+    the creature editor they match the new creature *(verified 2026-11-01, one PC)*;
+  - `cCreatureBase::mDefaultAttackAbilityIndex` / `mDefaultSocializeAbilityIndex` keep the old list's indexes (attack 7 became a
+    super power, socialize 6 sprint) *(verified 2026-11-01, `coop abilities`)*;
+  - **the game's respawn rebuilds the save creature's model** on the same avatar object; species key and profile stay ours
+    *(verified 2026-11-01, 2 PCs)*.
 
 ## 8. What a creature-stage planet contains
 - First real dump (host, owner's save, 2026-10-24): 4188 nouns: 101 CreatureAnimal, 123 Herd, **101 Nest** (one per herd, all

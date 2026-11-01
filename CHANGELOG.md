@@ -6,6 +6,12 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fixes from the 2-PC test of 2026-11-01: creature models arrive, the guest stays his own creature, his attack works** (exxecute;
+  `core/coop_models.h`, `World.cpp`, `game/OwnCreature.cpp`; results in `STATUS.md` 5). The model receiver read chunks at byte 38
+  instead of 31 since 2026-10-24: no model ever arrived (17 new checks in `testsun_core_tests.bat`). After a respawn the own model
+  is loaded again; default attack/socialize point at the same ability types (`coop abilities` logs them). Ability buttons still
+  match only after one editor visit. Tested on 1 PC (respawn, abilities); models not tested; no protocol change, **both update**.
+
 - **One-PC checks of 2026-11-01, docs only** (exxecute; `STATUS.md` 3c, M1). In a co-op launch with a cached world the guest plays
   his own creature (`own: switching ...`, model reloaded); Leave restarts into the own `Game0` and the cache goes back. Core
   tests all pass. Tested on 1 PC; no protocol change. Still for 2 PCs: editor changes seen by the friend, the migration answer.
