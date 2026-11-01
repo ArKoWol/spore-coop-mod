@@ -151,6 +151,7 @@ namespace
 		uint32_t diagRaw[3] = { 0, 0, 0 }, diagSpecies[3] = { 0, 0, 0 }, diagSeq = 0;
 		DWORD lastSpeciesSend = 0;
 		void* puppet = nullptr;              // the other player's puppet (a cCreatureAnimal*)
+		void* puppetHerd = nullptr;          // the herd it is built in (World::SetPuppetHerd)
 		DWORD lastAvatarSend = 0;
 		struct RemoteAvatar { float health = 0, maxHealth = 0, scale = 0; bool valid = false; } remoteAvatar;
 		int damageLogged = 0, damageSent = 0, damageApplied = 0;
@@ -349,6 +350,9 @@ namespace
 				continue;
 			}
 			auto animal = object_cast<Simulator::cCreatureAnimal>(object);
+			if (animal && s.puppetHerd && (void*)animal->mHerd.get() == s.puppetHerd) {
+				continue;  // the puppet before it was picked up
+			}
 			if (!animal) {
 				continue;
 			}
@@ -912,6 +916,11 @@ namespace
 			++animalsTotal;
 			if (IsAvatar(object) || (void*)object == puppet) {
 				continue;
+			}
+			if (auto animal = object_cast<Simulator::cCreatureAnimal>(object)) {
+				if (s.puppetHerd && (void*)animal->mHerd.get() == s.puppetHerd) {
+					continue;  // the puppet before it was picked up
+				}
 			}
 			if (IsMirrorAnimal(s, object)) {
 				continue;
@@ -1489,6 +1498,11 @@ namespace World
 		memcpy(s.diagRaw, raw, sizeof(raw));
 		memcpy(s.diagSpecies, species, sizeof(species));
 		s.diagSeq = seq;
+	}
+
+	void SetPuppetHerd(void* herd)
+	{
+		S().puppetHerd = herd;
 	}
 
 	void Update(bool host, bool inGame, void* puppet)

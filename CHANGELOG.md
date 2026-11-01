@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: the other player's creature stayed invisible after his respawn** (exxecute; `World.cpp`, `dllmain.cpp`). The new puppet's
+  animal was removed as a stray when the sweep ran before the puppet code picked it up (a race; the hits still arrived). The puppet's
+  herd is now exempt on both sides (`World::SetPuppetHerd`). 2-PC test of 2026-11-01: models, own creatures, buttons, native lethal
+  bite and PvP respawns work (`STATUS.md` 5). Not tested yet; no protocol change.
+
 - **The guest's ability buttons match his own creature** (exxecute; `game/OwnCreature.cpp`, `FACTS.md` 7). After the switch the
   buttons still played the old creature's slots (stealth fired Raging Roar). The mod now calls the game's own rebuild of the
   button map and icons (exe 0xD49400, what the editor's exit does), also after a respawn. Tested on 1 PC (buttons right); no

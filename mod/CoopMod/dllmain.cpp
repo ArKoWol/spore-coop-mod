@@ -256,6 +256,7 @@ static void ReleasePuppet()
 	}
 	sPuppet = nullptr;
 	sPuppetHerd = nullptr;
+	World::SetPuppetHerd(nullptr);
 }
 
 static ResourceKey sPuppetKey;  // the species the puppet was built from
@@ -287,6 +288,7 @@ static bool SpawnPuppet()
 	sPuppetAnchor = avatar->GetPosition() + Vector3(8.0f, 0.0f, 0.0f);
 	// cCreatureAnimal::Create without a herd crashed the game, so let the game build the herd.
 	sPuppetHerd = GameNounManager.CreateHerd(sPuppetAnchor, species, 1, false, 0, false);
+	World::SetPuppetHerd(sPuppetHerd.get());
 	sPuppetWaitFrames = 0;
 	sPuppetInit = false;
 	Logf(sPuppetHerd ? "puppet: herd created" : "puppet: CreateHerd returned null");

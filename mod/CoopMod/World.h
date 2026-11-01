@@ -25,6 +25,10 @@ namespace World
 	// with an avatar, `puppet` is the player puppet (not an NPC), nullptr if none.
 	void Update(bool host, bool inGame, void* puppet);
 
+	// The herd the player puppet is being built in (nullptr when none): its animal is neither announced nor removed as a stray
+	// while the puppet code has not picked it up yet (a stray sweep in between left the puppet invisible, 2-PC test 2026-11-01).
+	void SetPuppetHerd(void* herd);
+
 	// A message that arrived on kChannelDelta / kChannelReliable.
 	void OnMessage(int channel, const uint8_t* data, uint32_t size, bool host);
 
