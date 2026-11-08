@@ -266,7 +266,9 @@ namespace Objects
 		r.U8();
 		if (data[0] == kMsgRemove) {
 			uint32_t noun = r.U32();
-			Vector3 pos(r.F32(), r.F32(), r.F32());
+			// one statement per read: the compiler may evaluate call arguments in any order (MSVC swapped x and z here)
+			const float x = r.F32(), y = r.F32(), z = r.F32();
+			Vector3 pos(x, y, z);
 			if (!r.ok || !Tracked(noun)) {
 				return true;
 			}
@@ -294,7 +296,8 @@ namespace Objects
 		for (uint32_t i = 0; i < n; ++i) {
 			Obj o;
 			o.noun = r.U32();
-			o.pos = Vector3(r.F32(), r.F32(), r.F32());
+			const float x = r.F32(), y = r.F32(), z = r.F32();  // in this order: see above
+			o.pos = Vector3(x, y, z);
 			if (!r.ok) {
 				return true;
 			}

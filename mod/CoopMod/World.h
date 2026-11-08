@@ -29,6 +29,9 @@ namespace World
 	// while the puppet code has not picked it up yet (a stray sweep in between left the puppet invisible, 2-PC test 2026-11-01).
 	void SetPuppetHerd(void* herd);
 
+	// coop nests: logs the avatar's nest and the nearest nests with everything that could decide whether they are drawn (`nestdump:`)
+	void DumpNests();
+
 	// A message that arrived on kChannelDelta / kChannelReliable.
 	void OnMessage(int channel, const uint8_t* data, uint32_t size, bool host);
 

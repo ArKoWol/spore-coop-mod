@@ -1206,6 +1206,16 @@ static void DrivePuppet(DWORD now, bool inGame)
 			ReleasePuppet();
 		}
 	}
+	// the other player left (Leave, closed or crashed game): he goes after kReconnectMs of silence and comes back with his next
+	// packet (D1); the echo has no peer
+	if (!sEcho && sHaveLatest && sTransport != Transport::None && now - sLastReceive > kReconnectMs) {
+		Logf("puppet: nothing from the other player for %u s: his creature is removed", (unsigned)(kReconnectMs / 1000));
+		App::ConsolePrintF("coop: the other player is gone.");
+		sHaveLatest = false;
+		sPuppetInit = false;
+		sGotFirst = false;
+		ReleasePuppet();
+	}
 	// the other player is dead: no puppet until he respawns, then it is built where he is (game/Respawn.cpp)
 	if (Respawn::HidePuppet()) {
 		if (sPuppetHerd) {
@@ -1805,7 +1815,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop nests | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1875,6 +1885,10 @@ public:
 		}
 		else if (strcmp(sub, "hit") == 0 || strcmp(sub, "kill") == 0) {
 		World::TestHit(strcmp(sub, "kill") == 0);
+	}
+	else if (strcmp(sub, "nests") == 0) {
+		World::DumpNests();  // `nestdump:` lines in CoopMod.log
+		App::ConsolePrintF("coop: nests written to CoopMod.log");
 	}
 	else if (strcmp(sub, "abilities") == 0) {
 		OwnCreature::DumpAbilities();  // `own: ab` lines in CoopMod.log

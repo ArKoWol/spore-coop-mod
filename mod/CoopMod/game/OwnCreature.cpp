@@ -58,11 +58,6 @@ namespace
 		Key3 written = { 0, 0, 0 };
 		bool menuTried = false;
 		void* swapped = nullptr;           // the avatar we switched (or decided not to switch)
-		void* ownProfile = nullptr;        // the profile we switched to (null: no switch made)
-		void* oldProfile = nullptr;        // the profile the avatar had before the switch
-		int attackIdx = -1, socialIdx = -1;  // our default attack / socialize ability after the switch
-		bool deadSeen = false;             // our switched avatar died: the respawn rebuilds its model from the save's creature
-		DWORD aliveAt = 0;                 // when it lived again (the model is loaded a second later, after the game's own)
 		void* verify = nullptr;
 		DWORD verifyAt = 0;
 	};
@@ -339,6 +334,9 @@ namespace
 				s.change = true;
 				Logf("own: the editor wrote creature %08x/%08x/%08x: announced as our avatar's body from now on (game maps it to %s)", key[0],
 					key[1], key[2], SpeciesManager.GetSpeciesProfile(ResourceKey(key[0], key[1], key[2])) ? "a profile" : "no profile");
+				if (CoopLaunch::Active()) {
+					WriteOwnFile(s, key, "editor");  // the next co-op launch starts with this creature
+				}
 			}
 		}
 	}
@@ -502,82 +500,50 @@ namespace
 		return true;
 	}
 
-	// The ability of the same type in our avatar's (new) list, else the first of the same category; -1 if none.
-	int SameAbility(Simulator::cCreatureAnimal* avatar, Simulator::cCreatureAbility* old)
+	// cSpeciesProfile: loads a creature into this profile, as the game does for the player's species when the editor closes: the
+	// creature key, the abilities and the stats change, the species key stays (exe 0x4D4F70, thiscall, the key by pointer, returns
+	// false if there is no such creature; FACTS.md section 7).
+	const uintptr_t kProfileLoad = 0x4D4F70;
+	const uint8_t kProfileLoadStart[] = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x18, 0x89, 0x4D, 0xE8 };
+
+	bool LoadIntoProfile(Simulator::cSpeciesProfile* profile, const ResourceKey* key)
 	{
-		if (!old) {
-			return -1;
+		__try {
+			if (memcmp((const void*)Address(kProfileLoad), kProfileLoadStart, sizeof(kProfileLoadStart)) != 0) {
+				Logf("own: the profile load is not at %08x in this exe", (unsigned)kProfileLoad);
+				return false;
+			}
+			return ((bool(__thiscall*)(void*, const ResourceKey*))Address(kProfileLoad))(profile, key);
 		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			Logf("own: the profile load failed (exception)");
+			return false;
+		}
+	}
+
+	// the ability of this type in the creature's list, else the first of this category; -1 if none
+	int AbilityLike(Simulator::cCreatureAnimal* creature, int type, int category)
+	{
 		int byCategory = -1;
-		for (int i = 0; i < avatar->GetAbilitiesCount(); ++i) {
-			Simulator::cCreatureAbility* a = avatar->GetAbility(i);
-			if (a && a->mType == old->mType) {
+		for (int i = 0; i < creature->GetAbilitiesCount(); ++i) {
+			Simulator::cCreatureAbility* a = creature->GetAbility(i);
+			if (a && (int)a->mType == type) {
 				return i;
 			}
-			if (a && byCategory < 0 && a->mCategory == old->mCategory) {
+			if (a && byCategory < 0 && a->mCategory == category) {
 				byCategory = i;
 			}
 		}
 		return byCategory;
 	}
 
-	// After a profile switch the avatar keeps the indexes of its old ability list: its default attack (bite) and socialize (sing)
-	// then point at other abilities of the new list (2-PC test 2026-11-01: attack index 7 was a super power, socialize 6 sprint,
-	// so a click on an animal did not bite). Points them at the same abilities in the new list.
-	void RemapDefaults(Simulator::cCreatureAnimal* avatar, Simulator::cSpeciesProfile* old)
-	{
-		if (!old) {
-			return;
-		}
-		auto oldAbility = [old](int index) -> Simulator::cCreatureAbility* {
-			return index >= 0 && index < (int)old->mActiveAbilities.size() ? old->mActiveAbilities[index] : nullptr;
-		};
-		const int attack = avatar->mDefaultAttackAbilityIndex, social = avatar->mDefaultSocializeAbilityIndex;
-		const int newAttack = SameAbility(avatar, oldAbility(attack)), newSocial = SameAbility(avatar, oldAbility(social));
-		if (newAttack >= 0) {
-			avatar->mDefaultAttackAbilityIndex = newAttack;
-		}
-		if (newSocial >= 0) {
-			avatar->mDefaultSocializeAbilityIndex = newSocial;
-		}
-		avatar->mCurrentAttackIdx = (uint32_t)-1;
-		Logf("own: default attack ability %d -> %d, socialize %d -> %d (same type in our creature's list)", attack,
-			avatar->mDefaultAttackAbilityIndex, social, avatar->mDefaultSocializeAbilityIndex);
-	}
-
-	// In a co-op launch: the guest plays his own creature. ModAPI has no SetSpecies (SporeCoop calls the game's own); we set the
-	// species fields of the avatar and reload its model (guess, never tried before 2026-10-31).
+	// In a co-op launch: the guest plays his own creature. Done the way the game does it when the editor closes: our creature is loaded
+	// into the profile of the player's species, so the game still sees its own player, with his family, nest and mates (a switch to
+	// another species left the guest without a mate and with the wrong buttons, 2-PC test 2026-11-08). The models are reloaded and the
+	// ability buttons rebuilt; a respawn then builds our creature by itself.
 	void PlayOwn(State& s, Simulator::cCreatureAnimal* avatar, DWORD now)
 	{
 		if (s.swapped == avatar) {
-			// the game's respawn keeps the avatar object and our species key but rebuilds the model from the save's creature
-			// (2-PC test 2026-11-01): after a death, load our model again once the avatar lives
-			const bool dead = avatar->mbDead || avatar->mHealthPoints <= 0.0f;
-			if (s.ownProfile && dead) {
-				s.deadSeen = true;
-				s.aliveAt = 0;
-			}
-			else if (s.deadSeen && !dead && !s.aliveAt) {
-				s.aliveAt = now;
-			}
-			else if (s.deadSeen && !dead && now - s.aliveAt >= 1000) {
-				s.deadSeen = false;
-				s.aliveAt = 0;
-				// the respawn may also have set the save creature's default abilities again
-				avatar->mpSpeciesProfile = (Simulator::cSpeciesProfile*)s.ownProfile;
-				if (s.attackIdx >= 0) {
-					avatar->mDefaultAttackAbilityIndex = s.attackIdx;
-				}
-				if (s.socialIdx >= 0) {
-					avatar->mDefaultSocializeAbilityIndex = s.socialIdx;
-				}
-				avatar->GrowUp();
-				RebuildAbilityButtons();
-				Logf("own: our avatar lives again after a death: our creature %08x set again, model reloaded (GrowUp)",
-					avatar->mSpeciesKey.instanceID);
-				s.verify = avatar;
-				s.verifyAt = now + 2000;
-			}
 			return;
 		}
 		s.swapped = avatar;
@@ -592,41 +558,55 @@ namespace
 			return;
 		}
 		const Key3 before = AvatarKey(avatar);
-		const Key3 species = { avatar->mSpeciesKey.instanceID, avatar->mSpeciesKey.typeID, avatar->mSpeciesKey.groupID };
-		if ((key[0] == before[0] && key[2] == before[2]) || (key[0] == species[0] && key[2] == species[2])) {
-			Logf("own: our own creature %08x is already the avatar's species, nothing to switch", key[0]);
+		if (key[0] == before[0] && key[2] == before[2]) {
+			Logf("own: our own creature %08x is already the avatar's creature, nothing to load", key[0]);
 			return;
 		}
+		Simulator::cSpeciesProfile* profile = avatar->mpSpeciesProfile;
 		const ResourceKey own(key[0], key[1], key[2]);
-		Simulator::cSpeciesProfile* profile = SpeciesManager.GetSpeciesProfile(own);
-		if (!profile) {
-			Logf("own: our own creature %08x/%08x/%08x (from %s) is not buildable here, the guest plays the host's creature", key[0], key[1], key[2],
-				source);
+		if (!profile || !SpeciesManager.GetSpeciesProfile(own)) {
+			Logf("own: our own creature %08x/%08x/%08x (from %s) is not buildable here, the guest plays the host's creature", key[0], key[1], key[2], source);
 			return;
 		}
-		const ResourceKey model = avatar->GetModelKey();
-		Logf("own: switching our avatar to our own creature %08x/%08x/%08x (from %s): profile %p -> %p, species %08x, model key %08x/%08x/%08x, "
-			"profile sequence %u -> %u", key[0], key[1], key[2], source, (void*)avatar->mpSpeciesProfile, (void*)profile, species[0], model.instanceID,
-			model.typeID, model.groupID, (unsigned)avatar->mProfileSeq, (unsigned)profile->creatureSeq);
-		s.ownProfile = profile;
-		s.oldProfile = avatar->mpSpeciesProfile;
-		avatar->mpSpeciesProfile = profile;
-		RemapDefaults(avatar, (Simulator::cSpeciesProfile*)s.oldProfile);
-		s.attackIdx = avatar->mDefaultAttackAbilityIndex;
-		s.socialIdx = avatar->mDefaultSocializeAbilityIndex;
-		if (RebuildAbilityButtons()) {
-			Logf("own: ability buttons rebuilt for our creature");
+		// the default abilities are indexes into the list that is about to change: keep what they are
+		Simulator::cCreatureAbility* attack = avatar->mDefaultAttackAbilityIndex >= 0 ? avatar->GetAbility(avatar->mDefaultAttackAbilityIndex) : nullptr;
+		Simulator::cCreatureAbility* social = avatar->mDefaultSocializeAbilityIndex >= 0 ? avatar->GetAbility(avatar->mDefaultSocializeAbilityIndex) : nullptr;
+		const int attackType = attack ? (int)attack->mType : -1, attackCategory = attack ? attack->mCategory : -1;
+		const int socialType = social ? (int)social->mType : -1, socialCategory = social ? social->mCategory : -1;
+		const uint32_t seqBefore = profile->creatureSeq;
+		if (!LoadIntoProfile(profile, &own)) {
+			Logf("own: our own creature %08x could not be loaded into the player's profile, the guest plays the host's creature", key[0]);
+			return;
 		}
-		avatar->mSpeciesKey = own;
-		avatar->mProfileSeq = profile->creatureSeq;
-		if ((model.instanceID == before[0] && model.groupID == before[2]) || (model.instanceID == species[0] && model.groupID == species[2])) {
-			avatar->SetModelKey(own);
-			Logf("own: model key was the species key: SetModelKey(%08x)", key[0]);
+		const int newAttack = AbilityLike(avatar, attackType, attackCategory), newSocial = AbilityLike(avatar, socialType, socialCategory);
+		Logf("own: our own creature %08x/%08x/%08x (from %s) loaded into the player's profile %p: creature %08x -> %08x, species %08x stays, sequence %u -> %u, "
+			"%d abilities, default attack %d -> %d, socialize %d -> %d", key[0], key[1], key[2], source, (void*)profile, before[0], profile->mCreatureKey.instanceID,
+			avatar->mSpeciesKey.instanceID, (unsigned)seqBefore, (unsigned)profile->creatureSeq, avatar->GetAbilitiesCount(), avatar->mDefaultAttackAbilityIndex, newAttack,
+			avatar->mDefaultSocializeAbilityIndex, newSocial);
+		// everybody of the player's species that is here now: the avatar and its family
+		int family = 0;
+		auto reload = [&](Simulator::cCreatureAnimal* creature) {
+			if (newAttack >= 0) {
+				creature->mDefaultAttackAbilityIndex = newAttack;
+			}
+			if (newSocial >= 0) {
+				creature->mDefaultSocializeAbilityIndex = newSocial;
+			}
+			creature->mCurrentAttackIdx = (uint32_t)-1;
+			creature->mProfileSeq = profile->creatureSeq;
+			creature->GrowUp();
+		};
+		reload(avatar);
+		if (Simulator::cHerd* herd = avatar->mHerd.get()) {
+			for (auto& member : herd->mHerd) {
+				if (member && member.get() != avatar) {
+					reload(member.get());
+					++family;
+				}
+			}
 		}
-		else {
-			avatar->GrowUp();
-			Logf("own: model key is not the species key: GrowUp() to reload the model");
-		}
+		const bool buttons = RebuildAbilityButtons();
+		Logf("own: %d of our family reloaded, ability buttons %s", family, buttons ? "rebuilt" : "NOT rebuilt");
 		s.verify = avatar;
 		s.verifyAt = now + 2000;
 		s.change = true;
@@ -666,16 +646,6 @@ namespace OwnCreature
 			Simulator::cCreatureAbility* a = avatar->GetAbility(i);
 			if (a) {
 				Logf("own: ab %2d: type %d, category %d, hot key %d", i, (int)a->mType, a->mCategory, a->mVerbIconTriggerKey);
-			}
-		}
-		if (sS && sS->oldProfile) {
-			auto* old = (Simulator::cSpeciesProfile*)sS->oldProfile;
-			Logf("own: the profile before the switch (%p) had %d abilities:", (void*)old, (int)old->mActiveAbilities.size());
-			for (size_t i = 0; i < old->mActiveAbilities.size() && i < 32; ++i) {
-				Simulator::cCreatureAbility* a = old->mActiveAbilities[i];
-				if (a) {
-					Logf("own: ab old %2d: type %d, category %d, hot key %d", (int)i, (int)a->mType, a->mCategory, a->mVerbIconTriggerKey);
-				}
 			}
 		}
 	}

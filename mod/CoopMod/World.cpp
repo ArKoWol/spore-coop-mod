@@ -161,7 +161,7 @@ namespace
 
 		// nests (G2): the host's list, and the nests the guest made from it
 		struct NestInfo { Vector3 pos; ResourceKey key; float rot[4] = { 0, 0, 0, 1 }; ResourceKey model; float scale = 1.0f; };
-		struct NestMirror { cHerdPtr herd; cNestPtr nest; Vector3 pos; };
+		struct NestMirror { cHerdPtr herd; cNestPtr nest; Vector3 pos; bool made = false; };  // made: by us, else the game's own nest moved
 		DWORD lastNests = 0;
 		bool nestsNow = false;
 		std::vector<NestInfo> nestIncoming;      // guest: list being received
@@ -515,6 +515,12 @@ namespace
 		}
 	}
 
+	bool SameAsOurSpecies(const ResourceKey& k)
+	{
+		auto avatar = GameNounManager.GetAvatar();
+		return avatar && avatar->mSpeciesKey.instanceID == k.instanceID && avatar->mSpeciesKey.groupID == k.groupID;
+	}
+
 	// Decides which key the other player's avatar is built from: his key itself, or an alias when his body differs from the one
 	// we hold under the same key. Runs when his key / hash changed, when our own body changed, and (cheaply) while his model is
 	// still missing.
@@ -542,6 +548,11 @@ namespace
 		// our body for the same key: our own avatar's hash, or read it (this runs on a change, not every frame)
 		uint32_t local = 0;
 		if (s.sentHashValid && k.instanceID == s.sentKey.instanceID && k.groupID == s.sentKey.groupID) {
+			local = s.sentHash;
+		}
+		else if (s.sentHashValid && SameAsOurSpecies(k)) {
+			// his creature is our species' key and our profile now holds another creature (edited, or ours in a co-op launch): that
+			// key builds OUR body here, so his creature needs an alias although the record under the key is the same as his
 			local = s.sentHash;
 		}
 		else {
@@ -920,6 +931,11 @@ namespace
 			if (auto animal = object_cast<Simulator::cCreatureAnimal>(object)) {
 				if (s.puppetHerd && (void*)animal->mHerd.get() == s.puppetHerd) {
 					continue;  // the puppet before it was picked up
+				}
+				// our own family: the mate of a mating call comes from it, and without it there is no way into the editor
+				auto own = GameNounManager.GetAvatar();
+				if (own && own->mHerd && animal->mHerd == own->mHerd) {
+					continue;
 				}
 			}
 			if (IsMirrorAnimal(s, object)) {
@@ -1362,6 +1378,7 @@ namespace
 			}
 			State::NestMirror m;
 			m.pos = info.pos;
+			m.made = true;
 			m.herd = GameNounManager.CreateHerd(info.pos, profile, 0, false, 0, true);
 			if (!m.herd) {
 				++s.nestsFailed;
@@ -1422,8 +1439,11 @@ namespace
 			DestroyMirror(m.second);
 		}
 		s.mirrors.clear();
+		// only what we made: the game's own nests we moved stay (destroying them on a reconnect left the guest with no nests at all)
 		for (auto& n : s.nestMirrors) {
-			DestroyNestMirror(n);
+			if (n.made) {
+				DestroyNestMirror(n);
+			}
 		}
 		s.nestMirrors.clear();
 	}
@@ -1498,6 +1518,40 @@ namespace World
 		memcpy(s.diagRaw, raw, sizeof(raw));
 		memcpy(s.diagSpecies, species, sizeof(species));
 		s.diagSeq = seq;
+	}
+
+	void DumpNests()
+	{
+		auto avatar = GameNounManager.GetAvatar();
+		if (!avatar) {
+			Logf("nestdump: no avatar (creature stage only)");
+			return;
+		}
+		Simulator::cHerd* avatarHerd = avatar->mHerd.get();
+		Logf("nestdump: avatar at %.1f %.1f %.1f, herd %p, its nest %p, herd members %d, target size %d, owned by avatar %d", avatar->GetPosition().x,
+			avatar->GetPosition().y, avatar->GetPosition().z, (void*)avatarHerd, avatarHerd ? (void*)avatarHerd->mpNest.get() : nullptr,
+			avatarHerd ? (int)avatarHerd->mHerd.size() : 0, avatarHerd ? avatarHerd->mTargetHerdSize : 0, avatarHerd && avatarHerd->mOwnedByAvatar ? 1 : 0);
+		struct Near { float d; Simulator::cNest* nest; };
+		std::vector<Near> nests;
+		for (auto it = GameNounManager.mNouns.begin(); it != GameNounManager.mNouns.end(); ++it) {
+			Simulator::cGameData* object = &*it;
+			if (object->GetNounID() == Simulator::kNest) {
+				if (auto nest = object_cast<Simulator::cNest>(object)) {
+					nests.push_back({ (nest->GetPosition() - avatar->GetPosition()).Length(), nest });
+				}
+			}
+		}
+		std::sort(nests.begin(), nests.end(), [](const Near& a, const Near& b) { return a.d < b.d; });
+		Logf("nestdump: %d nests", (int)nests.size());
+		for (size_t i = 0; i < nests.size() && i < 8; ++i) {
+			Simulator::cNest* n = nests[i].nest;
+			Simulator::cHerd* h = n->mpHerd.get();
+			const ResourceKey& key = n->GetModelKey();
+			Logf("nestdump: %.1f m: at %.1f %.1f %.1f (ours %d), model %08x!%08x!%08x hasModel %d model %p changed %d onView %d scale %.2f resetEffects %d flags %08x spatial flags %08x "
+				"footprint %d herd %p species %08x members %d target %d", nests[i].d, n->GetPosition().x, n->GetPosition().y, n->GetPosition().z, h == avatarHerd ? 1 : 0, key.groupID,
+				key.typeID, key.instanceID, n->HasModel() ? 1 : 0, (void*)n->GetModel(), n->HasModelChanged() ? 1 : 0, n->IsOnView() ? 1 : 0, n->GetScale(),
+				n->mbResetNestEffects ? 1 : 0, (unsigned)n->mFlags, (unsigned)n->cSpatialObject::mFlags, n->mhFootprint, (void*)h, HerdSpeciesOf(h), h ? (int)h->mHerd.size() : 0, h ? h->mTargetHerdSize : 0);
+		}
 	}
 
 	void SetPuppetHerd(void* herd)
@@ -1646,7 +1700,9 @@ namespace World
 			}
 			for (uint32_t i = 0; i < n; ++i) {
 				State::NestInfo info;
-				info.pos = Vector3(r.F32(), r.F32(), r.F32());
+				// one statement per read: the compiler may evaluate call arguments in any order (MSVC swapped x and z here)
+				const float x = r.F32(), y = r.F32(), z = r.F32();
+				info.pos = Vector3(x, y, z);
 				info.key.instanceID = r.U32(); info.key.typeID = r.U32(); info.key.groupID = r.U32();
 				for (int k = 0; k < 4; ++k) {
 					info.rot[k] = r.F32();
@@ -2302,7 +2358,12 @@ namespace World
 
 	bool ShouldSkipAI(void* animal)
 	{
-		if (!sState || !sState->haveWorld || animal == (void*)GameNounManager.GetAvatar()) {
+		auto avatar = GameNounManager.GetAvatar();
+		if (!sState || !sState->haveWorld || animal == (void*)avatar) {
+			return false;
+		}
+		// our own family lives only on this machine: without its AI nobody answers a mating call (no way into the editor)
+		if (avatar && avatar->mHerd && static_cast<Simulator::cCreatureAnimal*>(animal)->mHerd == avatar->mHerd) {
 			return false;
 		}
 		// A mirror that was just killed (0 health, no corpse yet) gets the game's own tick for kDeathWaitMs: that is what turns a

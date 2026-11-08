@@ -1,6 +1,6 @@
 # Status: what works, what is being done, by whom
 
-> Status: live · Owner: both · Updated: 2026-11-01
+> Status: live · Owner: both · Updated: 2026-11-08
 > Read when: at the start of every work session (after `git pull`), and before you pick a task. Update it when you start or
 > finish a piece of work and after every two-PC test.
 
@@ -12,7 +12,7 @@ change), **partly**, **not done**.
 |---|---|---|
 | 1 | Session: connect, world transfer, automatic restart and rejoin, console | works |
 | 2a | Same animals on both sides: model, size, age, health, alpha | works; in a fight a mirror stood off the real animal (2026-10-25), settle snap built 2026-10-31, to check |
-| 2b | Nests (the host's nests on the guest) | not visible on the guest (2026-10-25); orientation, scale, model key sent since 2026-10-31: still not visible (2-PC test 2026-10-31) |
+| 2b | Nests (the host's nests on the guest) | **works on 2 PCs 2026-11-08**: same places (0.0 m), visible, upright. They were never missing: the guest read the host's positions with x and z swapped (`FACTS.md` 2) |
 | 2c | Plants not flickering | to check (fixed 2026-10-25) |
 | 2d | Fruit at the same places and gone when eaten | not done (fruit is generated per machine, 6 of 74 match) |
 | 2e | Eggs and hatching | partly |
@@ -20,10 +20,10 @@ change), **partly**, **not done**.
 | 2g | Species relations: extinction for both, allies | not done (plan: `PLAN.md` section 3) |
 | 3a | The other player walks | works |
 | 3b | Walking backwards, sideways, running | works (2-PC test 2026-10-31) |
-| 3c | Each player's own creature model on the puppet | **works on 2 PCs 2026-11-01** (a326dfa): models travel both ways, each sees the other's own creature, the host's editor change is seen by the guest; the guest plays his own creature with his own ability buttons. Open: the guest's HUD portrait shows the host's creature (the save's player) |
+| 3c | Each player's own creature model on the puppet | **works on 2 PCs 2026-11-08**: models both ways, each sees the other's own creature, editor changes seen. The guest's creature is loaded into the player's profile as the editor does: own buttons, portrait, sight, family, mate and editor, also after a respawn |
 | 3d | Real health and size of the puppet | to check |
 | 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
-| 3f | Click on the friend's creature: our creature follows it | built 2026-10-31, to check |
+| 3f | Click on the friend's creature: our creature follows it | built 2026-11-08: only in the social stance (in the attack stance the click is a bite), to check on 2 PCs |
 | 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | **works on 2 PCs 2026-11-01**: the guest's lethal bite is native (`LETHAL, applied here (native death)`), no crash, herd type repaired; each player gets his own DNA |
 | 4b | Host damage and deaths | works |
 | 4c | PvP, death and respawn at the own nest, no reward | **works on 2 PCs 2026-11-01**: both killed each other, both respawned at their own nests and saw each other again; one exception fixed the same day: after the host's respawn the guest's puppet of him stayed invisible (the stray sweep removed it before it was picked up) |
@@ -60,6 +60,7 @@ Newest first. One line per test: date, build (commit), who, what was tested, res
 
 | Date | Build | Who | What | Result |
 |---|---|---|---|---|
+| 2026-11-08 | working copy over 9a9b0b3 (protocol 17), host on 9a9b0b3 | both | nests, mating call, editor, own creature | works: nests at the host's places (`covers a host entry: 1`), mate and editor for the guest's own creature, portrait and buttons his, the host keeps his own look (alias). Host's side of the new fixes (leave, follow, fruit) not seen yet |
 | 2026-11-01 | a326dfa (protocol 17) | both | models, own creatures, editor, buttons, lethal bite, PvP and respawn | works: models in both directions (`models: installed`), each sees the other's own creature, the host's edit seen by the guest, own ability buttons, the guest's native lethal bite, own DNA each, PvP deaths and respawns. Fails: after the host's respawn the guest could not see him but was hit by him (`puppet: herd created`, no `animal found`; fixed after the test) |
 | 2026-11-01 | cc9d6ee (protocol 17) | both | join from the menu, star, own creature, edits, corpses, bites, respawn, Leave | works: invite, list, manifest (1 of 10 files), star and Play, the guest plays his own creature, eats the host's corpse to the end, respawns at his nest, Leave. Fails: no creature model arrived either way (each saw a stand-in; host's edit not seen), after the respawn the guest had the save's creature again, the ability buttons were mixed (could not bite), the host's eating animation not seen; guest log: `strays removed so far` 1518 in a session |
 | 2026-10-31 | b0039f2 (protocol 13) | both | M1 join, walking, nests, creature edit, corpses | walking (forward, back, sideways, running) looks right; host's nests still not visible on the guest; after the host's edit + mating, hundreds of clones in a ring around the avatar nest on the guest only (not selectable, no collision); host's edit seen on the host only, the guest sees the old body; the guest still cannot eat corpses. Host log: `body hash b7211470` never changed during the session (no key or profile-sequence change), host nest model key `00000000!00000000!87b2acc2`, host corpses `food 100.0` |

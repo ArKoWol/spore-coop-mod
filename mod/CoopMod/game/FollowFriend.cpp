@@ -4,6 +4,7 @@
 #include "../Log.h"
 
 #include <Spore/Simulator/SubSystem/GameViewManager.h>
+#include <Spore/Simulator/cCreatureGameData.h>
 
 namespace
 {
@@ -71,7 +72,12 @@ namespace FollowFriend
 		if (clicked) {
 			Simulator::cGameData* hovered = GameViewManager.GetHoveredObject();
 			bool onFriend = hovered && hovered == static_cast<Simulator::cGameData*>(puppet);
-			if (onFriend && !sFollowing) {
+			// in the attack stance a click on the friend is a bite: our MoveTo would cancel it (2-PC test 2026-11-08)
+			bool attackStance = Simulator::cCreatureGameData::GetAbilityMode() == Simulator::cCreatureGameData::AbilityMode::Attack;
+			if (onFriend && !sFollowing && attackStance) {
+				// nothing to do: the game attacks
+			}
+			else if (onFriend && !sFollowing) {
 				sFollowing = true;
 				sWalking = false;
 				sStarted = now;

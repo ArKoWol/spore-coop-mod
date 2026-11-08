@@ -1,6 +1,6 @@
 # How the mod works now
 
-> Status: reference · Owner: both · Updated: 2026-11-01
+> Status: reference · Owner: both · Updated: 2026-11-08
 > Read when: before you change the mod's code, the protocol or the tools. It describes the code as it is, not the plan
 > (the plan is `PLAN.md`). Update it in the same change that makes it wrong.
 
@@ -173,7 +173,7 @@ world), `coopjoin <steamid | last | number | name>`,
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side, at our height above the planet's centre), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
-death and respawn, section 7), `coop abilities` (our avatar's abilities and default indexes, `own: ab` lines), `coop killcheck` (one PC: the herd
+death and respawn, section 7), `coop abilities` (our avatar's abilities and default indexes, `own: ab` lines), `coop nests` (the nearest nests, `nestdump:` lines), `coop killcheck` (one PC: the herd
 type of a mirror-like herd and its repair, `game/Kills.cpp`),
 `coop menu` (opens the CO-OP window), plus `stage <name>` and `coophello`.
 Every command has at least one word (`FACTS.md` section 3). A new command is also added to the `$commands` list of
@@ -198,12 +198,10 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   and a change of the profile in memory make it read again at once. The host announces
   the animals sharing that profile with the same key, and re-reads every profile's key instead of caching it forever.
   **The guest's own creature**: outside a co-op launch the avatar's key goes into `Games\CoopOwnCreature.txt` (else, in the main
-  menu, the citizen species of the newest creature save); in a co-op launch the guest's avatar gets that profile and species key
-  5 s after it appears and its model is reloaded (`SetModelKey` or `GrowUp`); its default attack and socialize abilities are
-  pointed at the same ability types of the new list (`RemapDefaults`); a second after a respawn the profile, those defaults and the
-  model are set again (the game rebuilds the save creature's model); `COOP_NO_OWN_CREATURE=1` turns it off. The ability buttons
-  are rebuilt for our creature by the game's own function (`RebuildAbilityButtons`, exe 0xD49400, `FACTS.md` section 7) after
-  the switch and after a respawn; `coop abilities` logs both lists.
+  menu, the citizen species of the newest creature save; in a co-op launch, also after an edit); in a co-op launch that creature is
+  loaded into the player's species profile 5 s after the avatar appears (`LoadIntoProfile`, `FACTS.md` section 7), the avatar and its
+  family get the new model (`GrowUp`) and the default abilities of the same types, the ability buttons are rebuilt
+  (`RebuildAbilityButtons`). The species key stays. `coop abilities` logs the list; `COOP_NO_OWN_CREATURE=1` turns it off.
   The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);
@@ -213,6 +211,7 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   (`core/coop_core.h`); deltas of 20 entities on channel 2, spawn/destroy events, a full snapshot every 10 s and all species
   definitions with every full snapshot on channel 3. An animal with an unknown species is held back up to 3 s. Every entity
   carries position, orientation, scale, age, health and the flags dead / alpha.
+- **The guest's own family** (the avatar's herd) is not mirrored: it keeps its AI and is no stray, so a mating call finds a mate.
 - **Mirrors** (the host's animals on the guest): each in its own empty, disabled herd of one, no nest (`World.cpp`
   `MakeMirror`), built with the host's age (rebuilt when age or species change), with scale, health and alpha applied on
   every update; AI skipped (`World::ShouldSkipAI`); within 150 m walked by `PuppetMotion::Follower`, farther ones
@@ -226,7 +225,8 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   pairs first: teleported with the host's orientation and scale, `mbResetNestEffects` set, the herd kept enabled with target
   size 0. The avatar's own nest stays and stands for the host entry within 30 m of it. Own nests left over are removed; host
   entries left without a nest are made with `CreateHerd(..., createNest = true)`, a few per half second. Only the guest's own
-  record of what it moved or made counts.
+  record of what it moved or made counts. A reset (reconnect) destroys only the nests it made, not the moved ones. `coop nests` logs
+  the nearest ones.
 - **Animations**: the same animation of the same creature is sent at most every 400 ms; a creature within 1 m of its target
   gets no stop/turn orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
 - **Abilities, effects, voices** (`game/Actions.cpp`): detours of `cCreatureBase::PlayAbility`, `CreateEffectForPool1(Renamed)`,

@@ -1,4 +1,4 @@
-// FollowFriend.h : a click on the other player's creature makes our own avatar follow it (the game's locomotion walks it,
+// FollowFriend.h : a click on the other player's creature in the social stance (in the attack stance it is a bite) makes our own avatar follow it (the game's locomotion walks it,
 // MoveTo as for the puppet). It ends with W/A/S/D or the arrow keys, a click elsewhere, a second click on the friend, or when
 // the friend's creature is gone. Our own name plate shows "(following)" meanwhile.
 #pragma once

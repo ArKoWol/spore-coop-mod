@@ -1,6 +1,6 @@
 # Hard-won facts
 
-> Status: reference · Owner: both · Updated: 2026-11-01
+> Status: reference · Owner: both · Updated: 2026-11-08
 > Read when: before you change any code that talks to the game, ModAPI, Steam or the save files. Read it all once; it is
 > grouped by topic so you can come back to one section.
 
@@ -40,6 +40,8 @@ seen in our tests.
   cheats, detours). Do **not** pin the DLL: static destructors then run at process exit, and since **ModAPI routes our
   `new`/`delete` to the game's allocator**, a static `std::string`/`std::vector` holding memory crashes in the game's free
   (`SporeApp.exe+0x527270`) because the game's heap is already gone. `Dispose` also frees our static containers.
+- **Never read fields inside call arguments**: `Vector3(r.F32(), r.F32(), r.F32())` is evaluated right to left by this compiler, x and z
+  swap *(verified 2026-11-08: every nest of the guest landed on the far side of the planet)*.
 - A `member_detour` needs `GetAddress(Class, Method)`; example: `NPCTickAI_detour` in `AttachDetours()`.
 - **`SporeApp.exe` has DYNAMIC_BASE (ASLR) and is not loaded at 0x400000**: an exe address from disassembly or the SDK tables
   (written for base 0x400000) must go through `Address(x)` (`baseAddress + x - 0x400000`) before it is read, called or hooked;
@@ -109,16 +111,10 @@ seen in our tests.
   `StarManager::GetPlanetRecord` for the PlanetID at `cPlanet+0x140` and keeps the record at `+0x13C`. Later it makes the planet
   views (`0xE984E0`, a `cPlanetGfx` for `cVisiblePlanet::mpPlanet`). A planet without a record crashes there at `+0x78dc10`
   (a `cPlanetRecord` function reads the flags at `+0x2C` of a null record).
-- **A save whose star ids are all rewritten to another star does not load** *(verified 2026-10-25)*: the reader stops before
-  any `cPlanet::Read`, a planet object stays empty (id `0x70`) and the view crashes as above. Not the cause: compression (an
-  uncompressed copy of a save loads), missing planet records (the template's records copied under our ids into the game's planet
-  database did not help), entry `0x01897C18` (kept unchanged, still crashed; it holds little-endian refs `group 0x40626200, n,
-  PlanetID`). Still to bisect: entries `0x03275728`, `0x02C21781`, `0x0355C93A`. A save of another universe copied as it is
-  crashes too (`+0x7babe2`).
-- **The game's planet databases are writable from the mod**: `StarManager.mpPlanetRecordsDatabase` (`planetRecords.pkp`) and
-  `mpPlanetRecordsTempDatabase` (`.pkt`) are open read/write; records are read and written with `OpenRecord` (key type
-  `0x05220CB8`, group 1, instance PlanetID; data `[0x00250003][nested DBPF]`). A record stream's `Write` returns 1, not the byte
-  count. A package of planet records registered with the resource manager is not used by the load *(verified 2026-10-25)*.
+- **A save whose star ids are all rewritten to another star does not load** *(verified 2026-10-25)*: the reader stops before any
+  `cPlanet::Read`, the planet view crashes; compression and missing planet records are not the cause. A save of another universe crashes too.
+- **The game's planet databases are writable from the mod** (`StarManager.mpPlanetRecordsDatabase`, `OpenRecord`, key type `0x05220CB8`,
+  group 1, instance PlanetID); a package of planet records registered with the resource manager is not used by the load *(verified 2026-10-25)*.
 - **`stars.db`** is a DBPF; entry type `0x03E4353C` holds all 42010 star records in one RefPack blob: each record is big-endian
   `[size][8-byte id][0x01A80D26][payload size][field count][(field id, size) table][values]`, name as UTF-16LE. The game reads
   the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list
@@ -187,24 +183,19 @@ seen in our tests.
   **and** `cSpatialObject::mbEnabled` (creature +0x135); for the player's avatar it sets the corpse's `mbHasBeenEaten` (+0xB5F)
   when the eating **starts** and then takes food out of `mFoodValue` bite by bite. So a corpse marked eaten is not used up yet
   *(guess, from disassembly 2026-10-31)*.
-- `GameNounManager.SetAvatar(animal)` exists *(SDK)*; SporeCoop gives each player his own creature with `SetSpecies` on the
-  avatar 3 s after the load *(SporeCoop)*. We set `mpSpeciesProfile`, `mSpeciesKey`, `mProfileSeq` of the avatar and reload the
-  model (`SetModelKey` when the model key is the species key, else `GrowUp`): the avatar looks like the new creature
-  *(verified 2026-11-01, 2 PCs)*. What it does not change:
-  - **the ability buttons** keep the old creature's list. They follow `Simulator::cAbilityUIMap` (pointer at exe `0x169E3EC`;
-    ModAPI's addresses for it are of another exe): 25 entries = 5 categories x 5 buttons, each ability type on a fixed button
-    (sing 0, bite 5, mating call 10, jump 11, stealth 13), value = index in the player creature's ability list. **`0xD49400`**
-    (no arguments) refills the map from the player creature and redraws the icons through `0xD48CE0`; the game calls it after
-    the editor. Called by the mod after the switch, the buttons match the new creature *(verified 2026-11-01, one PC)*;
-  - the HUD portrait and the eyes' view (blindness) stay the save creature's *(verified 2026-11-01, one PC)*;
-  - `cCreatureBase::mDefaultAttackAbilityIndex` / `mDefaultSocializeAbilityIndex` keep the old list's indexes (attack 7 became a
-    super power, socialize 6 sprint) *(verified 2026-11-01, `coop abilities`)*;
-  - **the game's respawn rebuilds the save creature's model** on the same avatar object; species key and profile stay ours
-    *(verified 2026-11-01, 2 PCs)*.
-- In a co-op launch the guest's avatar loads as a **different, random species each run** (`5517d2d4`, `2ed2d353`, ...) although the
-  host's save names the host's creature: it is the species of a friendly nest (seen in the game), and an eyeless one makes the
-  guest blind *(verified 2026-11-01, one PC)*. Why: the host's creature is not buildable on the guest, so the game takes a nest's
-  species instead *(guess)*.
+- **How the game changes the player's creature** (editor closes): the avatar keeps its species profile and species key; the profile
+  gets the new creature: `bool cSpeciesProfile::Load(const ResourceKey*)` (exe `0x4D4F70`, thiscall) reads it, sets `mCreatureKey`,
+  raises `creatureSeq` and recalculates the abilities and stats (`0x4D5080`). Called by the mod with the guest's creature, the game
+  treats it as its own player: family, mate, editor, buttons, portrait, sight and respawn all follow *(verified 2026-11-08, 2 PCs)*.
+  Pointing the avatar at **another species' profile** looks right but breaks them: no mate, no editor, old buttons and portrait.
+  Existing creatures need `GrowUp` for the new model, their `mDefault...AbilityIndex` are indexes into the old list.
+- **Ability buttons** follow `Simulator::cAbilityUIMap` (pointer at exe `0x169E3EC`; ModAPI's addresses are of another exe): 25
+  entries = 5 categories x 5 buttons, each ability type on a fixed button (sing 0, bite 5, mating call 10, jump 11, stealth 13), value =
+  index in the player's ability list. **`0xD49400`** (no arguments) refills it and redraws the icons (`0xD48CE0`); the game calls
+  it after the editor *(verified 2026-11-01, one PC)*.
+- A guest whose save names a creature not buildable here loads as the species of a friendly nest, a different one each run; an
+  eyeless one makes him blind *(verified 2026-11-01, one PC)*.
+- The player's family answers a mating call only with its AI running; a mate is one of its members *(verified 2026-11-08, 2 PCs)*.
 
 ## 8. What a creature-stage planet contains
 - First real dump (host, owner's save, 2026-10-24): 4188 nouns: 101 CreatureAnimal, 123 Herd, **101 Nest** (one per herd, all
@@ -220,7 +211,8 @@ seen in our tests.
 - **`cCreatureBase::mSpeciesKey` is zero for most NPC animals**; the species is `mpSpeciesProfile` (+0xB20, or the herd's
   `mpSpeciesProfile`), whose key is `profile->mCreatureKey`.
 - **What differs between two machines that loaded the same save**: animals, herds, nests, eggs, obstacles, ornaments are made
-  per machine when the stage starts (host 101 nests, friend 96 and 108, none at the same places). **Fruit matches only 6 of 74
+  per machine when the stage starts, but **nests of the same save stand at the same places on both machines**: same position, same
+  species *(verified 2026-11-08, 0.0 m on 2 PCs)*. **Fruit matches only 6 of 74
   by position.** Plants, rocks and markers are identical. A `GamePlant` leaves and re-enters the game's noun list, so a scan
   that reports "gone" for it is wrong (that was the plant flicker) *(verified 2026-10-25)*.
 - **65 of the 101 animals sit at the planet's centre (0, 0, 0)** with 1 HP and a zero species key: the game's pool of animals that a

@@ -6,6 +6,14 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The guest has nests, a mate and the editor; his creature goes in the way the game does it** (exxecute; `game/OwnCreature.cpp`, `World.cpp`,
+  `Objects.cpp`, `FACTS.md` 2, 7). Positions in the nest list were read with x and z swapped, so all nests landed far away (2b; same bug in
+  the fruit list). The guest's creature is loaded into the player's profile instead of switching species; his family keeps AI and is no stray.
+  **ArKoWol**: nests were your item (2b). Tested on 2 PCs (guest's side); no protocol change; **both update**, then look at `eco:` lines.
+- **The friend's creature goes 10 s after he left; a click on him bites** (exxecute; `dllmain.cpp`, `game/FollowFriend.cpp`). The host never
+  removed the puppet. Following took the click, so the guest could not hit the host: it now needs the social stance. A reconnect
+  no longer destroys the moved nests. Not tested; no protocol change.
+
 - **Fix: the other player's creature stayed invisible after his respawn** (exxecute; `World.cpp`, `dllmain.cpp`). The new puppet's
   animal was removed as a stray when the sweep ran before the puppet code picked it up (a race; the hits still arrived). The puppet's
   herd is now exempt on both sides (`World::SetPuppetHerd`). 2-PC test of 2026-11-01: models, own creatures, buttons, native lethal
@@ -18,7 +26,7 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 - **Fixes from the 2-PC test of 2026-11-01: creature models arrive, the guest stays his own creature, his attack works** (exxecute;
   `core/coop_models.h`, `World.cpp`, `game/OwnCreature.cpp`; results in `STATUS.md` 5). The model receiver read chunks at byte 38
-  instead of 31 since 2026-10-24: no model ever arrived (17 new checks in `testsun_core_tests.bat`). After a respawn the own model
+  instead of 31 since 2026-10-24: no model ever arrived (17 new checks in `tests\run_core_tests.bat`). After a respawn the own model
   is loaded again; default attack/socialize point at the same ability types (`coop abilities` logs them). Ability buttons still
   match only after one editor visit. Tested on 1 PC (respawn, abilities); models not tested; no protocol change, **both update**.
 

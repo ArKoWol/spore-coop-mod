@@ -6,8 +6,8 @@
 //    its plain fields) and the creature records that appear in EditorSaves.package while the editor is open. It also reads a body
 //    from EVERY database that holds the key (a stale copy may win in FindRecord) and prefers the copy in EditorSaves.
 // 2. The guest's own creature. Outside a co-op launch the avatar's key is written to Games\CoopOwnCreature.txt; in a co-op launch
-//    (the host's world) the guest's avatar is switched to that species 5 s after it appears (ModAPI has no SetSpecies: the profile
-//    pointer, species key and profile sequence are set and the model is reloaded, a guess). COOP_NO_OWN_CREATURE=1 turns it off.
+//    (the host's world) that creature is loaded into the player's species profile 5 s after the avatar appears, the way the game
+//    does it when the editor closes (exe 0x4D4F70, FACTS section 7). COOP_NO_OWN_CREATURE=1 turns it off.
 // Log lines start with `own:`.
 #pragma once
 
@@ -32,8 +32,8 @@ namespace OwnCreature
 	// is one (else the one FindRecord returns). Logs the copies when they changed. For our own avatar's body only.
 	bool ReadFresh(uint32_t instance, uint32_t type, uint32_t group, std::vector<Models::Record>& out);
 
-	// coop abilities: logs our avatar's abilities (index, type, category, hot key), its default attack / socialize index, the
-	// attack or social stance and, after a switch to the own creature, the abilities of the profile it had before (`own: ab` lines).
+	// coop abilities: logs our avatar's abilities (index, type, category, hot key), its default attack / socialize index and the
+	// attack or social stance (`own: ab` lines).
 	void DumpAbilities();
 
 	// Dispose: frees the memory.
