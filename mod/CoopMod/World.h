@@ -60,6 +60,8 @@ namespace World
 	// A creature we made ourselves (a mirror, the player puppet) lacks the object the game reads at creature + 0xE84 (+ 0x32C)
 	// without a null check: give it a blank one, otherwise the game crashes ("reading 0000032c").
 	void EnsureTuning(void* creature);
+	// that blank object (made once, never freed: the game may point at it after the DLL is gone)
+	void* BlankTuning();
 
 	// The species of the OTHER player's avatar, for building his puppet: 2 = known and buildable here (key = instance, type, group),
 	// 1 = known, its model is on the way (wait), 0 = unknown or not coming (use the local species).

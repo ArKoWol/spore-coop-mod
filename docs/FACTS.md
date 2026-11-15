@@ -155,10 +155,10 @@ seen in our tests.
 - `SetDesiredSpeed(v, 0)` right after `MoveTo` makes the puppet walk faster than its standard speed (5.2 m/s seen)
   *(verified 2026-10-31)*.
 - **`cCreatureBase::WalkTo`** crashed in an early test (no herd then); it is `coop walk` now (untested with a herd).
-- **Every creature needs a tuning object**: the game reads `*(creature + 0xE84) + 0x32C` (`cCreatureBase::field_E84`) without a
-  null check (guest crashes "reading 0000032c" at `SporeApp.exe+0x948634` / `+0x76ca11`). It is filled only for creatures made
-  as members of a nest herd; mirrors and the puppet get a blank object whose `+0x32C` is -1 (`World::EnsureTuning`), never
-  freed because the game may still point at it after the DLL is gone.
+- **Every creature needs a tuning object**: the game reads `*(creature + 0xE84) + 0x32C` (`cCreatureBase::field_E84`, getter `0xC0C300`)
+  without a null check (crashes "reading 0000032c" at `+0x948634`, `+0x76ca11` = the creature under the cursor, also on the host for a
+  fresh puppet, 2026-11-15). Filled only for nest-herd members: ours get a blank one (`+0x32C` = -1, `World::EnsureTuning`, never freed)
+  and the getter is detoured to answer it instead of null (`game/Kills.cpp`) *(verified 2026-11-15: the getter's code)*.
 - A newborn's species is set a moment after it appears: an animal seen with species 0 must wait (up to 3 s) before it is used.
 - The game puts a nest made with `CreateHerd(..., createNest = true)` on the ground away from the asked position, or lists it
   later: never look a nest up again by position, keep your own record of what you made (else: 295 nests in minutes).

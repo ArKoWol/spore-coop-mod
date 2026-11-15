@@ -218,16 +218,21 @@ namespace
 	// touches it. We give such creatures a blank object whose +0x32C is -1.
 	char* sBlankTuning = nullptr;
 
+	char* BlankTuning()
+	{
+		if (!sBlankTuning) {
+			sBlankTuning = new char[0x800]();
+			*(int*)(sBlankTuning + 0x32C) = -1;
+		}
+		return sBlankTuning;
+	}
+
 	void EnsureTuning(Simulator::cCreatureBase* creature)
 	{
 		if (!creature || creature->field_E84) {
 			return;
 		}
-		if (!sBlankTuning) {
-			sBlankTuning = new char[0x800]();
-			*(int*)(sBlankTuning + 0x32C) = -1;
-		}
-		creature->field_E84 = sBlankTuning;
+		creature->field_E84 = BlankTuning();
 	}
 
 	// The host says this animal is dead: let the game play the death (a lethal hit with no attacker, no rewards).
@@ -2442,6 +2447,11 @@ namespace World
 	void EnsureTuning(void* creature)
 	{
 		::EnsureTuning(static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creature)));
+	}
+
+	void* BlankTuning()
+	{
+		return ::BlankTuning();
 	}
 
 	void Shutdown()

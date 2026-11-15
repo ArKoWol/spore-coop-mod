@@ -6,6 +6,10 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Fix: the host crashed when the guest joined** (exxecute; `game/Kills.cpp`, `World.cpp`, `FACTS.md` 7). ArKoW's game read `+0x32C` of a
+  null tuning object (`SporeApp.exe+0x76ca11`, the creature under the cursor) right after the guest's puppet was rebuilt: the new
+  animal existed before our update gave it the blank tuning. The game's tuning getter (`0xC0C300`) now answers the blank one for
+  every creature without tuning. Tested on 1 PC (two games): it answered a fresh mirror 10 times, no crash; no protocol change. **ArKoW**: update.
 - **Two games on one PC: `launch_two.bat`, a local transport** (exxecute; `game/LocalNet.cpp`, `game/Instance.cpp`, `scripts/launch_two.ps1`,
   `TESTING.md` 1b, `FACTS.md` 2). Game B (`test\SPORE_B`: hard links and junctions, no copy) gets a private mutex and its own APPDATA
   (the game reads it through `SHGetFolderPathW`); `coop localhost` / `coop localjoin` carry Steam's messages over 127.0.0.1, so world

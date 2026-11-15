@@ -107,6 +107,32 @@ namespace
 	}
 }
 
+// The game's getter of a creature's tuning object (cCreatureBase field_E84), 0xC0C300: `mov eax, [ecx+0xE84]; ret`. Its callers
+// read +0x32C of the result without a null check. A creature we made (the puppet, a mirror) has none until our update gives it the
+// blank one, and the game can reach it before that: the host crashed at +0x76ca11 (the creature under the cursor) right after the
+// friend's puppet was rebuilt, 2026-11-15. The detour answers the blank tuning instead of null.
+const uintptr_t kGetTuning = 0xC0C300;
+const uint8_t kGetTuningCode[] = { 0x8B, 0x81, 0x84, 0x0E, 0x00, 0x00, 0xC3 };
+static bool sTuningAttached = false;
+static int sTuningLogged = 0;
+
+struct CreatureObject {};
+member_detour(GetTuning_detour, CreatureObject, void*())
+{
+	void* detoured()
+	{
+		void* tuning = *(void**)((char*)this + 0xE84);
+		if (tuning) {
+			return tuning;
+		}
+		if (sTuningLogged < 10) {
+			++sTuningLogged;
+			Logf("kills: creature %p had no tuning object when the game asked for it: the blank one is given", (void*)this);
+		}
+		return World::BlankTuning();
+	}
+};
+
 // The species relation events (attacked, killed, impressed, ...): World decides which may reach the game's table.
 struct RelationManagerObject {};
 member_detour(ApplyEvent_detour, RelationManagerObject, void(int, void*, void*))
@@ -124,6 +150,13 @@ namespace Kills
 {
 	void Attach()
 	{
+		if (CodeMatches(Address(kGetTuning), kGetTuningCode, sizeof(kGetTuningCode))) {
+			sTuningAttached = true;
+			GetTuning_detour::attach(Address(kGetTuning));
+		}
+		else {
+			Logf("kills: the tuning getter is not at %08x in this exe: creatures without tuning are not guarded", (unsigned)kGetTuning);
+		}
 		if (!CodeMatches(Address(kApplyEvent), kApplyEventStart, sizeof(kApplyEventStart))) {
 			Logf("kills: ApplyEvent is not at %08x in this exe: relation events are not filtered", (unsigned)kApplyEvent);
 			return;
@@ -134,6 +167,10 @@ namespace Kills
 
 	void Detach()
 	{
+		if (sTuningAttached) {
+			sTuningAttached = false;
+			GetTuning_detour::detach();
+		}
 		if (sAttached) {
 			sAttached = false;
 			ApplyEvent_detour::detach();
