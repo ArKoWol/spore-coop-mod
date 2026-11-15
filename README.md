@@ -6,7 +6,9 @@ planet** and see each other's creature walking around.
 > **Status: early test build.** It is made by two friends for themselves, changes several times a day and can crash the
 > game. Back up your saves before you try it. Creature stage only.
 
-![Spore Co-op](media/promo/banner.jpg)
+[![Spore Co-op: watch the trailer](media/promo/banner.jpg)](https://www.youtube.com/watch?v=8cWhRykZAF4)
+
+**[▶ Watch the trailer on YouTube](https://www.youtube.com/watch?v=8cWhRykZAF4)**
 
 | | |
 |---|---|
