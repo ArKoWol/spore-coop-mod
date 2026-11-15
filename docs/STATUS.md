@@ -1,6 +1,6 @@
 # Status: what works, what is being done, by whom
 
-> Status: live · Owner: both · Updated: 2026-11-08
+> Status: live · Owner: both · Updated: 2026-11-15
 > Read when: at the start of every work session (after `git pull`), and before you pick a task. Update it when you start or
 > finish a piece of work and after every two-PC test.
 
@@ -22,7 +22,7 @@ change), **partly**, **not done**.
 | 3b | Walking backwards, sideways, running | works (2-PC test 2026-10-31) |
 | 3c | Each player's own creature model on the puppet | **works on 2 PCs 2026-11-08**: models both ways, each sees the other's own creature, editor changes seen. The guest's creature is loaded into the player's profile as the editor does: own buttons, portrait, sight, family, mate and editor, also after a respawn |
 | 3d | Real health and size of the puppet | to check |
-| 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`, its path is not found (`FACTS.md` section 8) |
+| 3e | Action animations (eat, sing, bite) | parked 2026-10-31 (exxecute): songs, dances, vomit not seen on 2 PCs. `coop selftest` passes for what the mod itself plays (ability via `PlayAbility`, vomit animation and effect); the player's own song never goes through `PlayAbility`. Its path was found and captured 2026-11-15 (exxecute, `FACTS.md` section 8): on 1 PC a clicked song reaches the echo puppet in full; to check on 2 PCs. The mating call (a skill) breaks off on the echo once the 2.5 s hold ends |
 | 3f | Click on the friend's creature: our creature follows it | built 2026-11-08: only in the social stance (in the attack stance the click is a bite), to check on 2 PCs |
 | 4a | Guest bites applied natively on his machine and reported to the host (PLAN rule 3) | **works on 2 PCs 2026-11-01**: the guest's lethal bite is native (`LETHAL, applied here (native death)`), no crash, herd type repaired; each player gets his own DNA |
 | 4b | Host damage and deaths | works |

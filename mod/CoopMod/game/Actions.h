@@ -15,8 +15,8 @@ namespace Actions
 	// A message from the other side; false when it is not ours.
 	bool OnMessage(const uint8_t* data, uint32_t size);
 
-	// Research: a creature-mode action of our avatar (cCreatureModeStrategy::ExecuteAction). The social abilities (sing, dance)
-	// do not go through cCreatureBase::PlayAbility: the unknown actions are logged with their data and the abilities it may name.
+	// Research: a creature-mode action of our avatar (cCreatureModeStrategy::ExecuteAction): the unknown actions are logged with
+	// their data and the abilities it may name. The player's own abilities are captured at the game's ability use (Actions.cpp).
 	void OnModeAction(uint32_t actionId, void* data);
 
 	// Every frame while a session runs: stops replayed effects the other side never stopped.
@@ -38,6 +38,10 @@ namespace Actions
 	// network; nullptr = off.
 	void SetEchoTarget(void* creature);
 	void* EchoTarget();
+
+	// Uses our avatar's ability `index` as a click on its button does (the player's own path, not PlayAbility); false when the
+	// game's code is not where we expect it.
+	bool PressAbilityButton(int index);
 
 	// The type and category of ability `index` of a creature (cCreatureAnimal*); false when it has none there.
 	bool AbilityInfo(void* creature, int index, int* type, int* category);

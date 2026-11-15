@@ -1,6 +1,6 @@
 # Hard-won facts
 
-> Status: reference · Owner: both · Updated: 2026-11-08
+> Status: reference · Owner: both · Updated: 2026-11-15
 > Read when: before you change any code that talks to the game, ModAPI, Steam or the save files. Read it all once; it is
 > grouped by topic so you can come back to one section.
 
@@ -229,15 +229,15 @@ seen in our tests.
   EatMeat `D335362D`, Pickup `D3353636`, Interact `D3353638` *(verified 2026-10-25, `action:` log lines)*. EatFruit's target is
   a `Fruit` noun (`02c9cc91`) at the fruit's position; Mate (`D335362C`) targets a creature; an unknown action `045ab96e` fires
   with a mating call and just before a kill *(verified 2026-10-25)*.
-- **At the start of a stage the trees and fruit are generated and regenerate for a few seconds** (shapes of trees and fruit on
-  them change on the guest, then it stops) *(verified 2026-10-25, owner's two-PC test)*.
-- **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well, but the carnivore's vomit after a fruit,
-  and the waves and notes of the mating call (only the head-up frames played) are not shown on the other machine. These come
-  from the ability and effect system, not from `PlayAnimation` *(guess; replaying `PlayAbility`, the effect pools
-  and `PlayVoice` (`game/Actions.cpp`, 2026-10-31) did not make them visible on 2 PCs either)*. `PlayAbility` does not play skill abilities (glide,
-  jump, mating call, sprint, sneak) *(SDK)*. The player's abilities never went through `cCreatureBase::PlayAbility` in two-PC tests,
-  while `PlayAbility` called by the mod is captured and replayed fine *(verified 2026-10-31, `coop selftest`)*; key messages posted
-  to the game window (1-9) start no ability *(verified 2026-10-31)*; the player's effects are captured (vomit `e55dc391` after a fruit) *(verified 2026-10-31, `action:` lines)*.
+- **Trees and fruit regenerate for a few seconds at a stage start** (shapes change on the guest) *(verified 2026-10-25, 2 PCs)*.
+- **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well; the vomit after a fruit and the mating
+  call's waves and notes come from the ability and effect system *(guess)*. `PlayAbility` does not play skill abilities (glide,
+  jump, mating call, sprint, sneak) *(SDK)*; called by the mod it is captured and replayed fine *(verified 2026-10-31, `coop selftest`)*.
+- **The player's abilities never pass `PlayAbility`.** An ability button calls `0xD49560(index)` (cdecl): it asks `0xD49220(index)`
+  whether the ability is usable (0 = yes; 1 busy or recharging, 7-9 target: then only a hint), then `0xD48AB0` -> **`0xD1E930(creature,
+  index)`**, the player's ability use (cdecl), a switch on the type; sing, dance, charm, pose are queued as an action of the avatar
+  (`0xC032F0`; in the social mini-game `0xBC9960`) *(disassembly 2026-11-15)*. Clicks on the song and the mating call arrive at
+  `0xD1E930`; status 4 came before the song was usable *(verified 2026-11-15, one PC; the meaning of 4 is a guess: wrong stance)*. Key messages posted to the window start no ability; the player's effects are captured *(verified 2026-10-31)*.
 
 ## 9. Combat, DNA and species relations
 - `TakeDamage`'s 4th argument is a push vector; pass `(0,0,0)` *(SporeCoop)*. The animal's `TakeDamage` is entered with `this` =

@@ -39,7 +39,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
 | `mod/CoopMod/game/Respawn.cpp/.h` | death and respawn of both players: watches our avatar (`respawn:` lines), health 0 in `kMsgAvatar` while dead, puts us beside our own nest after a respawn far from it, removes the friend's puppet while he is dead; `coop die` (one-PC test) |
 | `mod/CoopMod/game/OwnCreature.cpp/.h` | the player's own creature: watches the editor (mode, new creature records in EditorSaves), the avatar's profile in memory, reads our body from every database (`ReadFresh`), writes `Games\CoopOwnCreature.txt` and switches the guest's avatar to it in a co-op launch (`own:` lines) |
-| `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: the herd type check of `Kills`, then plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), presses keys 1-9 |
+| `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: the herd type check of `Kills`, then plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), uses the song through the game's ability-button code |
 | `mod/CoopMod/game/Kills.cpp/.h` | the guest's native lethal bite: gives a mirror's herd a herd type the game knows (`EnsureHerdType`, the extinction reads it), the detour on the relation manager's `ApplyEvent` (0xBA4A00; `World::AllowRelationEvent` decides), `coop killcheck` |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
@@ -230,7 +230,9 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
 - **Animations**: the same animation of the same creature is sent at most every 400 ms; a creature within 1 m of its target
   gets no stop/turn orders for 2.5 s after a remote animation was played on it (`PuppetMotion::Hold`).
 - **Abilities, effects, voices** (`game/Actions.cpp`): detours of `cCreatureBase::PlayAbility`, `CreateEffectForPool1(Renamed)`,
-  `CreateEffectForPool2Renamed`, `StartOrStopEffectFromPool1/2`, `StopEffectFromPools` and `PlayVoice`. Only the outermost call
+  `CreateEffectForPool2Renamed`, `StartOrStopEffectFromPool1/2`, `StopEffectFromPools` and `PlayVoice`, and of the player's own
+  ability use (exe `0xD1E930`, `FACTS.md` section 8): a social ability (sing, dance, charm, pose) the player starts is sent from
+  there as the same `kAbility` message, since it never passes `PlayAbility`. Only the outermost call
   is sent; an attack ability is not (bites stay `PlayAnimation` + damage); inside a sent ability its animations, effects and
   voices are not sent (the replayed ability makes them). Effects and voices only of the avatars. The receiver plays the ability
   by type (`GetAbilityIndexByType`), starts the effect under the same pool id and stops it on the sender's stop or after 8 s.

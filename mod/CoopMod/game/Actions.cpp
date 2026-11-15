@@ -296,6 +296,83 @@ member_detour(PlayAbility_detour, Simulator::cCreatureBase, void(int, Anim::Anim
 	}
 };
 
+// The player's own ability use (button or hotkey), exe 0xD1E930 (March 2017; FACTS.md section 8): cdecl (creature, ability index).
+// The social abilities of the player (sing, dance, charm, pose) are queued from here as an action of the avatar and never pass
+// cCreatureBase::PlayAbility, so this is where they are captured; the other side replays them with PlayAbility as before.
+namespace
+{
+	const uintptr_t kUseAbility = 0xD1E930;
+	const uint8_t kUseAbilityStart[] = { 0x83, 0xEC, 0x1C, 0x57, 0x8B, 0x7C, 0x24, 0x28 };
+	bool sUseAbilityAttached = false;
+	bool sButtonAttached = false;
+	// What a click on an ability button calls with the player's ability index (cdecl): the tutorial hints, then 0xD1E930 for the
+	// avatar. `coop selftest` uses it to play our song the way the player does.
+	const uintptr_t kAbilityButton = 0xD49560;
+	const uint8_t kAbilityButtonStart[] = { 0x53, 0x8B, 0x5C, 0x24, 0x08, 0x55, 0x56, 0x53 };
+	// The button's first question (cdecl, the player's ability index): 0 = usable now; else the reason it is not (1 busy or
+	// recharging, 7-9 target or place wrong, ...): the button then only shows a hint.
+	const uintptr_t kAbilityStatus = 0xD49220;
+	const uint8_t kAbilityStatusStart[] = { 0x53, 0x56, 0x57, 0xE8 };
+
+	bool CodeAt(uintptr_t address, const uint8_t* bytes, size_t size)
+	{
+		__try {
+			return memcmp((const void*)Address(address), bytes, size) == 0;
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+}
+
+static_detour(UseAbility_detour, int(Simulator::cCreatureBase*, int))
+{
+	int detoured(Simulator::cCreatureBase* creature, int abilityIndex)
+	{
+		int type = 0, category = 0;
+		if (sDepth == 0 && !sReplaying && creature && ReadAbility(creature, abilityIndex, &type, &category)) {
+			bool sent = category == Simulator::cCreatureAbility::kCategorySocial
+				&& Capture(creature, kAbility, (uint32_t)type, 0, nullptr, 0, 0);
+			if (LogFirst(0xB0, (uint32_t)type)) {
+				Logf("action: own ability use: index %d type %d category %d%s", abilityIndex, type, category,
+					sent ? " -> sent" : category == Simulator::cCreatureAbility::kCategorySocial ? " (not sent)" : "");
+			}
+		}
+		++sDepth;
+		int result = original_function(creature, abilityIndex);
+		--sDepth;
+		return result;
+	}
+};
+
+// Research: every press of an ability button, with the game's answer whether it can be used now (logged, the first 20 times).
+static_detour(AbilityButton_detour, void(int))
+{
+	void detoured(int index)
+	{
+		static int logged = 0;
+		if (logged < 20 || sLogging) {
+			++logged;
+			int status = -1;
+			__try {
+				if (CodeAt(kAbilityStatus, kAbilityStatusStart, sizeof(kAbilityStatusStart))) {
+					status = ((int(__cdecl*)(int))Address(kAbilityStatus))(index);
+				}
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER) {
+				status = -2;
+			}
+			int type = 0, category = 0;
+			auto avatar = GameNounManager.GetAvatar();
+			if (avatar) {
+				ReadAbility(avatar, index, &type, &category);
+			}
+			Logf("action: ability button %d (type %d, category %d): the game's status %d (0 = usable)", index, type, category, status);
+		}
+		original_function(index);
+	}
+};
+
 member_detour(EffectPool1_detour, Simulator::cCreatureBase, Swarm::IVisualEffect*(uint32_t))
 {
 	Swarm::IVisualEffect* detoured(uint32_t effectId)
@@ -409,6 +486,17 @@ namespace Actions
 		EffectStartStop2_detour::attach(GetAddress(Simulator::cCreatureBase, StartOrStopEffectFromPool2));
 		EffectStop_detour::attach(GetAddress(Simulator::cCreatureBase, StopEffectFromPools));
 		PlayVoice_detour::attach(GetAddress(Simulator::cCreatureBase, PlayVoice));
+		if (CodeAt(kUseAbility, kUseAbilityStart, sizeof(kUseAbilityStart))) {
+			sUseAbilityAttached = true;
+			UseAbility_detour::attach(Address(kUseAbility));
+		}
+		if (CodeAt(kAbilityButton, kAbilityButtonStart, sizeof(kAbilityButtonStart))) {
+			sButtonAttached = true;
+			AbilityButton_detour::attach(Address(kAbilityButton));
+		}
+		else {
+			Logf("action: the player's ability use is not at %08x in this exe: own songs and dances are not sent", (unsigned)kUseAbility);
+		}
 	}
 
 	void Detach()
@@ -423,6 +511,14 @@ namespace Actions
 			EffectStartStop2_detour::detach();
 			EffectStop_detour::detach();
 			PlayVoice_detour::detach();
+			if (sUseAbilityAttached) {
+				sUseAbilityAttached = false;
+				UseAbility_detour::detach();
+			}
+			if (sButtonAttached) {
+				sButtonAttached = false;
+				AbilityButton_detour::detach();
+			}
 		}
 		delete sState;
 		sState = nullptr;
@@ -553,6 +649,23 @@ namespace Actions
 	{
 		return creature && ReadAbility(static_cast<Simulator::cCreatureBase*>(static_cast<Simulator::cCreatureAnimal*>(creature)),
 			index, type, category);
+	}
+
+	bool PressAbilityButton(int index)
+	{
+		// once our detour is on, its first bytes are a jump: they were checked when it was attached
+		if (!sButtonAttached && !CodeAt(kAbilityButton, kAbilityButtonStart, sizeof(kAbilityButtonStart))) {
+			Logf("action: the ability button code is not at %08x in this exe", (unsigned)kAbilityButton);
+			return false;
+		}
+		__try {
+			((void(__cdecl*)(int))Address(kAbilityButton))(index);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			Logf("action: the ability button call failed (exception)");
+			return false;
+		}
+		return true;
 	}
 
 	Counters GetCounters() { return sCounters; }

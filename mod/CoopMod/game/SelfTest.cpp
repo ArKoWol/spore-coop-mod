@@ -19,7 +19,7 @@ namespace
 	const DWORD kSampleMs = 1500;      // when the echo puppet must still play what our avatar plays (not cut after the first frames)
 	const uint32_t kNoAnimation = 0x4330667;   // cCreatureAbility::GetAnimationID when an ability has none
 
-	enum class Step { Off, WaitEcho, Ability, Anim, SingAnim, Effect, EffectStop, Keys, Done };
+	enum class Step { Off, WaitEcho, Ability, Anim, OwnSong, Effect, EffectStop, Done };
 
 	Step sStep = Step::Off;
 	DWORD sStepStart = 0;
@@ -30,10 +30,10 @@ namespace
 	int sAbilityCount = 0;
 	int sAt = 0;
 	int sPassed = 0, sFailed = 0;
-	uint32_t sSingAnim = 0;                   // the animation of our sing ability, played as PlayAnimation (the player's path?)
+	int sSingIdx = -1;                        // our sing ability, used through its button (the player's own path)
+	uint32_t sSingAnim = 0;                   // its animation
 	uint32_t sAvatarAnim = 0, sEchoAnim = 0;  // what both played at kSampleMs
 	bool sSampled = false;
-	HWND sWindow = nullptr;
 
 	void Say(const char* format, ...)
 	{
@@ -50,32 +50,6 @@ namespace
 	{
 		ok ? ++sPassed : ++sFailed;
 		Say("%s %s (%s)", ok ? "PASS" : "FAIL", what, detail);
-	}
-
-	BOOL CALLBACK FindWindowProc(HWND hwnd, LPARAM)
-	{
-		DWORD pid = 0;
-		GetWindowThreadProcessId(hwnd, &pid);
-		if (pid == GetCurrentProcessId() && IsWindowVisible(hwnd) && !GetWindow(hwnd, GW_OWNER)) {
-			sWindow = hwnd;
-			return FALSE;
-		}
-		return TRUE;
-	}
-
-	// Presses a key as the player would: the window messages the game reads, sent to its window (it need not have the focus).
-	void PressKey(int vk)
-	{
-		if (!sWindow) {
-			EnumWindows(FindWindowProc, 0);
-		}
-		if (!sWindow) {
-			return;
-		}
-		LPARAM scan = (LPARAM)MapVirtualKeyA(vk, MAPVK_VK_TO_VSC) << 16;
-		PostMessageA(sWindow, WM_KEYDOWN, vk, scan | 1);
-		PostMessageA(sWindow, WM_CHAR, '0' + (vk - '0'), scan | 1);
-		PostMessageA(sWindow, WM_KEYUP, vk, scan | 1 | (1u << 30) | (1u << 31));
 	}
 
 	void Next(Step step)
@@ -121,7 +95,9 @@ namespace SelfTest
 	{
 		sPassed = sFailed = 0;
 		sAbilityCount = 0;
-		Say("started: wait for the echo puppet, then abilities, an animation, an effect, then keys 1-9 (stand still)");
+		sSingIdx = -1;
+		sSingAnim = 0;
+		Say("started: wait for the echo puppet, then our song through its button, abilities, an animation, an effect (stand still)");
 		Next(Step::WaitEcho);
 	}
 
@@ -150,8 +126,10 @@ namespace SelfTest
 					int type = 0, category = 0;
 					if (Actions::AbilityInfo(avatar, i, &type, &category)) {
 						Say("our ability %d: type %d, category %d%s", i, type, category, Testable(type, category) ? "" : " (not tested)");
-						if (type == Simulator::cCreatureAbility::kSing) {
+						using A = Simulator::cCreatureAbility;
+						if (sSingIdx < 0 && (type == A::kSing || type == A::kHarmoniousSong || type == A::kInspiringSong)) {
 							uint32_t anim = avatar->GetAbility(i)->GetAnimationID(0);
+							sSingIdx = i;
 							sSingAnim = anim == kNoAnimation ? 0 : anim;
 							Say("the sing ability's animation: %08x", sSingAnim);
 						}
@@ -162,7 +140,7 @@ namespace SelfTest
 						}
 					}
 				}
-				Next(Step::Ability);
+				Next(Step::OwnSong);
 			}
 			else if (now - sStepStart > kEchoWaitMs) {
 				Say("RESULT: FAIL (no echo puppet within %u s)", kEchoWaitMs / 1000);
@@ -212,33 +190,37 @@ namespace SelfTest
 					c.anims - sBefore.anims, c.replayed - sBefore.replayed, kSampleMs / 1000.0f, sAvatarAnim, sEchoAnim);
 				Check(c.anims > sBefore.anims && c.replayed > sBefore.replayed && sEchoAnim == sAvatarAnim, "animation 05261d56 (vomit)",
 					detail);
-				Next(Step::SingAnim);
+				Next(Step::Effect);
 			}
 			else {
 				Sample(now, avatar, echo);
 			}
 			break;
 
-		case Step::SingAnim:
-			// the player's song seems to arrive as plain animations (no ability was ever captured in a real test): play it that way
-			if (!sSingAnim) {
-				Say("no sing animation to test");
-				Next(Step::Effect);
+		case Step::OwnSong:
+			// first, while the song does not recharge: the player's song never passes PlayAbility, it goes button -> 0xD49560 ->
+			// the ability use 0xD1E930 (FACTS.md section 8)
+			if (sSingIdx < 0) {
+				Say("no sing ability to test through its button");
+				Next(Step::Ability);
 				break;
 			}
 			if (!sStepBegun) {
 				sStepBegun = true;
 				sStepStart = now;
 				sBefore = c;
-				avatar->PlayAnimation(sSingAnim);
+				if (!Actions::PressAbilityButton(sSingIdx)) {
+					Check(false, "our song through its button", "the game's button code is not found");
+					Next(Step::Ability);
+				}
 			}
 			else if (now - sStepStart >= kStepMs) {
-				char what[64], detail[160];
-				snprintf(what, sizeof(what), "sing animation %08x as PlayAnimation", sSingAnim);
-				snprintf(detail, sizeof(detail), "captured %d, replayed %d, after %.1f s our avatar plays %08x, the echo %08x",
-					c.anims - sBefore.anims, c.replayed - sBefore.replayed, kSampleMs / 1000.0f, sAvatarAnim, sEchoAnim);
-				Check(c.anims > sBefore.anims && c.replayed > sBefore.replayed && sEchoAnim == sAvatarAnim, what, detail);
-				Next(Step::Effect);
+				char detail[192];
+				snprintf(detail, sizeof(detail), "captured %d, replayed %d, after %.1f s our avatar plays %08x (sing %08x), the echo %08x",
+					c.abilities - sBefore.abilities, c.replayed - sBefore.replayed, kSampleMs / 1000.0f, sAvatarAnim, sSingAnim, sEchoAnim);
+				Check(c.abilities > sBefore.abilities && c.replayed > sBefore.replayed && sEchoAnim == sAvatarAnim, "our song through its button",
+					detail);
+				Next(Step::Ability);
 			}
 			else {
 				Sample(now, avatar, echo);
@@ -273,29 +255,8 @@ namespace SelfTest
 				char detail[96];
 				snprintf(detail, sizeof(detail), "captured %d, replayed %d", c.stops - sBefore.stops, c.replayed - sBefore.replayed);
 				Check(c.stops > sBefore.stops && c.replayed > sBefore.replayed, "effect stop", detail);
-				Next(Step::Keys);
-			}
-			break;
-
-		case Step::Keys:
-			// research, no verdict: what does the game call when the player presses an ability key?
-			if (sAt >= 9) {
 				Say("RESULT: %s (%d passed, %d failed)", sFailed == 0 && sPassed > 0 ? "PASS" : "FAIL", sPassed, sFailed);
 				sStep = Step::Done;
-				break;
-			}
-			if (!sStepBegun) {
-				sStepBegun = true;
-				sStepStart = now;
-				sBefore = c;
-				PressKey('1' + sAt);
-			}
-			else if (now - sStepStart >= kStepMs) {
-				Say("key %d: abilities %d, effects %d, stops %d, voices %d, animations %d, mode actions %d (last %08x), replayed %d", sAt + 1,
-					c.abilities - sBefore.abilities, c.effects - sBefore.effects, c.stops - sBefore.stops, c.voices - sBefore.voices,
-					c.anims - sBefore.anims, c.modeActions - sBefore.modeActions, c.lastModeAction, c.replayed - sBefore.replayed);
-				++sAt;
-				sStepBegun = false;
 			}
 			break;
 

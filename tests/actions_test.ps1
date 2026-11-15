@@ -1,7 +1,7 @@
 # Do abilities, effects and animations of our creature reach the other side's copy? One PC, no friend needed.
 # Precondition: the game runs (launch_spore_mod.bat) and is IN the creature stage; your creature stands still.
 # It sends `coop selftest` (game/SelfTest.cpp: echo puppet on, abilities / an animation / an effect played on our avatar and
-# checked on the echo puppet, then keys 1-9 pressed as a player) and prints the selftest lines of CoopMod.log.
+# checked on the echo puppet, our song through the game's own button code) and prints the selftest lines of CoopMod.log.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests\actions_test.ps1
 param([int]$TimeoutSeconds = 120)
 
@@ -26,7 +26,7 @@ while ((Get-Date) -lt $until -and -not $result) {
         $stream.Seek($start, 'Begin') | Out-Null
         $text = (New-Object IO.StreamReader($stream)).ReadToEnd()
     } finally { $stream.Close() }
-    $lines = @($text -split "`r?`n" | Where-Object { $_ -match 'selftest: |action: (replay|mode action|  word)' })
+    $lines = @($text -split "`r?`n" | Where-Object { $_ -match 'selftest: |action: (replay|own ability use|mode action|  word)' })
     for ($i = $shown; $i -lt $lines.Count; $i++) {
         $line = $lines[$i]
         $color = if ($line -match 'PASS') { 'Green' } elseif ($line -match 'FAIL') { 'Red' } else { 'Gray' }

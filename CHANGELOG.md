@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The player's own song, dance, charm and pose are captured where the game uses them** (exxecute; `game/Actions.cpp`, `SelfTest.cpp`,
+  `FACTS.md` 8). They never pass `PlayAbility`: a detour of the player's ability use (exe `0xD1E930`) now sends social abilities as
+  the usual `kAbility`; the button presses are logged with the game's "usable" status. `coop selftest` uses the song through the game's
+  button code instead of keys 1-9. Tested on 1 PC: a clicked song is sent and the echo sings it in full; the mating call (a skill, not
+  sent as an ability) still breaks off on the echo. No protocol change; **ArKoWol**: update before the next 2-PC test of 3e.
 - **The guest has nests, a mate and the editor; his creature goes in the way the game does it** (exxecute; `game/OwnCreature.cpp`, `World.cpp`,
   `Objects.cpp`, `FACTS.md` 2, 7). Positions in the nest list were read with x and z swapped, so all nests landed far away (2b; same bug in
   the fruit list). The guest's creature is loaded into the player's profile instead of switching species; his family keeps AI and is no stray.
