@@ -1,6 +1,6 @@
 # How we test
 
-> Status: agreed · Owner: both · Updated: 2026-10-31
+> Status: agreed · Owner: both · Updated: 2026-11-15
 > Read when: before you test a change and before you call anything "done". Results go into `STATUS.md` section 5.
 
 ## 1. The two-PC test (the real test)
@@ -14,6 +14,13 @@ there. One PC alone proves only that nothing crashes.
    never whole logs (they contain Steam IDs).
 
 Never run the guest's game minimized or fullscreen in the background: a minimized Spore runs no frames (`FACTS.md` section 2).
+
+## 1b. Two games on one PC (quick loop before the two-PC test)
+`launch_two.bat` (or `launch_two.bat -Connect`): builds, starts game A (`test\SPORE_A`, console port 27780) and game B
+(`test\SPORE_B`, console 27781, its own APPDATA in `test\SPORE_B\CoopAppData`, no Steam). In A's console `coop localhost`, in B's
+`coop localjoin`: B downloads A's world, restarts by itself into it, joins again. Then load the creature stage in A and Play on
+the CO-OP star in B. Same code as Steam from the session up; not covered: Steam itself, invitations, the friends list, real lag.
+Logs: `test\SPORE_A\SporebinEP1\CoopMod.log` and `test\SPORE_B\SporebinEP1\CoopMod.log`. `-ResetB` gives B a fresh copy of your save.
 
 ## 2. Tools that exist
 | Tool | Use |

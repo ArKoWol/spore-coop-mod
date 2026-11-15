@@ -100,6 +100,7 @@ What works today: `docs/STATUS.md`.
 ## Repository layout
 ```
 launch_spore_mod.bat    double-click: build, install, start the game, open the console (scripts\launch.ps1)
+launch_two.bat          one-PC test: two games side by side, A hosts and B joins over 127.0.0.1 (scripts\launch_two.ps1)
 console.bat             remote game console (scripts\console.ps1)
 update.bat              check GitHub for new commits / a new release and ask (package\coop_update\update.bat)
 CLAUDE.md CHANGELOG.md README.md

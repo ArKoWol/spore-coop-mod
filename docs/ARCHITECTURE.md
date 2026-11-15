@@ -1,6 +1,6 @@
 # How the mod works now
 
-> Status: reference · Owner: both · Updated: 2026-11-08
+> Status: reference · Owner: both · Updated: 2026-11-15
 > Read when: before you change the mod's code, the protocol or the tools. It describes the code as it is, not the plan
 > (the plan is `PLAN.md`). Update it in the same change that makes it wrong.
 
@@ -21,7 +21,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
 
 | File | What it does |
 |---|---|
-| `mod/CoopMod/dllmain.cpp` | start-up and shutdown, console commands, Steam/UDP transport, `StatePacket`, glue of the world transfer, restart, remote console, puppet, detours (`NPCTickAI`, `TakeDamage`, `PlayAnimation`, `ExecuteAction`, movie), crash handler, `kProtocolVersion` |
+| `mod/CoopMod/dllmain.cpp` | start-up and shutdown, console commands, Steam/local/UDP transport, `StatePacket`, glue of the world transfer, restart, remote console, puppet, detours (`NPCTickAI`, `TakeDamage`, `PlayAnimation`, `ExecuteAction`, movie), crash handler, `kProtocolVersion` |
 | `mod/CoopMod/World.cpp/.h` | the shared world: the host's animals streamed to the guest as mirrors, species and model requests, avatar health, damage requests, nests, animation events |
 | `mod/CoopMod/Objects.cpp/.h` | fruit, fruit groups, plants, eggs: scan and removal events (broadcast and manifest apply switched off, they only log: `eco:` lines) |
 | `mod/CoopMod/Entities.cpp/.h` | `coop dump`: what exists in the world, per noun type |
@@ -45,6 +45,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/NamePlates.cpp/.h` | Steam names above the players' creatures (creature stage, during a session); screen position from `cViewer::GetCameraToPoint` |
 | `mod/CoopMod/game/HostPanel.cpp/.h` | the "Host co-op" plate in the creature stage (top right): host, Steam ID, copy, stop, who is here, Invite (opens the list of `InvitePanel`); for a guest in a co-op launch the plate `In <host>'s world` with Leave |
 | `mod/CoopMod/game/CoopLaunch.cpp/.h` | the co-op launch in the game: `Prepare()` from `DllMain` (calls `core/coop_launch.h`, logs `launch:` lines), `Active/Host/Notice`, `HostName`; in the main menu a plate with the notice of a failed folder move and the one-time restore question of an old install |
+| `mod/CoopMod/game/LocalNet.cpp/.h` | the local transport for two games on one PC: Steam's channels and messages over one TCP connection on 127.0.0.1 (frame: size, channel, message); the host listens on its local port, the guest reconnects every second; ids 1025-65535 are local ports (`IsLocalId`) |
+| `mod/CoopMod/game/Instance.cpp/.h` | settings of a game copy from environment variables (`COOP_MULTI`: a private `Global\SporeEdi` mutex; `COOP_APPDATA`: answers the game's `SHGetFolderPathW(CSIDL_APPDATA)`; `COOP_CONSOLE_PORT`, `COOP_LOCAL_PORT`, `COOP_NO_STEAM`) |
 | `mod/CoopMod/game/WorldTransfer.cpp/.h` | the world transfer on channel 1: the host's snapshot, manifest and chunk pump; the guest's state (download, retry, staged, error, abort); calls `core/coop_manifest.h` |
 | `core/coop_manifest.h` | the manifest logic (plain C++, Win32 file calls only): CRC32, wire formats, snapshot of a folder, diff against the cache, the `Download` (chunks in, build, verify), `Commit`, `RemoveIncoming`; tests in `tests/manifest_tests.cpp` |
 | `core/coop_core.h` | the replication core (plain C++, no game headers): entity table, snapshots and deltas; tests in `tests/` |
@@ -61,7 +63,10 @@ the console commands and the update functions; `Dispose` removes all of them (se
 ## 4. Transport, channels and messages
 - **Steam** `ISteamNetworkingMessages` through the flat C exports of a modern 32-bit `steam_api.dll`, kept as
   `steam_api_coop.dll` so it does not clash with the GOG build's old stub `steam_api.dll`. Peers are found by Steam ID; Steam
-  relays the traffic. **UDP** on port 27777 is the fallback (`coop udphost` / `coopudpjoin`, no world transfer).
+  relays the traffic. **Local** (`game/LocalNet.cpp`, `coop localhost` / `coop localjoin` / `coopjoin <port>`): two games on one
+  PC, the same messages and channels over TCP on 127.0.0.1; a port (27790 for A, 27791 for B) stands in for the Steam ID
+  everywhere (`Coop\<id>`, `CoopLaunch.txt`, recent hosts), so world transfer, co-op launch and shared world run unchanged.
+  `Session()` is true for Steam and Local. **UDP** on port 27777 is the old fallback (`coop udphost` / `coopudpjoin`, no world transfer).
 - `kProtocolVersion` (`dllmain.cpp`) is **17** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key; 17: corpse food both ways, `kMsgEaten` when a corpse is used up, the guest's lethal bite native). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
@@ -163,13 +168,13 @@ arrives during a game or a co-op launch and prints "connected to the host" when 
 plan is `features/JOIN_FLOW.md`.
 
 ## 6. Remote console
-The mod listens on `127.0.0.1:27780` (local only); `scripts/console.ps1` sends lines that run as console commands and gets
+The mod listens on `127.0.0.1:27780` (local only; `COOP_CONSOLE_PORT` for a second game, 27781 in `launch_two.ps1`); `scripts/console.ps1` sends lines that run as console commands and gets
 the console output back (detour on the game's `ArgScript::PrintF`). The socket has its own thread; commands are queued and run
 on the main thread in `ConsoleUpdate`. One client at a time; a new one replaces the old.
 
 Console commands (Ctrl+Shift+C in the game, or `console.bat`): `coop host`, `coop leave` (in a co-op launch: restart in your own
 world), `coopjoin <steamid | last | number | name>`,
-`coop friends`, `coop udphost`, `coopudpjoin <ip>`, `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport`
+`coop friends`, `coop localhost`, `coop localjoin`, `coopjoin <local port>`, `coop udphost`, `coopudpjoin <ip>`, `coop status`, `coop abs`, `coop move` / `coop walk` / `coop teleport`
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side, at our height above the planet's centre), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
@@ -277,7 +282,8 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
 | Tool | What |
 |---|---|
 | `launch_spore_mod.bat` (`scripts/launch.ps1`) | closes a running game, asks whether to pull when GitHub has new commits (`-NoUpdateCheck` skips), builds + installs (`-Mode dev`, default), or `release` / `play`; starts the game windowed (`-w`), waits for the mod and opens a console connected to it, which closes with the game. `-NoConsole` |
-| `console.bat` (`scripts/console.ps1`) | remote console: interactive, or `console.bat "coop status" "coop host"`; several commands in one line with `;`; Tab completion, Up/Down history |
+| `console.bat` (`scripts/console.ps1`) | remote console: interactive, or `console.bat "coop status" "coop host"`; several commands in one line with `;`; Tab completion, Up/Down history; `-Port` (default 27780), `-Run` (default `COOP_CONSOLE_RUN`) |
+| `launch_two.bat` (`scripts/launch_two.ps1`) | one-PC test with two games: makes `test\SPORE_B` once from hard links and junctions of `test\SPORE_A` (own logs and `CoopModels`, shared `CoopMod.dll`) and B's APPDATA `test\SPORE_B\CoopAppData` (a copy of your save and creations, own caches and `%TEMP%`); runs `launch.ps1` for A, then starts B with its ports and no Steam. `-Connect` (A hosts, B joins), `-ResetB`, `-Mode play` |
 | `update.bat` (`package/coop_update/update.bat`) | from the repo: checks new commits and releases, asks to pull / install / both / skip. For players: installs the latest release. Finds the game by `-GameDir`, `coop_update.json`, the folder above, `test\SPORE_A` / `SPORE`, then the registry (`installloc`) |
 | `scripts/setup.ps1` | one-time developer setup: Build Tools, ModAPI SDK, SporeModLoader, first build, optional test copy of the game |
 | `mod/CoopMod/build.bat` | builds (output in `%TEMP%\coopmod_build.log`, shown by the launcher when the build fails) `staging\CoopMod.dll` and, through `make_assets.ps1`, `staging\CoopMod.package` from `assets/` (installed as `<game>\Data\CoopMod.package`) |

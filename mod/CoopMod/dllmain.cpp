@@ -20,6 +20,8 @@
 #include "game/Presence.h"
 #include "game/InvitePanel.h"
 #include "game/OwnCreature.h"
+#include "game/Instance.h"
+#include "game/LocalNet.h"
 #include "../../core/coop_launch.h"
 
 static HMODULE sModule = nullptr;  // our DLL (set in DllMain)
@@ -395,6 +397,9 @@ static bool SteamLoadProc(T& fn, const char* name)
 
 static bool SteamStart()
 {
+	if (Instance::NoSteam()) {
+		return false;  // COOP_NO_STEAM: the second game copy of the one-PC test (game/Instance.h)
+	}
 	if (sSteam.ready) {
 		return true;
 	}
@@ -519,9 +524,12 @@ static const uint32_t kMagic = 0x4F435053;
 static const uint16_t kDefaultPort = 27777;
 static const DWORD kSendIntervalMs = 33;
 
-enum class Transport { None, Udp, Steam };
+// Local: two game copies on one PC over 127.0.0.1 (game/LocalNet.cpp); it carries the same messages as Steam, so everything
+// that is a "session" (world transfer, shared world, co-op launch) works on both. Session() is true for either.
+enum class Transport { None, Udp, Steam, Local };
 
 static Transport sTransport = Transport::None;
+static bool Session() { return sTransport == Transport::Steam || sTransport == Transport::Local; }
 static SOCKET sSocket = INVALID_SOCKET;
 static sockaddr_in sPeer;
 static uint64_t sPeerSteamId = 0;
@@ -565,6 +573,9 @@ static void NetStop()
 		alignas(8) unsigned char identity[256] = {};
 		sSteam.SetSteamID64(identity, sPeerSteamId);
 		sSteam.CloseSession(sSteam.messages, identity);
+	}
+	if (sTransport == Transport::Local) {
+		LocalNet::Stop();
 	}
 	sTransport = Transport::None;
 	sHavePeer = false;
@@ -649,6 +660,44 @@ static bool SteamJoinStart(uint64_t hostId)
 	return true;
 }
 
+// Our id in the session: the Steam ID, or in a local session our local port (LocalNet.h).
+static uint64_t MyNetId()
+{
+	return sTransport == Transport::Local ? Instance::LocalPort() : sSteam.myId;
+}
+
+static bool LocalHostStart()
+{
+	NetStop();
+	if (!LocalNet::Host(Instance::LocalPort())) {
+		return false;
+	}
+	sTransport = Transport::Local;
+	sIsHost = true;
+	sHavePeer = false;
+	return true;
+}
+
+static bool LocalJoinStart(uint64_t hostPort)
+{
+	NetStop();
+	if (!LocalNet::IsLocalId(hostPort) || hostPort == Instance::LocalPort() || !LocalNet::Join((uint16_t)hostPort)) {
+		Logf("local: cannot join port %llu (mine is %u)", (unsigned long long)hostPort, (unsigned)Instance::LocalPort());
+		return false;
+	}
+	sTransport = Transport::Local;
+	sIsHost = false;
+	sPeerSteamId = hostPort;
+	sHavePeer = true;
+	return true;
+}
+
+// A Steam ID or, for a local id (a port), the other game on this PC.
+static bool JoinStart(uint64_t hostId)
+{
+	return LocalNet::IsLocalId(hostId) ? LocalJoinStart(hostId) : SteamJoinStart(hostId);
+}
+
 static void NetSend(uint32_t type, const Vector3& pos, const Math::Quaternion& rot)
 {
 	StatePacket p;
@@ -656,7 +705,7 @@ static void NetSend(uint32_t type, const Vector3& pos, const Math::Quaternion& r
 	p.version = kProtocolVersion;
 	p.type = type;
 	p.seq = ++sSeq;
-	p.sender = sTransport == Transport::Steam ? sSteam.myId : 0;
+	p.sender = Session() ? MyNetId() : 0;
 	p.pos[0] = pos.x; p.pos[1] = pos.y; p.pos[2] = pos.z;
 	p.rot[0] = rot.x; p.rot[1] = rot.y; p.rot[2] = rot.z; p.rot[3] = rot.w;
 	if (sTransport == Transport::Udp) {
@@ -667,6 +716,9 @@ static void NetSend(uint32_t type, const Vector3& pos, const Math::Quaternion& r
 		sSteam.SetSteamID64(identity, sPeerSteamId);
 		// 5 = k_nSteamNetworkingSend_UnreliableNoDelay (unreliable + no nagle + no delay)
 		sSteam.Send(sSteam.messages, identity, &p, sizeof(p), 5, 0);
+	}
+	else if (sTransport == Transport::Local) {
+		LocalNet::Send(0, &p, sizeof(p), false);
 	}
 }
 
@@ -730,7 +782,7 @@ static void WorldSendStart()
 }
 
 // Only take a world in the main menu of a run that has not just installed one; the host also offers it
-// when it thinks the client reconnected (see SteamReceive), which can happen in the middle of a game.
+// when it thinks the client reconnected (see SessionReceive), which can happen in the middle of a game.
 static bool WorldAccepted()
 {
 	if (sWorldInstalledAtStart || Simulator::IsCreatureGame()) {
@@ -793,89 +845,98 @@ static void UdpReceive()
 
 static void RememberHost(uint64_t steamId, bool first);  // below, next to NetUpdate
 
-static void SteamReceive()
+// Hands every waiting message of a channel to handle(data, size): Steam's messages, or the local transport's.
+template <typename F>
+static void ForEachMessage(int channel, F handle)
 {
+	if (sTransport == Transport::Local) {
+		std::vector<uint8_t> message;
+		while (LocalNet::Receive(channel, message)) {
+			handle(message.data(), (int)message.size());
+		}
+		return;
+	}
 	void* messages[16];
 	for (;;) {
-		int n = sSteam.Receive(sSteam.messages, 0, messages, 16);
+		int n = sSteam.Receive(sSteam.messages, channel, messages, 16);
 		if (n <= 0) {
 			return;
 		}
 		for (int i = 0; i < n; ++i) {
 			// SteamNetworkingMessage_t starts with: void* m_pData; int m_cbSize;
 			const unsigned char* msg = (const unsigned char*)messages[i];
-			const void* data = *(void* const*)msg;
+			const unsigned char* data = *(const unsigned char* const*)msg;
 			int size = *(const int*)(msg + sizeof(void*));
-			if (size != (int)sizeof(StatePacket)) {
-					WarnVersion("message size");
-				}
-				else {
-				StatePacket p;
-				memcpy(&p, data, sizeof(p));
-				if (p.magic == kMagic && p.version != kProtocolVersion) {
-						WarnVersion("message version");
-					}
-					else if (p.magic == kMagic) {
-					DWORD now = GetTickCount();
-					// A client that was silent for a while (it restarted the game, e.g. to install the world) or a
-					// different client counts as a new connection and gets the world again; a client that has just
-					// installed it ignores the copy.
-					bool reconnect = sHavePeer && (p.sender != sPeerSteamId || now - sLastReceive > kReconnectMs);
-					if (sIsHost && p.sender && (!sHavePeer || reconnect)) {
-						sPeerSteamId = p.sender;
-						sHavePeer = true;
-						Logf("steam: client %s, Steam ID %llu", reconnect ? "reconnected" : "connected", (unsigned long long)p.sender);
-						App::ConsolePrintF("coop: client %s (Steam ID %llu)", reconnect ? "reconnected" : "connected",
-							(unsigned long long)p.sender);
-						if (sSendWorld) {
-							WorldSendStart();
-						}
-						World::HostPeerConnected();
-					}
-					if (!sIsHost && !sHostSeen) {
-						sHostSeen = true;
-						Logf("steam: host answered");
-						App::ConsolePrintF("coop: connected to the host.");
-						RememberHost(sPeerSteamId, true);
-						if (sWorldInstalledAtStart) {
-							App::ConsolePrintF("coop: the host's world is installed. Choose Continue and enter the creature stage.");
-						}
-					}
-					sLastReceive = now;
-					HandlePacket(p);
-				}
-			}
+			handle(data, size);
 			sSteam.Release(messages[i]);
 		}
 	}
 }
 
-static void SteamReceiveFiles()
+static void SessionReceive()
 {
-	void* messages[16];
-	for (;;) {
-		int n = sSteam.Receive(sSteam.messages, kFileChannel, messages, 16);
-		if (n <= 0) {
+	ForEachMessage(0, [](const unsigned char* data, int size) {
+		if (size != (int)sizeof(StatePacket)) {
+			WarnVersion("message size");
 			return;
 		}
-		for (int i = 0; i < n; ++i) {
-			const unsigned char* msg = (const unsigned char*)messages[i];
-			const unsigned char* data = *(const unsigned char* const*)msg;
-			int size = *(const int*)(msg + sizeof(void*));
-			if (sIsHost) {
-				WorldTransfer::HostMessage(data, size);
-			}
-			else if (WorldAccepted() && WorldTransfer::GuestMessage(data, size, GamesDir(), sPeerSteamId)) {
-				WorldStaged();
-			}
-			sSteam.Release(messages[i]);
+		StatePacket p;
+		memcpy(&p, data, sizeof(p));
+		if (p.magic != kMagic) {
+			return;
 		}
-	}
+		if (p.version != kProtocolVersion) {
+			WarnVersion("message version");
+			return;
+		}
+		DWORD now = GetTickCount();
+		// A client that was silent for a while (it restarted the game, e.g. to install the world) or a
+		// different client counts as a new connection and gets the world again; a client that has just
+		// installed it ignores the copy.
+		bool reconnect = sHavePeer && (p.sender != sPeerSteamId || now - sLastReceive > kReconnectMs);
+		if (sIsHost && p.sender && (!sHavePeer || reconnect)) {
+			sPeerSteamId = p.sender;
+			sHavePeer = true;
+			Logf("net: client %s, id %llu", reconnect ? "reconnected" : "connected", (unsigned long long)p.sender);
+			App::ConsolePrintF("coop: client %s (%s %llu)", reconnect ? "reconnected" : "connected",
+				sTransport == Transport::Local ? "local game" : "Steam ID", (unsigned long long)p.sender);
+			if (sSendWorld) {
+				WorldSendStart();
+			}
+			World::HostPeerConnected();
+		}
+		if (!sIsHost && !sHostSeen) {
+			sHostSeen = true;
+			Logf("net: host answered");
+			App::ConsolePrintF("coop: connected to the host.");
+			RememberHost(sPeerSteamId, true);
+			if (sWorldInstalledAtStart) {
+				App::ConsolePrintF("coop: the host's world is installed. Choose Continue and enter the creature stage.");
+			}
+		}
+		sLastReceive = now;
+		HandlePacket(p);
+	});
+}
+
+static void SessionReceiveFiles()
+{
+	ForEachMessage(kFileChannel, [](const unsigned char* data, int size) {
+		if (sIsHost) {
+			WorldTransfer::HostMessage(data, size);
+		}
+		else if (WorldAccepted() && WorldTransfer::GuestMessage(data, size, GamesDir(), sPeerSteamId)) {
+			WorldStaged();
+		}
+	});
 }
 
 // The shared world (World.cpp): entity deltas on channel 2 (unreliable), the rest on channel 3 (reliable, ordered).
 static bool WorldSendOn(const void* data, uint32_t size, int flags, int channel)
 {
+	if (sTransport == Transport::Local) {
+		return sPeerSteamId && LocalNet::Send(channel, data, size, flags == 8);
+	}
 	if (!sSteam.ready || !sPeerSteamId) {
 		return false;
 	}
@@ -888,28 +949,17 @@ static bool WorldSendUnreliable(const void* data, uint32_t size) { return WorldS
 static bool WorldSendReliable(const void* data, uint32_t size) { return WorldSendOn(data, size, 8, World::kChannelReliable); }
 static bool FileSend(const void* data, uint32_t size) { return WorldSendOn(data, size, 8, kFileChannel); }  // world transfer
 
-static void SteamReceiveWorld()
+static void SessionReceiveWorld()
 {
-	void* messages[16];
 	for (int channel : { World::kChannelDelta, World::kChannelReliable }) {
-		for (;;) {
-			int n = sSteam.Receive(sSteam.messages, channel, messages, 16);
-			if (n <= 0) {
-				break;
+		ForEachMessage(channel, [channel](const unsigned char* data, int size) {
+			if (size > 0 && channel == World::kChannelReliable && data[0] == Presence::kMsgInvite) {
+				Presence::OnMessage(data, (uint32_t)size);  // an invitation from a friend, not part of the shared world
 			}
-			for (int i = 0; i < n; ++i) {
-				const unsigned char* msg = (const unsigned char*)messages[i];
-				const unsigned char* data = *(const unsigned char* const*)msg;
-				int size = *(const int*)(msg + sizeof(void*));
-				if (size > 0 && channel == World::kChannelReliable && data[0] == Presence::kMsgInvite) {
-					Presence::OnMessage(data, (uint32_t)size);  // an invitation from a friend, not part of the shared world
-				}
-				else if (size > 0) {
-					World::OnMessage(channel, data, (uint32_t)size, sIsHost);
-				}
-				sSteam.Release(messages[i]);
+			else if (size > 0) {
+				World::OnMessage(channel, data, (uint32_t)size, sIsHost);
 			}
-		}
+		});
 	}
 }
 
@@ -1040,7 +1090,7 @@ static std::string IndicatorText()
 		return "CO-OP: connecting to the host...";
 	}
 	uint64_t saveHost = SaveHostId();
-	if (sTransport == Transport::Steam && saveHost != sPeerSteamId) {
+	if (Session() && saveHost != sPeerSteamId) {
 		return "CO-OP: connected, but this save is YOUR OWN world, not the host's";
 	}
 	return "CO-OP: you are in the HOST's world";
@@ -1121,7 +1171,8 @@ static void OpenConsoleWindow()
 		Logf("console: no console.ps1 found, no console window");
 		return;
 	}
-	std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + script + L"\"";
+	std::wstring command = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"" + script + L"\" -Port " +
+		std::to_wstring(Instance::ConsolePort());
 	STARTUPINFOW startup = { sizeof(startup) };
 	PROCESS_INFORMATION process = {};
 	if (CreateProcessW(nullptr, &command[0], nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, nullptr, &startup, &process)) {
@@ -1330,6 +1381,9 @@ static void EchoFeed(DWORD now)
 // The host's Steam name, or "" while Steam does not know it yet (it is fetched in the background).
 static std::string SteamName(uint64_t steamId)
 {
+	if (LocalNet::IsLocalId(steamId)) {
+		return "local game " + std::to_string(steamId);  // the other copy on this PC (its port)
+	}
 	if (!sSteam.ready || !sSteam.friends || !sSteam.GetPersonaName) {
 		return "";
 	}
@@ -1379,7 +1433,7 @@ namespace CoopNet
 		sWarnedVersion = false;
 		WorldTransfer::GuestReset();
 		sHostSeen = false;
-		return SteamJoinStart(hostId);
+		return JoinStart(hostId);
 	}
 
 	void Cancel()
@@ -1422,18 +1476,18 @@ namespace CoopNet
 	HostState Hosting()
 	{
 		HostState s;
-		s.hosting = sTransport == Transport::Steam && sIsHost;
-		s.joined = sTransport == Transport::Steam && !sIsHost;
+		s.hosting = Session() && sIsHost;
+		s.joined = Session() && !sIsHost;
 		s.guestHere = s.hosting && sHavePeer && sReceived > 0 && GetTickCount() - sLastReceive < kReconnectMs;
 		s.guest = s.guestHere ? sPeerSteamId : 0;
-		s.myId = sSteam.myId;
+		s.myId = MyNetId();
 		return s;
 	}
 
 	JoinState State()
 	{
 		JoinState s;
-		s.joining = sTransport == Transport::Steam && !sIsHost;
+		s.joining = Session() && !sIsHost;
 		s.hostSeen = sHostSeen;
 		s.versionMismatch = sWarnedVersion;
 		WorldTransfer::GuestState world = WorldTransfer::Guest();
@@ -1454,7 +1508,7 @@ namespace CoopNet
 
 	uint64_t PeerId()
 	{
-		return sTransport == Transport::Steam && sHavePeer ? sPeerSteamId : 0;
+		return Session() && sHavePeer ? sPeerSteamId : 0;
 	}
 
 	Simulator::cCreatureAnimal* Puppet()
@@ -1486,7 +1540,7 @@ namespace CoopNet
 
 	uint64_t MyId()
 	{
-		return sSteam.myId;
+		return MyNetId();
 	}
 
 	bool SetRichPresence(const char* key, const char* value)
@@ -1591,13 +1645,18 @@ static void NetUpdate()
 	if (sTransport == Transport::None) {
 		return;
 	}
-	if (sTransport == Transport::Steam) {
-		sSteam.RunCallbacks();
-		sSteam.SocketsRunCallbacks(sSteam.sockets);
-		RememberHostRetry();
-		SteamReceive();
-		SteamReceiveFiles();
-		SteamReceiveWorld();
+	if (Session()) {
+		if (sTransport == Transport::Steam) {
+			sSteam.RunCallbacks();
+			sSteam.SocketsRunCallbacks(sSteam.sockets);
+			RememberHostRetry();
+		}
+		else {
+			LocalNet::Pump();
+		}
+		SessionReceive();
+		SessionReceiveFiles();
+		SessionReceiveWorld();
 		WorldTransfer::SetSender(FileSend);
 		WorldTransfer::HostPump();
 		if (!sIsHost) {
@@ -1634,7 +1693,7 @@ static void NetUpdate()
 // commands can be typed (or scripted) from PowerShell instead of in the game.
 // The socket lives on its own thread and queues the lines; the commands run on the main thread each frame.
 // A minimized game runs no frames (nor does the co-op networking), so commands wait until it is restored.
-static const uint16_t kConsolePort = 27780;
+static const uint16_t kConsolePort = Instance::ConsolePort();  // 27780, another one for a second copy (COOP_CONSOLE_PORT)
 static SOCKET sConsoleListen = INVALID_SOCKET;
 static SOCKET sConsoleClient = INVALID_SOCKET;
 static CRITICAL_SECTION sConsoleLock;
@@ -1815,7 +1874,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop nests | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop localhost | coop localjoin | coopjoin <local port> | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop nests | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1853,6 +1912,32 @@ public:
 			// separate one-argument command.
 			App::ConsolePrintF("coop: use  coopjoin <steamid>  (or  coopudpjoin <ip>)  without the space after coop");
 		}
+		else if (strcmp(sub, "localhost") == 0) {
+			// two game copies on one PC (scripts\launch_two.ps1): the same session as Steam, over 127.0.0.1
+			if (sWorldInstalledAtStart) {
+				App::ConsolePrintF("coop: this run plays a friend's world (co-op launch), it cannot host. coop leave first.");
+			}
+			else if (LocalHostStart()) {
+				App::ConsolePrintF("coop: hosting for the other game on this PC (port %u). There: coopjoin %u  (or coop localjoin)",
+					(unsigned)Instance::LocalPort(), (unsigned)Instance::LocalPort());
+			}
+			else {
+				App::ConsolePrintF("coop: local hosting failed (port %u busy? see CoopMod.log)", (unsigned)Instance::LocalPort());
+			}
+		}
+		else if (strcmp(sub, "localjoin") == 0) {
+			// the other copy of the one-PC test: 27790 (copy A) unless that is our own port, then 27791 (copy B)
+			uint16_t host = Instance::LocalPort() == 27790 ? 27791 : 27790;
+			sWarnedVersion = false;
+			WorldTransfer::GuestReset();
+			sHostSeen = false;
+			if (LocalJoinStart(host)) {
+				App::ConsolePrintF("coop: connecting to the local game on port %u...", (unsigned)host);
+			}
+			else {
+				App::ConsolePrintF("coop: local join failed (see CoopMod.log)");
+			}
+		}
 		else if (strcmp(sub, "udphost") == 0) {
 			bool ok = UdpStart(true, nullptr, kDefaultPort);
 			App::ConsolePrintF("coop: %s", ok ? "hosting over UDP (port 27777), waiting for a client" : "failed to start (see CoopMod.log)");
@@ -1862,7 +1947,7 @@ public:
 			App::ConsolePrintF("coop: sending the world to clients %s", sSendWorld ? "on" : "off");
 		}
 		else if (strcmp(sub, "sendworld") == 0) {
-			if (sTransport == Transport::Steam && sHavePeer) {
+			if (Session() && sHavePeer) {
 				WorldSendStart();
 			}
 			else {
@@ -1980,13 +2065,16 @@ public:
 			App::ConsolePrintF("coop: absolute positions %s", sAbsolute ? "on" : "off");
 		}
 		else if (strcmp(sub, "status") == 0) {
-			const char* mode = sTransport == Transport::None ? "off" : (sTransport == Transport::Steam ? "steam" : "udp");
+			const char* mode = sTransport == Transport::None ? "off" : sTransport == Transport::Steam ? "steam"
+				: sTransport == Transport::Local ? "local" : "udp";
 			App::ConsolePrintF("coop: %s %s, peer %s, received %u, puppet %s", mode,
 				sTransport == Transport::None ? "" : (sIsHost ? "host" : "client"),
 				sHavePeer ? "known" : "none", (unsigned)sReceived, sPuppet ? "active" : "none");
 			if (sSteam.ready) {
 				App::ConsolePrintF("coop: your Steam ID %llu", (unsigned long long)sSteam.myId);
 			}
+			App::ConsolePrintF("coop: local port %u (the other game on this PC joins with coopjoin %u), console port %u",
+				(unsigned)Instance::LocalPort(), (unsigned)Instance::LocalPort(), (unsigned)kConsolePort);
 			World::PrintStatus();
 		}
 		else if (strcmp(sub, "off") == 0) {
@@ -2016,14 +2104,32 @@ public:
 			return;
 		}
 		Logf("coopjoin %s", args[0]);
-		// a Steam ID, or a remembered host: "last", its number in `coop friends`, or part of its name
+		// a local port (4-5 digits: the other game on this PC), a Steam ID, or a remembered host: "last", its number in
+		// `coop friends`, or part of its name
 		char error[200];
-		uint64_t id = RecentHosts::Resolve(args[0], error, sizeof(error));
+		size_t length = strlen(args[0]);
+		bool port = length >= 4 && length <= 5 && strspn(args[0], "0123456789") == length;
+		uint64_t id = port ? _strtoui64(args[0], nullptr, 10) : RecentHosts::Resolve(args[0], error, sizeof(error));
+		if (port && !LocalNet::IsLocalId(id)) {
+			snprintf(error, sizeof(error), "%s is not a local port (1025-65535)", args[0]);
+			id = 0;
+		}
 		if (id == 0) {
 			App::ConsolePrintF("coop: %s", error);
 			return;
 		}
-		if (SteamJoinStart(id)) {
+		sWarnedVersion = false;
+		WorldTransfer::GuestReset();
+		sHostSeen = false;
+		if (LocalNet::IsLocalId(id)) {
+			if (LocalJoinStart(id)) {
+				App::ConsolePrintF("coop: connecting to the local game on port %llu...", (unsigned long long)id);
+			}
+			else {
+				App::ConsolePrintF("coop: local join failed (see CoopMod.log)");
+			}
+		}
+		else if (SteamJoinStart(id)) {
 			App::ConsolePrintF("coop: connecting over Steam, your Steam ID: %llu", (unsigned long long)sSteam.myId);
 		}
 		else {
@@ -2079,7 +2185,7 @@ void Initialize()
 	if (sWorldInstalledAtStart) {
 		uint64_t autoJoin = CoopLaunch::Host();
 		Logf("autojoin: co-op launch, joining host %llu", (unsigned long long)autoJoin);
-		if (SteamJoinStart(autoJoin)) {
+		if (JoinStart(autoJoin)) {
 			App::ConsolePrintF("coop: co-op launch: the host's world is open, joining the host again automatically. Leave: coop leave");
 		}
 		else {
@@ -2087,12 +2193,6 @@ void Initialize()
 		}
 	}
 }
-
-// Test aid: Spore refuses to start a second copy ("other instance of the game is already running", a named mutex).
-// With the environment variable COOP_MULTI set, a second copy gets an unnamed mutex instead, so two games can run
-// on one PC (give the second one its own APPDATA so the saves do not clash).
-static HANDLE(WINAPI* sOrigCreateMutexA)(LPSECURITY_ATTRIBUTES, BOOL, LPCSTR) = CreateMutexA;
-static bool sMultiInstance = false;
 
 // Always windowed. A fullscreen Spore is minimized by Windows as soon as it loses the focus (Alt+Tab) and then runs no
 // frames at all: for the host that freezes the whole shared world for the other player. The game takes `-w` from its
@@ -2124,17 +2224,6 @@ static LPWSTR WINAPI GetCommandLineW_hook()
 		}
 	}
 	return line;
-}
-
-static HANDLE WINAPI CreateMutexA_hook(LPSECURITY_ATTRIBUTES attributes, BOOL initialOwner, LPCSTR name)
-{
-	HANDLE handle = sOrigCreateMutexA(attributes, initialOwner, name);
-	if (name && handle && GetLastError() == ERROR_ALREADY_EXISTS) {
-		Logf("multi: mutex '%s' already existed, using a private one", name);
-		CloseHandle(handle);
-		handle = sOrigCreateMutexA(attributes, initialOwner, nullptr);
-	}
-	return handle;
 }
 
 void Dispose()
@@ -2172,9 +2261,7 @@ void Dispose()
 	MenuWorlds::DetachHook();
 	LoadTrace::Detach();
 	DetourDetach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
-	if (sMultiInstance) {
-		DetourDetach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
-	}
+	Instance::DetachHooks();
 	if (sForceWindowed) {
 		DetourDetach((PVOID*)&sOrigGetCommandLineA, (PVOID)GetCommandLineA_hook);
 		DetourDetach((PVOID*)&sOrigGetCommandLineW, (PVOID)GetCommandLineW_hook);
@@ -2187,6 +2274,7 @@ void Dispose()
 	// std::string/std::vector still holding memory would crash in the game's free. Free them now to be safe.
 	sDisposed = true;
 	WorldTransfer::Shutdown();
+	LocalNet::Shutdown();
 	std::string().swap(sIndicator);
 	std::wstring().swap(sBaseTitle);
 	EnterCriticalSection(&sConsoleLock);
@@ -2209,10 +2297,7 @@ void AttachDetours()
 	LoadTrace::Attach();
 	sOrigPrintF = ArgScript::PrintF;
 	DetourAttach((PVOID*)&sOrigPrintF, (PVOID)PrintF_detour);
-	if (getenv("COOP_MULTI")) {
-		sMultiInstance = true;
-		DetourAttach((PVOID*)&sOrigCreateMutexA, (PVOID)CreateMutexA_hook);
-	}
+	Instance::AttachHooks();  // two copies on one PC: mutex, APPDATA (game/Instance.cpp)
 	if (!getenv("COOP_FULLSCREEN")) {
 		sForceWindowed = true;
 		DetourAttach((PVOID*)&sOrigGetCommandLineA, (PVOID)GetCommandLineA_hook);

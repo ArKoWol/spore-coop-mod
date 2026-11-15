@@ -49,6 +49,8 @@
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Entities.h" />
     <ClInclude Include="Log.h" />
+    <ClInclude Include="game\Instance.h" />
+    <ClInclude Include="game\LocalNet.h" />
     <ClInclude Include="RecentHosts.h" />
     <ClInclude Include="game\PuppetMotion.h" />
     <ClInclude Include="game\Actions.h" />
@@ -95,6 +97,8 @@
     <ClCompile Include="game\Presence.cpp" />
     <ClCompile Include="game\InvitePanel.cpp" />
     <ClCompile Include="game\OwnCreature.cpp" />
+    <ClCompile Include="game\Instance.cpp" />
+    <ClCompile Include="game\LocalNet.cpp" />
     <ClCompile Include="World.cpp" />
     <ClCompile Include="Models.cpp" />
     <ClCompile Include="Objects.cpp" />

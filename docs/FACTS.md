@@ -27,12 +27,12 @@ seen in our tests.
 - **A minimized Spore runs no frames**: no update functions, no co-op networking, no remote console. Fullscreen Spore
   minimizes as soon as it loses focus; `SporeApp.exe -w` runs windowed and keeps running (throttled) without focus.
 - Windowed Spore runs about 50 fps in the main menu with or without the focus (`coop fps`).
-- A second game copy on one PC (`COOP_MULTI=1` gives it a private mutex past the "already running" check, plus a separate
-  `APPDATA`) crashes at `SporeApp.exe+0x29de23` (null read) shortly after start; cause not found.
+- Saves: `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...); console: Ctrl+Shift+C. **The game finds `%APPDATA%`
+  with `SHGetFolderPathW(CSIDL_APPDATA)`, never from the variable**; its one single-copy lock is the mutex `Global\SporeEdi`. With both
+  redirected (`game/Instance.cpp`) two copies run side by side *(verified 2026-11-15)*; the old crash at `+0x29de23` came from sharing APPDATA *(guess)*.
 - **A crashed or killed Spore can leave an unkillable process** after the AMD driver resets (`LiveKernelEvent 117`); a new game
   then hangs at startup or says "Another instance of the game is already running". Only a reboot clears it.
 - `Simulator::IsCreatureGame()` is false in the main menu, which is where the guest waits before the world arrives.
-- Game saves live in `%APPDATA%\Spore\Games\Game0` (`.spo`, `stars.db`, `PlanetScripts.pld`, ...). Console: Ctrl+Shift+C.
 
 ## 3. ModAPI, the loader and the console
 - **The loader unloads the mod with `FreeLibrary` right after `Dispose`** ("CoopMod detached (FreeLibrary)" in the log) while
@@ -230,8 +230,8 @@ seen in our tests.
   a `Fruit` noun (`02c9cc91`) at the fruit's position; Mate (`D335362C`) targets a creature; an unknown action `045ab96e` fires
   with a mating call and just before a kill *(verified 2026-10-25)*.
 - **Trees and fruit regenerate for a few seconds at a stage start** (shapes change on the guest) *(verified 2026-10-25, 2 PCs)*.
-- **Replaying `PlayAnimation` is not enough for every action**: eating fruit plays well; the vomit after a fruit and the mating
-  call's waves and notes come from the ability and effect system *(guess)*. `PlayAbility` does not play skill abilities (glide,
+- **A long action is a chain of animations; only the first passes `PlayAnimation`**: the mating call `0265d18b` (start, 0.5 s) ->
+  `0265d18c` (3 s) -> `0265d18d` (end); the rest is switched by the animation system. Ids differ in the low byte only *(verified 2026-11-15, one PC)*. `PlayAbility` does not play skill abilities (glide,
   jump, mating call, sprint, sneak) *(SDK)*; called by the mod it is captured and replayed fine *(verified 2026-10-31, `coop selftest`)*.
 - **The player's abilities never pass `PlayAbility`.** An ability button calls `0xD49560(index)` (cdecl): it asks `0xD49220(index)`
   whether the ability is usable (0 = yes; 1 busy or recharging, 7-9 target: then only a hint), then `0xD48AB0` -> **`0xD1E930(creature,

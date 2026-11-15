@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Two games on one PC: `launch_two.bat`, a local transport** (exxecute; `game/LocalNet.cpp`, `game/Instance.cpp`, `scripts/launch_two.ps1`,
+  `TESTING.md` 1b, `FACTS.md` 2). Game B (`test\SPORE_B`: hard links and junctions, no copy) gets a private mutex and its own APPDATA
+  (the game reads it through `SHGetFolderPathW`); `coop localhost` / `coop localjoin` carry Steam's messages over 127.0.0.1, so world
+  transfer, co-op launch and shared world run as with Steam. `COOP_MULTI` now only replaces Spore's own mutex. Tested on 1 PC (two
+  games, the guest in the host's world); no protocol change. Nothing to do for ArKoWol; Steam joining is unchanged, check it once.
 - **The player's own song, dance, charm and pose are captured where the game uses them** (exxecute; `game/Actions.cpp`, `SelfTest.cpp`,
   `FACTS.md` 8). They never pass `PlayAbility`: a detour of the player's ability use (exe `0xD1E930`) now sends social abilities as
   the usual `kAbility`; the button presses are logged with the game's "usable" status. `coop selftest` uses the song through the game's

@@ -1,4 +1,4 @@
-# Remote game console: talks to CoopMod's console port (127.0.0.1:27780) of a running Spore.
+# Remote game console: talks to CoopMod's console port (127.0.0.1:27780; the second game of launch_two.ps1: -Port 27781).
 # Usage:
 #   .\console.ps1                         interactive: type console commands (Tab completes, Up/Down: history),
 #                                         see the game's console output; exit or Ctrl+C to quit
@@ -10,7 +10,9 @@ param(
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$Command,
     [double]$Wait = 2,
     [int]$Port = 27780,
-    [string]$Run  # interactive mode only: commands (separated by ;) sent right after connecting, e.g. -Run "coop host"
+    # interactive mode only: commands (separated by ;) sent right after connecting, e.g. -Run "coop host"; default: the
+    # environment variable COOP_CONSOLE_RUN (scripts\launch_two.ps1 -Connect)
+    [string]$Run = $env:COOP_CONSOLE_RUN
 )
 
 $ErrorActionPreference = 'Stop'
@@ -105,6 +107,8 @@ $commands = @(
     @('coop restart', 'restart the game (tests the automatic restart)'),
     @('coop udphost', 'host over plain UDP, port 27777'),
     @('coopudpjoin ', '<ip>: join a UDP host'),
+    @('coop localhost', 'one PC, two games: host for the other game on this PC (launch_two.bat)'),
+    @('coop localjoin', 'one PC, two games: join the other game on this PC'),
     @('coop move', 'puppet follows with the game''s walking (default)'),
     @('coop walk', 'puppet follows with WalkTo'),
     @('coop teleport', 'puppet is teleported (old way, no leg animation)'),
