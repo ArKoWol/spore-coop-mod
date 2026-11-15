@@ -6,6 +6,15 @@ planet** and see each other's creature walking around.
 > **Status: early test build.** It is made by two friends for themselves, changes several times a day and can crash the
 > game. Back up your saves before you try it. Creature stage only.
 
+![Spore Co-op](media/promo/banner.jpg)
+
+| | |
+|---|---|
+| ![Your friend in your world](media/screenshots/shared_world.jpg) | ![Hunt side by side](media/screenshots/side_by_side.jpg) |
+| ![From the first steps](media/screenshots/early_creatures.jpg) | ![Join from the main menu](media/screenshots/coop_window.jpg) |
+
+More pictures for posts: [`media/promo/`](media/promo) (collage, square card, comic).
+
 ## What works and what does not (yet)
 
 | Works | Not yet |

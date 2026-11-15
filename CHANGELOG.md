@@ -6,6 +6,9 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Screenshots and promo pictures** (exxecute; `media/screenshots/`, `media/promo/`, `README.md`). Four demo screenshots from a
+  2-PC session (window bar, taskbar and notifications cut off) and four promo images (banner 1280x640 for GitHub's social preview,
+  collage, square card, comic) shown in the README. No code change, not tested; no protocol change. Nothing to do.
 - **Fix: the host crashed when the guest joined** (exxecute; `game/Kills.cpp`, `World.cpp`, `FACTS.md` 7). ArKoW's game read `+0x32C` of a
   null tuning object (`SporeApp.exe+0x76ca11`, the creature under the cursor) right after the guest's puppet was rebuilt: the new
   animal existed before our update gave it the blank tuning. The game's tuning getter (`0xC0C300`) now answers the blank one for
