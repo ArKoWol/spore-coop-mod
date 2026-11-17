@@ -1,6 +1,6 @@
 # Co-op join flow: from the main menu into a friend's world
 
-> Status: agreed · Owner: ArKoWol · Updated: 2026-11-01
+> Status: agreed · Owner: ArKoWol · Updated: 2026-11-17
 > Read when: you work on hosting, joining, the main menu, the world transfer or the start of the game. Decisions: `../DECISIONS.md`
 > D19-D22, D24. What works today: `../STATUS.md` section 2. How the code works today: `../ARCHITECTURE.md` section 5.
 
@@ -146,7 +146,8 @@ starts, then starts it with `CoopLaunch.txt`. **Spike J4**: the helper and then 
 | E13 | Host gone after the restart | plate `Artyom is offline` with Leave |
 | E14 | Game closed or crashed in the co-op launch | next start restores the own `Game0` (M1 step 1) |
 | E15 | Host plays another planet since | M4 manifest differs, the changed files are sent |
-| E17 | Which creature the guest plays | `../PLAN.md` section 3 (own species), not part of the join |
+| E16 | Host plays a new game he has not saved yet | today the guest gets the last save on disk (seen 2026-11-17); planned: hosting saves first (D27, `SHARED_CREATURE_WORLD.md` P2) |
+| E17 | Which creature the guest plays | the one kept for him in the host's world (D26, `SHARED_CREATURE_WORLD.md` P1), not part of the join |
 | E21 | Short network drop | 10 s grace (`kReconnectMs`), then E13 |
 | E22 | UDP fallback | developer tool only, no world transfer |
 

@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **Docs: feedback of the 2026-11-17 play session, plan corrected** (exxecute; new `docs/features/SHARED_CREATURE_WORLD.md`,
+  `PLAN.md` 1, 3, 7.1, 8, `DECISIONS.md` D25-D27, `STATUS.md`, `FACTS.md` 7, `JOIN_FLOW.md` E16-E17). Six problems: the guest's
+  outside creature, an old world sent, nests back at the host's respawn, the guest's little DNA, nest results not shared, the
+  friend's family attackable. Finished Musts removed from 7.1. No code change, no protocol change. **ArKoWol**: confirm D25-D27
+  and the new 7.1 split (most new Musts are in your area).
 - **Screenshots and promo pictures** (exxecute; `media/screenshots/`, `media/promo/`, `README.md`). Four demo screenshots from a
   2-PC session (window bar, taskbar and notifications cut off) and four promo images (banner 1280x640 for GitHub's social preview,
   collage, square card, comic) shown in the README. The banner links to the YouTube trailer (36 s, published 2026-11-15).

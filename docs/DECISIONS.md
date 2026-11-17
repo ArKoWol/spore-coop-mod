@@ -1,11 +1,20 @@
 # Decisions of the owner
 
-> Status: agreed · Owner: ArKoWol · Updated: 2026-11-01
+> Status: agreed · Owner: ArKoWol · Updated: 2026-11-17
 > Read when: before you question the direction or propose something that changes it. Add a line here for every new
 > decision of the owner; never edit an old line except to mark it replaced.
 
 Newest first. Each line: what was decided, and which earlier decision it replaces. `PLAN.md` always follows the newest
 decisions.
+
+## 2026-11-17: after the first longer play session (`features/SHARED_CREATURE_WORLD.md`)
+Proposed by exxecute from the 2026-11-17 session played with ArKoWol; ArKoWol to confirm (his area by D5, D23).
+
+| # | Decision | Replaces |
+|---|---|---|
+| D27 | Hosting saves the running game first and sends that save; hosting outside the creature stage's play is refused | - |
+| D26 | The guest's creature, DNA and brain level belong to the host's world (sidecar); a first join starts without an outside creature, his own creatures from other games are not brought in | the guest's own creature from his last game (OwnCreature, 2026-11-08) |
+| D25 | Creature stage: a species allied or extinct for one player is the same for the other (nest results shared); the friend's species and family cannot be attacked at all; the two avatars keep PvP | D14 in part (allies were per player) |
 
 ## 2026-11-01: the CO-OP star comes back in the co-op launch
 | # | Decision | Replaces |

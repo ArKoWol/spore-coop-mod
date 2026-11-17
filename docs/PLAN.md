@@ -1,6 +1,6 @@
 # Co-op plan for every stage
 
-> Status: agreed with the owner (2026-10-25) · Owner: ArKoWol · Updated: 2026-10-31
+> Status: agreed with the owner (2026-10-25) · Owner: ArKoWol · Updated: 2026-11-17
 > Read when: before you start any gameplay work, and before you propose a change of direction. This is the only live plan;
 > the decisions behind it, with dates, are in `DECISIONS.md`. What is done is in `STATUS.md`.
 
@@ -19,7 +19,8 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 6. **Each player has his own editor.** Guest in the editor: the host plays on. Host in the editor: the guest's world probably
    freezes; the guest sees "host is in the editor" and may open his own editor.
 7. **Save**: the world in the host's save; the guest's personal data in a sidecar file next to it (section 8). Only the host
-   saves. Joining: world transfer and one restart into a "co-op launch" (`features/JOIN_FLOW.md`).
+   saves; hosting saves the running game first and sends that save (D27). Joining: world transfer and one restart into a
+   "co-op launch" (`features/JOIN_FLOW.md`).
 8. **Leaving**: the guest leaves = his creature disappears, his tribe or cities stay and are invulnerable while he is away;
    the host leaves = the session ends.
 
@@ -34,8 +35,11 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
   - the guest's table is native on his machine, his game keeps it (replayed deaths of mirrors never go into it);
   - the host's game only knows its own table; a detour on `GetRelationship` (0xBA40E0, `FACTS.md` section 9) answers from the
     guest's table (sent by the guest) when the NPC is looking at the guest's puppet;
-  - each player's species is an ally (value 6) in the other's table;
-  - extinction is shared: an extinct species' herds disappear for both.
+  - each player's species is an ally (value 6) in the other's table, and the friend's species and family **cannot be attacked**
+    at all (no target, no damage); the two avatars keep PvP (D25);
+  - the result of a nest is shared: a species allied or extinct for one is allied or extinct for the other, through the game's
+    own `ApplyEvent`; an extinct species' herds disappear for both (D25);
+  - the guest's own hits and impressions on mirrors count in his table and goal cards; only replayed ones are dropped.
 - **DNA for a kill**: the game pays only the attacking avatar, so the guest applies his own lethal hit on his machine.
 - **Checkpoints**: every nest move (both nests move together) and the transition to the tribe stage.
 - **Weak spot**: the social mini-game for the guest. His herd is a mirror without AI, so the guest sings and dances and the host
@@ -69,7 +73,7 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
   simulates its NPC ships and the guest sees mirrors. AI empires across the galaxy: only the host.
 
 ## 7. Order of work
-1. **Creature stage, finished**: the guest's own creature, "the actor decides his own action result", the guest's relation
+1. **Creature stage, finished**: the guest's creature kept in the host's world, "the actor decides his own action result", the guest's relation
    table, extinction, the alliance between the players, nest checkpoints, editors, the guest's data in the save.
 2. **Checkpoint system** as a common mechanism: hold, report, start on both.
 3. **Cell in one pool** and the cell -> creature transition.
@@ -78,20 +82,20 @@ ambitious one. **Nothing in it beyond the creature-stage basics is verified in t
 6. **Space**: one empire, two ships, shared money and missions.
 
 ### 7.1 Creature stage priorities (MoSCoW)
-Agreed by ArKoWol on 2026-10-31 (`DECISIONS.md` D23). The test:
+Agreed by ArKoWol on 2026-10-31 (`DECISIONS.md` D23); corrected by exxecute after the play session of 2026-11-17 (D25-D27,
+`features/SHARED_CREATURE_WORLD.md` P1-P6; ArKoWol to confirm). Done and removed: corpses (2f), the guest's lethal hit (4a),
+respawn (4c), the host's nests on the guest (2b). The test:
 can two players play the creature stage for several evenings without losing progress? Numbers are `STATUS.md` section 1.
 
 | Priority | Mechanic | STATUS | Who |
 |---|---|---|---|
+| Must | hosting saves first and sends the current world (P2, D27) | 1 | ArKoWol |
+| Must | the guest's creature, DNA and brain in the host's world (sidecar); no outside creature on the first join (P1, D26) | 3c, 5a | exxecute (creature), ArKoWol (sidecar) |
+| Must | the friend's species allied and not attackable (P6, D25) | 2g, 2h | ArKoWol |
+| Must | the guest's own relation events count: his nest goals and DNA (P4) | 4e | exxecute |
 | Must | stability: no clones at the nest, the guest leaves and returns | 1, 6 | ArKoWol |
-| Must | the guest eats corpses | 2f | exxecute |
-| Must | the guest's lethal hit applied on his machine, he gets the DNA | 4a | exxecute |
-| Must | the guest's own creature from the start (`SetSpecies`), editor changes seen by the friend | 3c | exxecute |
-| Must | the guest's progress in the host's save (sidecar, section 8) | 5a | ArKoWol |
-| Must | a dead player respawns at his own nest | 4c | exxecute |
-| Must | the two players' species are allies | 2g | ArKoWol |
-| Should | the host's nests on the guest | 2b | ArKoWol |
-| Should | species relation tables, shared extinction | 2g | ArKoWol |
+| Should | nest results shared: allied and extinct for both (P5, D25) | 2g | ArKoWol |
+| Should | nests do not come back when the host respawns (P3) | 2i | ArKoWol |
 | Should | checkpoints: nest move together, transition to the tribe stage | 5b | ArKoWol |
 | Should | the guest's social mini-game, simplified (section 3, weak spot) | 3e | exxecute |
 | Should | check: the puppet's health and size, mirrors in fights | 3d, 2a | exxecute, ArKoWol |
@@ -103,7 +107,8 @@ Join flow M5 waits until the Musts are done; M1-M4 are only checked on 2 PCs.
 ## 8. Save model
 The host's save is the world. The guest's personal data (species and creature file, DNA, brain level, parts, relation table,
 and later his tribe/civ identity) is written by the host into a sidecar `Game0\coop_players.json` next to the save, on every
-save and when the guest's progress changes. A returning guest (same Steam ID) gets it back. The guest's own `Game0` is never
+save and when the guest's progress changes. A returning guest (same Steam ID) gets it back; a first join brings no creature from
+the guest's other games (D26, `features/SHARED_CREATURE_WORLD.md` P1). The guest's own `Game0` is never
 overwritten: the friend's world is swapped in for one launch and the own `Game0` comes back at the next start
 (`features/JOIN_FLOW.md` M1, built, not yet verified on 2 PCs).
 

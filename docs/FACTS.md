@@ -1,6 +1,6 @@
 # Hard-won facts
 
-> Status: reference · Owner: both · Updated: 2026-11-15
+> Status: reference · Owner: both · Updated: 2026-11-17
 > Read when: before you change any code that talks to the game, ModAPI, Steam or the save files. Read it all once; it is
 > grouped by topic so you can come back to one section.
 
@@ -176,9 +176,9 @@ seen in our tests.
   skipped for mirrors *(guess)*. A corpse's food value is `cCreatureBase::mFoodValue` (+0xB84) *(SDK)*: 100 on the host's corpses,
   200 on a fresh mirror *(verified 2026-10-31)*.
 - **Respawn**: the message `kMsgRestartAtNest` (0x04F60B92) "respawns the avatar creature at their nest" *(SDK)*; the nest is
-  the one of the avatar's herd (`mHerd->mpNest`) *(guess)*. Whether the respawned avatar is the same object, how long the death
-  lasts and whether its health goes to 0: not known yet, `respawn:` lines in `CoopMod.log` tell (`coop die`). The mod does not
-  send that message itself (calls through `IMessageManager` are not trusted, section 6).
+  the one of the avatar's herd (`mHerd->mpNest`) *(guess)*. **After the host's respawn every nest of the planet was back**, also
+  destroyed ones; whether the game or our nest code makes them is not known *(verified 2026-11-17, 2 PCs; cause open,
+  `features/SHARED_CREATURE_WORLD.md` P3)*. The mod does not send that message itself (calls through `IMessageManager` are not trusted, section 6).
 - **How a creature eats a corpse** (state machine 0xD70FD0, bites 0xD70A80 in our exe): it needs the corpse's `mbDead` (+0xB5E)
   **and** `cSpatialObject::mbEnabled` (creature +0x135); for the player's avatar it sets the corpse's `mbHasBeenEaten` (+0xB5F)
   when the eating **starts** and then takes food out of `mFoodValue` bite by bite. So a corpse marked eaten is not used up yet

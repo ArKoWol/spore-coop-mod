@@ -1,6 +1,6 @@
 # Documents
 
-> Status: reference · Owner: both · Updated: 2026-10-25
+> Status: reference · Owner: both · Updated: 2026-11-17
 > Read when: you look for where something is written, or where to write something. The rules for writing are in
 > `../CLAUDE.md`, section "Documents".
 
@@ -16,6 +16,7 @@
 | `FACTS.md` | hard-won facts about the game, ModAPI, Steam, saves, creatures, combat, other stages | before game-facing code | you learn something about the game or the tools |
 | `TESTING.md` | how to test on two PCs, tools, test rules | before you test or call anything done | the way of testing changes |
 | `features/JOIN_FLOW.md` | joining from the main menu: the co-op launch, CO-OP button, who is hosting (ArKoWol) | you work on joining or the menu | that feature's design changes |
+| `features/SHARED_CREATURE_WORLD.md` | problems of the 2026-11-17 play session and their fixes: guest's creature in the host's world, saving at hosting, nests, DNA, friendly fire (exxecute) | you work on the guest's progress, hosting, nests or relations | a part is built or its design changes |
 | `features/UI_STYLE.md` | how every in-game window of the mod looks and is made (exxecute) | you make or change a window | the style changes |
 
 A new large feature gets its own `features/<name>.md` and a row here. Nothing else is added to `docs/` without the owner's OK.
