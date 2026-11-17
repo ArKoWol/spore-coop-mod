@@ -30,7 +30,7 @@ change), **partly**, **not done**.
 | 4b | Host damage and deaths | works |
 | 4c | PvP, death and respawn at the own nest, no reward | **works on 2 PCs 2026-11-01**: both killed each other, both respawned at their own nests and saw each other again; one exception fixed the same day: after the host's respawn the guest's puppet of him stayed invisible (the stray sweep removed it before it was picked up) |
 | 4d | Hit and get-hit animations of mirrors | not done |
-| 4e | The guest's DNA from nests and species goals | fails (2026-11-17): the host earns normal DNA, the guest little; his nest goal cards do not complete (`features/SHARED_CREATURE_WORLD.md` P4); `dna:` diagnosis built 2026-11-17, to run |
+| 4e | The guest's DNA from nests and species goals | fails (2026-11-17): the host earns normal DNA, the guest little; his nest goal cards do not complete (`features/SHARED_CREATURE_WORLD.md` P4); 2026-11-17 on 1 PC the guest's kills pay like the host's (`dna:` lines); social and nest bonus not checked |
 | 5a | Separate DNA / brain / parts per player, saved in the host's save | not done; needed for 3c (D26) |
 | 5b | Stage change when both are ready | not done |
 | 6 | Stability: no crashes on connect, in combat, on restart; leaving and returning guest | main crashes fixed |

@@ -48,7 +48,8 @@ When a part is built and seen working, cut it from this file.
   (no AI) does not run (`../PLAN.md` 3, weak spot); the nest bonus needs the nest's own herd (`cHerd::mbBestFriends`,
   `mbExtinction`, `mpNest`), and a mirror's herd has no nest. *(guess)*
 - **Diagnosis built 2026-11-17** (`game/Progress.cpp`): every DNA change is a `dna:` line with the relation event before it;
-  `coop dna` gives totals. Next: host and guest do the same (kill one nest's animals, befriend one), compare the lines.
+  `coop dna` gives totals. **Seen 2026-11-17 on 1 PC**: the guest's kills pay like the host's (+7.0 / +8.8 per kill, event 0
+  reached the game, 8 kills). Not seen yet: impressions (event 3) and a nest or species bonus; on 2 PCs, repeat the session's case.
 - **Fix**: after the diagnosis. Rule: the guest's own action on a mirror counts (rule 3 of `../PLAN.md` 1), replayed ones never.
 
 ## P5. Befriending and destroying a nest is not shared
