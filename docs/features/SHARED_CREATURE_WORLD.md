@@ -9,17 +9,16 @@ was seen, the cause as far as we know and the fix we plan. Causes marked *(guess
 When a part is built and seen working, cut it from this file.
 
 ## P1. The guest brings any creature from his own games
-- **Seen**: the joining player starts with the creature of his last own game, not one of the host's world. Nothing of it is kept
-  in the host's world, so he can bring the strongest creature he ever made into a fresh world.
-- **Cause**: outside a co-op launch the mod writes the avatar's key to `Games\CoopOwnCreature.txt`; in a co-op launch that
-  creature is loaded into the profile (`game/OwnCreature.h`, part 2). The host never stores it (STATUS 5a is not done).
-- **Fix** (D26): the guest's creature belongs to the host's world, in the sidecar `Game0\coop_players.json` (`../PLAN.md` 8):
-  1. First join of a Steam ID to this world: the guest gets no outside creature. He starts as the host's species and the game's
-     creature editor opens for him with the parts of this world (his own species from then on).
-  2. The host writes his creature (key and creature file), DNA and brain level into the sidecar on every save and when they change.
-  3. A later join loads the creature from the sidecar; `CoopOwnCreature.txt` is no longer used in a co-op launch.
-- **Open**: can the editor be opened for the guest at the start without breaking his profile (`../FACTS.md` 7)? Fallback: he
-  plays the host's species until his first own editor visit.
+- **Seen** (2026-11-17): the joining player started with the creature of his last own game, so he could bring the strongest
+  creature he ever made into a fresh world. Nothing of it was kept in the host's world.
+- **Built 2026-11-17, works on 1 PC** (two games, protocol 18, D26): the host keeps the creature the guest announces in `Game0\coop_players.json`
+  (`../ARCHITECTURE.md` 7); the guest loads his entry in a co-op launch, a first join plays the host's creature. The old
+  `CoopOwnCreature.txt` is gone (the file may stay on disk, nothing reads it).
+- **Seen 2026-11-17 on 1 PC**: first join = host's creature; after B's edit A kept it; B left, joined again (2 files sent) and
+  played the edited creature. **To check on 2 PCs** (Steam IDs instead of local ports).
+- **Open**: the editor is not opened for the guest at the start; he opens it with the mating call at his nest. DNA and brain
+  level in the sidecar are ArKoWol's part (`../STATUS.md` 5a). If the host edits his own creature after the guest's first join,
+  the guest may get the host's old creature kept as "his" (harmless: his next edit replaces it).
 
 ## P2. The host sends an old world
 - **Seen**: the host started a new game and hosted; the guest arrived in the previous world.
@@ -44,8 +43,13 @@ When a part is built and seen working, cut it from this file.
 - **Cause** *(guess)*: on the guest the host's animals are mirrors, and the mod drops relation events on mirrors so that
   replayed deaths do not count (`../FACTS.md` 9). That also drops the guest's **own** hits and impressions, so his table and his
   goal cards never see them. The kill DNA works (native lethal bite, STATUS 4a), the nest and species goals do not.
-- **Fix**: keep relation events that come from the guest's own action on a mirror (rule 3 of `../PLAN.md` 1), drop only the
-  replayed ones. Check with the goal card of one nest on the guest.
+- **What the code shows** (2026-11-17): the guest's own bites already reach his table (`World::AllowRelationEvent`: events on a
+  mirror within 3 s of his own bite). Two other candidates: impressions (event 3) need the social mini-game, which a mirror's herd
+  (no AI) does not run (`../PLAN.md` 3, weak spot); the nest bonus needs the nest's own herd (`cHerd::mbBestFriends`,
+  `mbExtinction`, `mpNest`), and a mirror's herd has no nest. *(guess)*
+- **Diagnosis built 2026-11-17** (`game/Progress.cpp`): every DNA change is a `dna:` line with the relation event before it;
+  `coop dna` gives totals. Next: host and guest do the same (kill one nest's animals, befriend one), compare the lines.
+- **Fix**: after the diagnosis. Rule: the guest's own action on a mirror counts (rule 3 of `../PLAN.md` 1), replayed ones never.
 
 ## P5. Befriending and destroying a nest is not shared
 - **Seen**: a nest befriended or killed by one player stays as it was for the other.

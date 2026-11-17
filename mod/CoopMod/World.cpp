@@ -9,6 +9,7 @@
 #include "game/Respawn.h"
 #include "game/OwnCreature.h"
 #include "game/Kills.h"
+#include "game/CoopNet.h"
 #include "../../core/coop_core.h"
 #include "../../core/coop_models.h"
 
@@ -1984,6 +1985,12 @@ namespace World
 				s.remoteKey = key;
 				s.remoteHash = hash;
 				s.remoteKnown = true;
+				if (host) {
+					// D26: the guest's creature is kept in our world (Game0\coop_players.json) unless it is our own creature
+					const uint32_t guestKey[3] = { key.instanceID, key.typeID, key.groupID };
+					const uint32_t ownKey[3] = { s.sentKey.instanceID, s.sentKey.typeID, s.sentKey.groupID };
+					OwnCreature::OnFriendCreature(CoopNet::PeerId(), guestKey, ownKey);
+				}
 				if (s.remoteDirty) {
 					ResolveRemote(s);
 				}

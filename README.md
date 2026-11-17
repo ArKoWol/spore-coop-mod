@@ -21,7 +21,7 @@ More pictures for posts: [`media/promo/`](media/promo) (collage, square card, co
 
 | Works | Not yet |
 |---|---|
-| Connecting over Steam by Steam ID, no port forwarding | The other player has **your** creature's look, not their own (being tested: the guest plays his own creature once he has played his own creature stage with this version; `COOP_NO_OWN_CREATURE=1` turns it off) |
+| Connecting over Steam by Steam ID, no port forwarding | The other player has **your** creature's look, not their own (being tested: the guest's creature belongs to the host's world. On the first join he plays the host's creature; what he makes in the editor at his nest is kept in the host's world and comes back at his next join. Creatures from his own games are not brought in. `COOP_NO_OWN_CREATURE=1` turns it off) |
 | The host's world is sent to the guest automatically; the guest's game restarts and rejoins by itself | Fruit at the same places, corpses both can eat, species relations, own progress per player |
 | The other player's creature walks, stops and turns (game's own walk animation) | Running, walking backwards or sideways |
 | The host's animals on the guest (model, size, health); guest bites and host damage go through the host | PvP and respawn at your own nest |

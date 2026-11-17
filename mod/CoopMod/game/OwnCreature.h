@@ -5,9 +5,11 @@
 //    This file watches three other signals: the editor closing (game mode), the in-memory species profile of the avatar (a hash of
 //    its plain fields) and the creature records that appear in EditorSaves.package while the editor is open. It also reads a body
 //    from EVERY database that holds the key (a stale copy may win in FindRecord) and prefers the copy in EditorSaves.
-// 2. The guest's own creature. Outside a co-op launch the avatar's key is written to Games\CoopOwnCreature.txt; in a co-op launch
-//    (the host's world) that creature is loaded into the player's species profile 5 s after the avatar appears, the way the game
-//    does it when the editor closes (exe 0x4D4F70, FACTS section 7). COOP_NO_OWN_CREATURE=1 turns it off.
+// 2. The guest's creature belongs to the host's world (D26, features/SHARED_CREATURE_WORLD.md P1). The host keeps the creature
+//    the guest announces (kMsgAvatarSpecies, when it is not the host's own) in Game0\coop_players.json (core/coop_players.h); the
+//    file travels with the world. In a co-op launch the guest loads his entry into the player's species profile 5 s after the
+//    avatar appears, the way the game does it when the editor closes (exe 0x4D4F70, FACTS section 7). No entry (first join): he
+//    plays the host's creature until his first editor visit. COOP_NO_OWN_CREATURE=1 turns the loading off.
 // Log lines start with `own:`.
 #pragma once
 
@@ -35,6 +37,10 @@ namespace OwnCreature
 	// coop abilities: logs our avatar's abilities (index, type, category, hot key), its default attack / socialize index and the
 	// attack or social stance (`own: ab` lines).
 	void DumpAbilities();
+
+	// Host: the guest `guestId` announced his avatar's creature (instance, type, group). Kept in Game0\coop_players.json unless it
+	// is the host's own creature `hostOwn` (the guest plays ours: nothing of his to keep).
+	void OnFriendCreature(unsigned long long guestId, const uint32_t key[3], const uint32_t hostOwn[3]);
 
 	// Dispose: frees the memory.
 	void Shutdown();

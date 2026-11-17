@@ -4,6 +4,7 @@
 #include "Kills.h"
 #include "../World.h"
 #include "../Log.h"
+#include "Progress.h"
 
 #include <cstdio>
 #include <cstring>
@@ -139,7 +140,9 @@ member_detour(ApplyEvent_detour, RelationManagerObject, void(int, void*, void*))
 {
 	void detoured(int event, void* key, void* creature)
 	{
-		if (!World::AllowRelationEvent(creature, event)) {
+		const bool allowed = World::AllowRelationEvent(creature, event);
+		Progress::NoteRelation(event, allowed, creature);  // the `dna:` lines (game/Progress.cpp)
+		if (!allowed) {
 			return;
 		}
 		original_function(this, event, key, creature);

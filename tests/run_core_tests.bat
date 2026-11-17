@@ -23,5 +23,8 @@ cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\presence_tests.exe presence_tes
 out\presence_tests.exe || exit /b 1
 rem the chunks a creature model travels in (core\coop_models.h)
 cl /nologo /EHsc /std:c++17 /W4 /Fo:out\ /Fe:out\models_tests.exe models_tests.cpp || exit /b 1
-out\models_tests.exe
+out\models_tests.exe || exit /b 1
+rem the world sidecar Game0\coop_players.json (core\coop_players.h)
+cl /nologo /EHsc /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fo:out\ /Fe:out\players_tests.exe players_tests.cpp || exit /b 1
+out\players_tests.exe
 exit /b %errorlevel%

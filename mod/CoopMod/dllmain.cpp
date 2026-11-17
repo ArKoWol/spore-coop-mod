@@ -20,6 +20,7 @@
 #include "game/Presence.h"
 #include "game/InvitePanel.h"
 #include "game/OwnCreature.h"
+#include "game/Progress.h"
 #include "game/Instance.h"
 #include "game/LocalNet.h"
 #include "../../core/coop_launch.h"
@@ -505,7 +506,7 @@ static void SteamStop()
 // ---------------------------------------------------------------- network
 
 // Bump when the packet layout or the save transfer changes; players with different versions refuse each other.
-static const uint32_t kProtocolVersion = 17;  // 16: kMsgInvite and the Rich Presence key (game/Presence.cpp); 17: corpse food both ways, eaten at the end, lethal hit native
+static const uint32_t kProtocolVersion = 18;  // 16: kMsgInvite and the Rich Presence key (game/Presence.cpp); 17: corpse food both ways, eaten at the end, lethal hit native; 18: the guest's creature from the host's world (Game0\coop_players.json)
 
 #pragma pack(push, 1)
 struct StatePacket
@@ -1629,7 +1630,8 @@ static void NetUpdate()
 	Respawn::Update(sEcho, sPuppetRaw);  // death and respawn of both players (game/Respawn.cpp)
 	Presence::Update();     // starts Steam in the main menu, publishes our state, scans the friends while the window is open
 	InvitePanel::Update();  // the host's invite list, the toast of an invitation in the main menu
-	OwnCreature::Update(inGame);  // editor watch, own creature file, the guest's own creature in a co-op launch
+	OwnCreature::Update(inGame);  // editor watch, the guest's creature from the host's world in a co-op launch
+	Progress::Update(inGame);     // `dna:` lines: every DNA change with the relation event before it
 	if (sSteam.ready && sTransport != Transport::Steam) {
 		SteamIdlePump();
 	}
@@ -1874,7 +1876,7 @@ static void ConsoleUpdate()
 }
 
 static const char* kUsage =
-	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop localhost | coop localjoin | coopjoin <local port> | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop nests | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
+	"coop host | coop leave | coopjoin <steamid> | coopjoin last | coop localhost | coop localjoin | coopjoin <local port> | coop friends | coop udphost | coopudpjoin <ip> | coop abs | coop move | coop walk | coop teleport | coop facing | coop run | coop motionlog | coop actionlog | coop selftest | coop echo | coop dump | coop hit | coop kill | coop killcheck | coop abilities | coop dna | coop nests | coop fps | coop restart | coop noworld | coop sendworld | coop status | coop off";
 
 class CoopCommand : public ArgScript::ICommand
 {
@@ -1974,6 +1976,9 @@ public:
 	else if (strcmp(sub, "nests") == 0) {
 		World::DumpNests();  // `nestdump:` lines in CoopMod.log
 		App::ConsolePrintF("coop: nests written to CoopMod.log");
+	}
+	else if (strcmp(sub, "dna") == 0) {
+		Progress::Report();  // `dna: report` lines in CoopMod.log
 	}
 	else if (strcmp(sub, "abilities") == 0) {
 		OwnCreature::DumpAbilities();  // `own: ab` lines in CoopMod.log

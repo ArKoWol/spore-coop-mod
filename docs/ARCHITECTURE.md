@@ -1,6 +1,6 @@
 # How the mod works now
 
-> Status: reference · Owner: both · Updated: 2026-11-15
+> Status: reference · Owner: both · Updated: 2026-11-17
 > Read when: before you change the mod's code, the protocol or the tools. It describes the code as it is, not the plan
 > (the plan is `PLAN.md`). Update it in the same change that makes it wrong.
 
@@ -38,7 +38,8 @@ the console commands and the update functions; `Dispose` removes all of them (se
 | `mod/CoopMod/game/UiDraw.cpp/.h` | the shared look and plumbing of the in-game windows: GDI+ drawing (`Plate`, `Button`, `Text`), PNG, `PictureWindow` (a picture in a UTFWin window, clicks to a handler) |
 | `mod/CoopMod/game/Actions.cpp/.h` | abilities, creature effects and voices: captured at the game's functions, replayed on the other side's copy (`kMsgAction`) |
 | `mod/CoopMod/game/Respawn.cpp/.h` | death and respawn of both players: watches our avatar (`respawn:` lines), health 0 in `kMsgAvatar` while dead, puts us beside our own nest after a respawn far from it, removes the friend's puppet while he is dead; `coop die` (one-PC test) |
-| `mod/CoopMod/game/OwnCreature.cpp/.h` | the player's own creature: watches the editor (mode, new creature records in EditorSaves), the avatar's profile in memory, reads our body from every database (`ReadFresh`), writes `Games\CoopOwnCreature.txt` and switches the guest's avatar to it in a co-op launch (`own:` lines) |
+| `mod/CoopMod/game/OwnCreature.cpp/.h` | the player's own creature: watches the editor (mode, new creature records in EditorSaves), the avatar's profile in memory, reads our body from every database (`ReadFresh`); the host keeps the guest's creature in `Game0\coop_players.json` (`core/coop_players.h`), the guest loads it in a co-op launch (`own:` lines) |
+| `mod/CoopMod/game/Progress.cpp/.h` | the diagnosis of the guest's DNA: every DNA change with the relation event before it (`dna:` lines), `coop dna` |
 | `mod/CoopMod/game/SelfTest.cpp/.h` | `coop selftest`: the herd type check of `Kills`, then plays abilities, an animation and an effect on our avatar, checks them on the echo puppet (PASS / FAIL), uses the song through the game's ability-button code |
 | `mod/CoopMod/game/Kills.cpp/.h` | the detour on the game's tuning getter `0xC0C300` (a creature without tuning gets `World::BlankTuning()` instead of null); the guest's native lethal bite: gives a mirror's herd a herd type the game knows (`EnsureHerdType`, the extinction reads it), the detour on the relation manager's `ApplyEvent` (0xBA4A00; `World::AllowRelationEvent` decides), `coop killcheck` |
 | `mod/CoopMod/game/FollowFriend.cpp/.h` | a click on the friend's creature (`GetHoveredObject`) makes our avatar follow it with `MoveTo`; keys or another click end it |
@@ -67,7 +68,7 @@ the console commands and the update functions; `Dispose` removes all of them (se
   PC, the same messages and channels over TCP on 127.0.0.1; a port (27790 for A, 27791 for B) stands in for the Steam ID
   everywhere (`Coop\<id>`, `CoopLaunch.txt`, recent hosts), so world transfer, co-op launch and shared world run unchanged.
   `Session()` is true for Steam and Local. **UDP** on port 27777 is the old fallback (`coop udphost` / `coopudpjoin`, no world transfer).
-- `kProtocolVersion` (`dllmain.cpp`) is **17** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key; 17: corpse food both ways, `kMsgEaten` when a corpse is used up, the guest's lethal bite native). Players with different versions refuse each other on purpose.
+- `kProtocolVersion` (`dllmain.cpp`) is **18** (14: manifest world transfer and, in parallel, abilities/effects/voices; 15: both merged; 16: `kMsgInvite` and the presence key; 17: corpse food both ways, `kMsgEaten` when a corpse is used up, the guest's lethal bite native; 18: the guest's creature from the host's world). Players with different versions refuse each other on purpose.
 
 | Channel | Content | Reliability |
 |---|---|---|
@@ -178,7 +179,7 @@ world), `coopjoin <steamid | last | number | name>`,
 (how the puppet follows, `anim` = `walk`), `coop motionlog`, `coop echo` (one-PC puppet test: it repeats you 0.4 s later, 4 m
 to the side, at our height above the planet's centre), `coop noworld`, `coop sendworld`, `coop off`, `coop dump`, `coop fps`, `coop restart`, `coop modeltest`,
 `coop hit` / `coop kill` (one-PC check: 1 damage / the death path on the nearest animal), `coop die` (one-PC check of our own
-death and respawn, section 7), `coop abilities` (our avatar's abilities and default indexes, `own: ab` lines), `coop nests` (the nearest nests, `nestdump:` lines), `coop killcheck` (one PC: the herd
+death and respawn, section 7), `coop abilities` (our avatar's abilities and default indexes, `own: ab` lines), `coop nests` (the nearest nests, `nestdump:` lines), `coop dna` (DNA and relation events, `dna:` lines), `coop killcheck` (one PC: the herd
 type of a mirror-like herd and its repair, `game/Kills.cpp`),
 `coop menu` (opens the CO-OP window), plus `stage <name>` and `coophello`.
 Every command has at least one word (`FACTS.md` section 3). A new command is also added to the `$commands` list of
@@ -202,11 +203,12 @@ Every command has at least one word (`FACTS.md` section 3). A new command is als
   holding it, the EditorSaves copy first (`OwnCreature::ReadFresh`, also when the other side asks for our model); the editor's close
   and a change of the profile in memory make it read again at once. The host announces
   the animals sharing that profile with the same key, and re-reads every profile's key instead of caching it forever.
-  **The guest's own creature**: outside a co-op launch the avatar's key goes into `Games\CoopOwnCreature.txt` (else, in the main
-  menu, the citizen species of the newest creature save; in a co-op launch, also after an edit); in a co-op launch that creature is
-  loaded into the player's species profile 5 s after the avatar appears (`LoadIntoProfile`, `FACTS.md` section 7), the avatar and its
+  **The guest's creature** (D26): the host writes the key the guest announces (`kMsgAvatarSpecies`) into his world's sidecar
+  `Game0\coop_players.json` under the guest's id, unless it is the host's own creature; the file travels with the world. In a
+  co-op launch the guest's entry is loaded into the player's species profile 5 s after the avatar appears (`LoadIntoProfile`, `FACTS.md` section 7), the avatar and its
   family get the new model (`GrowUp`) and the default abilities of the same types, the ability buttons are rebuilt
-  (`RebuildAbilityButtons`). The species key stays. `coop abilities` logs the list; `COOP_NO_OWN_CREATURE=1` turns it off.
+  (`RebuildAbilityButtons`). The species key stays. No entry (first join): he plays the host's creature until his first editor
+  visit. `coop abilities` logs the list; `COOP_NO_OWN_CREATURE=1` turns the loading off.
   The puppet is built from that key. When the receiver holds
   another body under the same key (the guest joined with a copy of the host's save, then one of them edited his creature),
   it fetches the sender's body and registers it under an alias key (`Models::InstallAlias`, `CoopModels\m_<group>_<alias>`);

@@ -2,8 +2,9 @@
 #include "stdafx.h"
 #include "OwnCreature.h"
 #include "CoopLaunch.h"
-#include "MenuWorlds.h"
+#include "CoopNet.h"
 #include "../Log.h"
+#include "../../../core/coop_players.h"
 
 #include <Spore\Editors\Editor.h>
 #include <Spore\Editors\cEditorResource.h>
@@ -55,8 +56,8 @@ namespace
 		// own creature file / the guest's own creature
 		void* avatar = nullptr;
 		DWORD avatarSince = 0;
-		Key3 written = { 0, 0, 0 };
-		bool menuTried = false;
+		std::vector<coop::players::Entry> sidecar;  // host: Game0\coop_players.json as last read or written
+		bool sidecarLoaded = false;
 		void* swapped = nullptr;           // the avatar we switched (or decided not to switch)
 		void* verify = nullptr;
 		DWORD verifyAt = 0;
@@ -103,37 +104,26 @@ namespace
 		return std::string(appdata ? appdata : "") + "\\Spore\\Games";
 	}
 
-	std::string OwnFile()
+	// the world this game plays: on the host his own Game0, in a co-op launch the host's world (with its sidecar)
+	std::string WorldDir()
 	{
-		return GamesDir() + "\\CoopOwnCreature.txt";
+		return GamesDir() + "\\Game0";
 	}
 
-	bool ReadOwnFile(Key3& key, char* source, size_t sourceSize)
+	// In a co-op launch: the creature the host keeps for us in his world (D26). False = none (first join) or a damaged file.
+	bool SidecarCreature(unsigned long long myId, Key3& key)
 	{
-		FILE* f = fopen(OwnFile().c_str(), "r");
-		if (!f) {
+		std::vector<coop::players::Entry> entries;
+		if (!coop::players::Load(WorldDir(), entries)) {
+			Logf("own: %s\\%s is damaged: no own creature from it", WorldDir().c_str(), coop::players::kFileName);
 			return false;
 		}
-		char src[32] = {};
-		int n = fscanf(f, "%x %x %x %31s", &key[0], &key[1], &key[2], src);
-		fclose(f);
-		if (source && sourceSize) {
-			strncpy_s(source, sourceSize, src, _TRUNCATE);
+		const coop::players::Entry* e = coop::players::Find(entries, myId);
+		if (!e || !e->creature[0]) {
+			return false;
 		}
-		return n >= 3 && key[0];
-	}
-
-	void WriteOwnFile(State& s, const Key3& key, const char* source)
-	{
-		FILE* f = fopen(OwnFile().c_str(), "w");
-		if (!f) {
-			Logf("own: cannot write %s", OwnFile().c_str());
-			return;
-		}
-		fprintf(f, "%08x %08x %08x %s\n", key[0], key[1], key[2], source);
-		fclose(f);
-		s.written = key;
-		Logf("own: our own creature is %08x/%08x/%08x (from %s), written for co-op launches", key[0], key[1], key[2], source);
+		key = { e->creature[0], e->creature[1], e->creature[2] };
+		return true;
 	}
 
 	const std::vector<uint32_t>& CreatureTypes(State& s)
@@ -334,9 +324,6 @@ namespace
 				s.change = true;
 				Logf("own: the editor wrote creature %08x/%08x/%08x: announced as our avatar's body from now on (game maps it to %s)", key[0],
 					key[1], key[2], SpeciesManager.GetSpeciesProfile(ResourceKey(key[0], key[1], key[2])) ? "a profile" : "no profile");
-				if (CoopLaunch::Active()) {
-					WriteOwnFile(s, key, "editor");  // the next co-op launch starts with this creature
-				}
 			}
 		}
 	}
@@ -418,58 +405,6 @@ namespace
 		s.fpLoaded = loaded;
 	}
 
-	// Outside a co-op launch the avatar is the player's own creature: remember its key for the next co-op launch.
-	void RememberOwn(State& s, Simulator::cCreatureAnimal* avatar)
-	{
-		Key3 key = AvatarKey(avatar);
-		if (s.edited[0]) {
-			key = s.edited;
-		}
-		if (!key[0] || key == s.written) {
-			return;
-		}
-		Key3 old = { 0, 0, 0 };
-		if (ReadOwnFile(old, nullptr, 0) && old == key) {
-			s.written = key;
-			return;
-		}
-		WriteOwnFile(s, key, "avatar");
-	}
-
-	// In the main menu of the own world, when no file exists yet: the species of the newest creature-stage save (a guess that the
-	// star's citizen species is the player's species).
-	void RememberFromMenu(State& s)
-	{
-		if (s.menuTried) {
-			return;
-		}
-		Key3 old;
-		if (ReadOwnFile(old, nullptr, 0)) {
-			s.menuTried = true;
-			return;
-		}
-		uint32_t starId = 0;
-		std::string planet;
-		if (!MenuWorlds::HostPlanet(starId, planet)) {
-			return;  // the list may still be empty: try again
-		}
-		s.menuTried = true;
-		Simulator::cStarManager* stars = Simulator::cStarManager::Get();
-		if (!stars) {
-			return;
-		}
-		for (const cStarRecordPtr& star : stars->mSavedGameStarRecords) {
-			if (star && star->mKey.internalValue == starId) {
-				const ResourceKey& k = star->mCitizenSpeciesKey;
-				Logf("own: newest creature save (%s): citizen species %08x/%08x/%08x", planet.c_str(), k.instanceID, k.typeID, k.groupID);
-				if (k.instanceID) {
-					WriteOwnFile(s, Key3{ k.instanceID, k.typeID, k.groupID }, "save-star");
-				}
-				return;
-			}
-		}
-	}
-
 	// The game's own rebuild of the ability buttons (exe 0xD49400, March 2017; FACTS.md section 7): clears the button map
 	// (Simulator::cAbilityUIMap, its pointer at 0x169E3EC), puts every ability of the player's creature on the button of its type
 	// and redraws the icons (0xD48CE0). The game calls it after the creature editor. No arguments.
@@ -546,15 +481,21 @@ namespace
 		if (s.swapped == avatar) {
 			return;
 		}
-		s.swapped = avatar;
 		if (getenv("COOP_NO_OWN_CREATURE")) {
+			s.swapped = avatar;
 			Logf("own: COOP_NO_OWN_CREATURE is set, the guest plays the host's creature");
 			return;
 		}
+		const unsigned long long myId = CoopNet::MyId();
+		if (!myId) {
+			return;  // the transport has no id for us yet: try again at the next check
+		}
+		s.swapped = avatar;
 		Key3 key;
-		char source[32] = {};
-		if (!ReadOwnFile(key, source, sizeof(source))) {
-			Logf("own: no own creature known (%s missing): play your own creature stage once with this build", OwnFile().c_str());
+		const char* source = "the host's world";
+		if (!SidecarCreature(myId, key)) {
+			Logf("own: the host's world keeps no creature for us (first join): we play the host's creature until our first editor "
+				"visit (D26)");
 			return;
 		}
 		const Key3 before = AvatarKey(avatar);
@@ -656,9 +597,6 @@ namespace OwnCreature
 		const DWORD now = GetTickCount();
 		WatchEditor(s, now);
 		if (!inGame) {
-			if (!CoopLaunch::Active() && GameModeManager.GetActiveModeID() == (uint32_t)GameModeIDs::kGGEMode) {
-				RememberFromMenu(s);
-			}
 			return;
 		}
 		auto avatar = GameNounManager.GetAvatar();
@@ -682,8 +620,36 @@ namespace OwnCreature
 		if (CoopLaunch::Active()) {
 			PlayOwn(s, avatar, now);
 		}
+	}
+
+	void OnFriendCreature(unsigned long long guestId, const uint32_t key[3], const uint32_t hostOwn[3])
+	{
+		if (!guestId || !key[0] || !hostOwn[0]) {
+			return;  // without our own key we cannot tell his creature from ours
+		}
+		if (key[0] == hostOwn[0] && key[2] == hostOwn[2]) {
+			return;  // the guest plays our creature (first join, or his own is not loaded yet): nothing of his to keep
+		}
+		State& s = S();
+		const std::string dir = WorldDir();
+		if (!s.sidecarLoaded) {
+			if (!coop::players::Load(dir, s.sidecar)) {
+				Logf("own: %s\\%s is damaged: it is written again, with the guest's creature only", dir.c_str(), coop::players::kFileName);
+				s.sidecar.clear();
+			}
+			s.sidecarLoaded = true;
+		}
+		const uint32_t k[3] = { key[0], key[1], key[2] };
+		if (!coop::players::SetCreature(s.sidecar, guestId, k)) {
+			return;
+		}
+		if (coop::players::Save(dir, s.sidecar)) {
+			Logf("own: the guest's creature %08x/%08x/%08x is kept in our world (%s): he gets it back at his next join", k[0], k[1], k[2],
+				coop::players::kFileName);
+		}
 		else {
-			RememberOwn(s, avatar);
+			Logf("own: cannot write %s\\%s: the guest's creature is not kept", dir.c_str(), coop::players::kFileName);
+			s.sidecarLoaded = false;
 		}
 	}
 

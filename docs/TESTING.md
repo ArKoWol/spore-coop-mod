@@ -1,6 +1,6 @@
 # How we test
 
-> Status: agreed · Owner: both · Updated: 2026-11-15
+> Status: agreed · Owner: both · Updated: 2026-11-17
 > Read when: before you test a change and before you call anything "done". Results go into `STATUS.md` section 5.
 
 ## 1. The two-PC test (the real test)
@@ -32,10 +32,11 @@ Logs: `test\SPORE_A\SporebinEP1\CoopMod.log` and `test\SPORE_B\SporebinEP1\CoopM
 | `coop motionlog`, `coop fps` | puppet motion and frame-rate diagnostics |
 | `coop selftest` + `tests\actions_test.ps1` | one PC, game in the creature stage: abilities, an animation and an effect of our avatar must be captured and replayed on the echo puppet (`selftest: RESULT: PASS`); the song is also used through the game's own ability-button code, the player's path |
 | `coop die` | one PC, creature stage: kills our avatar as a hit from the host does (no attacker); the game must respawn it at its own nest, the echo puppet must go while we are dead and come back (`respawn-test: RESULT: PASS`). Kills your creature for real |
+| `coop dna` | creature stage, both sides: DNA now and gained, relation events reached / dropped; every DNA change is a `dna:` line with the event before it. Do the same actions as host and as guest and compare (`features/SHARED_CREATURE_WORLD.md` P4) |
 | `coop killcheck` | one PC, creature stage: a herd made like a mirror's, its herd type known to the game or not, and the repair (`PASS` / `FAIL`; also the first check of `coop selftest`) |
 | `coop actionlog` | log every ability, creature effect and voice that is sent and replayed (`action:` lines) |
 | `coop facing`, `coop run` | the puppet's steps back / sideways (`always`, `steps`, `off`) and its speed matching (on / off) |
-| `tests\run_core_tests.bat` | the replication core with a fake world, and the co-op launch folder logic (`core/coop_launch.h`) and the world-transfer manifest (`core/coop_manifest.h`: diff, build, verify, cleanup) on temporary folders; no game, seconds |
+| `tests\run_core_tests.bat` | the replication core with a fake world, and the co-op launch folder logic (`core/coop_launch.h`) the world-transfer manifest (`core/coop_manifest.h`: diff, build, verify, cleanup) and the world sidecar (`core/coop_players.h`) on temporary folders; no game, seconds |
 | `crash:` lines in `CoopMod.log`, link map | find a crash (`FACTS.md` section 4) |
 
 ## 3. Rules

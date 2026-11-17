@@ -77,7 +77,7 @@ if (-not (Test-Path $sporeB)) {
         $from = Join-Path $sporeA $name
         if (Test-Path $from) { Copy-Item $from (Join-Path $sporeB $name) -Recurse -Force }
     }
-    foreach ($name in 'Game0', 'CoopOwnCreature.txt', 'CoopMigrateAsked.txt') {
+    foreach ($name in 'Game0', 'CoopMigrateAsked.txt') {
         $from = Join-Path $sporeA "Games\$name"
         if (Test-Path $from) { Copy-Item $from (Join-Path $sporeB "Games\$name") -Recurse -Force }
     }

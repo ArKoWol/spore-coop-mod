@@ -21,7 +21,8 @@ seen in our tests.
   "verified port") are addresses in our exe.
 - **The GOG install can leave the registry incomplete** (`HKLM\SOFTWARE\WOW6432Node\Electronic Arts\spore*`): alerts
   "Configuration Script Failed [2000]" and "data directory is missing or corrupt [1004]", even without mods. Fix:
-  `package/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package).
+  `package/fix_spore_registry.ps1 -GameDir <folder>` as administrator (shipped in the package). The values can also go later on a
+  working install: the game then closes at start with exit code 0, also with an empty APPDATA *(verified 2026-11-17)*.
 
 ## 2. Running the game
 - **A minimized Spore runs no frames**: no update functions, no co-op networking, no remote console. Fullscreen Spore
@@ -92,7 +93,6 @@ seen in our tests.
   *(verified 2026-10-25, with a test command that is gone; git has it)*. A star far from the centre is off screen.
 - **Do not call `GlobalGGEUI::InitializeUI` / `Initialize` a second time**: it changes nothing visible and the game crashes at
   exit (eip 0 / 0x28 / 0x2a0 after `CoopMod disposed`).
-- Closing the game from the menu does not save `stars.db`.
 - The **selected star** of the menu is the StarID at `[GlobalGGEUI::Get() + 0xFC] + 0x7C` (keeps the last selection when you
   click empty space; `+0x138` is something else) *(verified 2026-10-25, one PC)*. A StarID the mod writes there holds about 1 s,
   then the game sets it to 0: the card does not open *(verified 2026-11-01, 2 PCs)*.
@@ -117,8 +117,8 @@ seen in our tests.
   group 1, instance PlanetID); a package of planet records registered with the resource manager is not used by the load *(verified 2026-10-25)*.
 - **`stars.db`** is a DBPF; entry type `0x03E4353C` holds all 42010 star records in one RefPack blob: each record is big-endian
   `[size][8-byte id][0x01A80D26][payload size][field count][(field id, size) table][values]`, name as UTF-16LE. The game reads
-  the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list
-  *(verified 2026-10-25)*. **`planetRecords.pkp`**: one entry per planet (instance = PlanetID), each a nested DBPF.
+  the file uncompressed too; a record that changes size crashes the start. The save flag in it is not used for the list; closing the
+  game from the menu does not save it *(verified 2026-10-25)*. **`planetRecords.pkp`**: one entry per planet (instance = PlanetID), each a nested DBPF.
 - **A star the mod adds in memory is kept by `stars.db` when the game saves** and comes back in the saved-game list at the next
   start, even without its `.spo`: a host's cached galaxy listed a star named `CO-OP` (an old build's CO-OP star) with no
   `CO-OP.spo` in the folder *(verified 2026-11-01, one PC)*. The co-op launch therefore removes stars named `CO-OP...` first.

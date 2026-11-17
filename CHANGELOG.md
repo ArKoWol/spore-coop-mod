@@ -6,6 +6,11 @@ tested (`tested on 2 PCs` / `tested on 1 PC` / `not tested`) and whether the pro
 
 ## Unreleased
 
+- **The guest's creature belongs to the host's world; DNA diagnosis** (exxecute; `game/OwnCreature.cpp`, new `core/coop_players.h`,
+  `game/Progress.cpp`, `World.cpp`; `features/SHARED_CREATURE_WORLD.md` P1, P4). The host keeps the creature the guest announces in
+  `Game0\coop_players.json` (travels with the world); a first join plays the host's creature, `CoopOwnCreature.txt` is gone.
+  `dna:` lines and `coop dna` log every DNA change with the relation event before it. Core tests pass (21 new); P1 tested on 1 PC (two games), DNA lines not yet compared.
+  **Protocol 18**: both update. ArKoWol: extend the sidecar (DNA, brain) through `core/coop_players.h`.
 - **Docs: feedback of the 2026-11-17 play session, plan corrected** (exxecute; new `docs/features/SHARED_CREATURE_WORLD.md`,
   `PLAN.md` 1, 3, 7.1, 8, `DECISIONS.md` D25-D27, `STATUS.md`, `FACTS.md` 7, `JOIN_FLOW.md` E16-E17). Six problems: the guest's
   outside creature, an old world sent, nests back at the host's respawn, the guest's little DNA, nest results not shared, the

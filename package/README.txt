@@ -57,8 +57,9 @@ and so does the co-op. The console opens with Ctrl+Shift+C.
    restarts once); the friend's world is kept in Games\Coop. Nothing is deleted.
 
 What you see: the other player's creature walks next to you (for now it may have YOUR creature's look).
-Being tested: the guest plays his OWN creature in the host's world. For that the guest must have
-played his own creature stage once with this version (the mod remembers the creature then).
+Being tested: the guest's creature belongs to the host's world. On the first join the guest plays
+the host's creature; what he makes in the editor (mating call at his nest) is kept in the host's
+world and comes back at his next join. Creatures from his own games are not brought in.
 COOP_NO_OWN_CREATURE=1 keeps the host's creature for the guest.
 What is not shared yet: eating, fighting, health, plants, fruit, eggs and nests.
 

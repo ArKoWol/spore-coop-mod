@@ -70,6 +70,7 @@
     <ClInclude Include="game\Presence.h" />
     <ClInclude Include="game\InvitePanel.h" />
     <ClInclude Include="game\OwnCreature.h" />
+    <ClInclude Include="game\Progress.h" />
     <ClInclude Include="World.h" />
     <ClInclude Include="Models.h" />
     <ClInclude Include="Objects.h" />
@@ -97,6 +98,7 @@
     <ClCompile Include="game\Presence.cpp" />
     <ClCompile Include="game\InvitePanel.cpp" />
     <ClCompile Include="game\OwnCreature.cpp" />
+    <ClCompile Include="game\Progress.cpp" />
     <ClCompile Include="game\Instance.cpp" />
     <ClCompile Include="game\LocalNet.cpp" />
     <ClCompile Include="World.cpp" />
